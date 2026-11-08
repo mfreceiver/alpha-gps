@@ -529,8 +529,68 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         model.selectAllPhotos()
         assertNull(model.batchSummary)
         model.recordBatchSummary(summary)
-        model.clearPhotoSelection()
-        assertNull(model.batchSummary)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun previewIsRefusedWhileATransferIsBusyAndKeepsBatchSummaryAndSelection() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = pagedConnection()
+        // Park the download so the transfer stays busy (Downloading) until the gate opens.
+        connection.downloadResults = Channel()
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        model.togglePhotoSelection("photo:0")
+        val summary = WifiBatchSummary(3, mapOf(WifiSkipReason.NoJpeg to 1))
+        model.recordBatchSummary(summary)
+        controller.downloadPhoto("camera", connection.photos.first().handle)
+        runCurrent()
+        assertTrue(registry.get("camera")!!.wifiRemote.imageTransfer.busy)
+        // The magnifier entry must not open the viewer mid-transfer, must not clear the
+        // pending batch summary, and must not touch the selection.
+        model.previewPhoto("photo:0")
+        assertNull(model.viewedPhotoIndex, "previewPhoto must be refused while the transfer is busy")
+        assertEquals(summary, model.batchSummary)
+        assertEquals(listOf("photo:0"), model.selectedPhotoIds.toList())
+        controller.cancelPhotoOperation("camera")
+        runCurrent()
+        // Once idle again, preview works and still keeps summary and selection.
+        model.previewPhoto("photo:0")
+        assertEquals(0, model.viewedPhotoIndex)
+        assertEquals(summary, model.batchSummary)
+        assertEquals(listOf("photo:0"), model.selectedPhotoIds.toList())
+        model.closePhoto()
+        assertNull(model.viewedPhotoIndex)
+        assertEquals(summary, model.batchSummary, "closing the preview must keep the batch summary")
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun previewIsRefusedWhileAPageLoadIsInFlight() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = pagedConnection()
+        connection.pageGate = CompletableDeferred()
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        controller.browsePhotos("camera", pageSize)
+        runCurrent()
+        assertTrue(registry.get("camera")!!.wifiRemote.photoBrowser.loading)
+        model.previewPhoto("photo:0")
+        assertNull(model.viewedPhotoIndex, "previewPhoto must be refused while the page loads")
+        connection.pageGate!!.complete(Unit)
+        runCurrent()
+        model.previewPhoto("photo:$pageSize")
+        assertEquals(pageSize, model.viewedPhotoIndex)
         controller.closeAndJoin()
     }
 

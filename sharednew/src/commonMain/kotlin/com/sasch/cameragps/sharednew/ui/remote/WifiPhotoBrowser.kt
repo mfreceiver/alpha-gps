@@ -241,7 +241,11 @@ internal fun WifiPhotoBrowser(
             }
         }
         val summary = viewModel.batchSummary
-        if (summary != null && summary.isComplete(transfer)) {
+        // Latch completion per summary: closePhoto() clears the transfer result when the
+        // viewer closes, but a preview round-trip must not hide the finished batch line.
+        var summarySettled by remember(summary) { mutableStateOf(false) }
+        if (summary != null && !summarySettled && summary.isComplete(transfer)) summarySettled = true
+        if (summary != null && (summarySettled || summary.isComplete(transfer))) {
             Text(
                 if (summary.skippedCount == 0) stringResource(
                     Res.string.wifi_remote_batch_summary_no_skip, summary.downloaded
@@ -336,6 +340,9 @@ internal fun WifiPhotoBrowser(
                     }
                     if (selecting) IconButton(
                         onClick = { viewModel.previewPhoto(capture.id) },
+                        // Refuse while a load/transfer is in flight: previewPhoto guards too,
+                        // but a disabled button also keeps the click feedback honest.
+                        enabled = !busy,
                         modifier = Modifier.align(Alignment.BottomStart).padding(2.dp).size(40.dp)
                             .background(Color.Black.copy(alpha = 0.55f), CircleShape),
                     ) {
