@@ -23,5 +23,47 @@ class SonyJpegTest {
         assertFailsWith<IllegalArgumentException> { SonyJpeg.inspect(tooWide) }
     }
 
+    @Test
+    fun parsesExifOrientationInBothEndianNesses() {
+        assertEquals(6, SonyJpeg.inspect(jpegWithExifOrientation(6, littleEndian = true)).orientation)
+        assertEquals(8, SonyJpeg.inspect(jpegWithExifOrientation(8, littleEndian = false)).orientation)
+        assertEquals(3, SonyJpeg.inspect(jpegWithExifOrientation(3, littleEndian = true)).orientation)
+        assertEquals(1, SonyJpeg.inspect(jpegWithExifOrientation(1, littleEndian = false)).orientation)
+    }
+
+    @Test
+    fun defaultsOrientationWithoutUsableExif() {
+        // No APP1 at all.
+        assertEquals(1, SonyJpeg.inspect(testJpeg()).orientation)
+        // APP1 present but not Exif payload.
+        // "XMPxx" (5) + two NULs = 7 payload bytes; segment length covers 2 + 7.
+        val notExif = bytes(0xff, 0xd8, 0xff, 0xe1, 0, 9) + "XMPxx\u0000\u0000".encodeToByteArray() +
+            testJpeg().copyOfRange(2, testJpeg().size)
+        assertEquals(1, SonyJpeg.inspect(notExif).orientation)
+        // Orientation outside the valid 1..8 range falls back to 1.
+        assertEquals(1, SonyJpeg.inspect(jpegWithExifOrientation(9, littleEndian = true)).orientation)
+        assertEquals(1, SonyJpeg.inspect(jpegWithExifOrientation(0, littleEndian = false)).orientation)
+    }
+
+    private fun jpegWithExifOrientation(orientation: Int, littleEndian: Boolean): ByteArray {
+        fun u16(value: Int) = if (littleEndian) bytes(value and 0xff, value shr 8)
+        else bytes(value shr 8, value and 0xff)
+
+        fun u32(value: Int) = if (littleEndian)
+            bytes(value and 0xff, (value shr 8) and 0xff, (value shr 16) and 0xff, (value shr 24) and 0xff)
+        else bytes((value shr 24) and 0xff, (value shr 16) and 0xff, (value shr 8) and 0xff, value and 0xff)
+
+        val tiff = (if (littleEndian) bytes(0x49, 0x49) else bytes(0x4d, 0x4d)) + u16(42) + u32(8) +
+            u16(1) + u16(0x0112) + u16(3) + u32(1) + u16(orientation) + bytes(0, 0) + u32(0)
+        val payload = "Exif".encodeToByteArray() + bytes(0, 0) + tiff
+        val base = testJpeg()
+        val sof = base.copyOfRange(2, 15)
+        val tail = base.copyOfRange(15, base.size)
+        // JPEG segment lengths are always big-endian, independent of the TIFF endian.
+        return bytes(0xff, 0xd8) + bytes(0xff, 0xe1) +
+                bytes((payload.size + 2) shr 8, (payload.size + 2) and 0xff) +
+                payload + sof + tail
+    }
+
     private fun bytes(vararg values: Int) = values.map(Int::toByte).toByteArray()
 }

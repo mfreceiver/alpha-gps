@@ -170,6 +170,7 @@ internal class SonyImageTransfer(
                     val jpeg = SonyJpeg.inspect(bytes)
                     require(jpeg.width <= 640 && jpeg.height <= 640)
                     bytes.copyOf(jpeg.byteCount).decodeToImageBitmap()
+                        .rotateByExifOrientation(jpeg.orientation)
                 } else decodeNonJpegThumbnail(bytes)
             }
         } catch (cancelled: CancellationException) {
@@ -209,6 +210,7 @@ internal class SonyImageTransfer(
                                 jpeg.width.toLong() * jpeg.height <= 8 * 1024 * 1024
                     )
                     bytes.copyOf(jpeg.byteCount).decodeToImageBitmap()
+                        .rotateByExifOrientation(jpeg.orientation)
                 } else decodePreview(bytes)
             }
         } catch (cancelled: CancellationException) {

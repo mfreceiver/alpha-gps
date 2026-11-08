@@ -300,8 +300,10 @@ internal fun WifiPhotoBrowser(
 
 @Composable
 private fun PhotoPreview(image: ImageBitmap?, loading: Boolean) {
+    // Bitmaps arrive already rotated upright; pick the tile ratio from the effective aspect.
+    val ratio = if (image != null && image.height > image.width) 2f / 3f else 3f / 2f
     Box(
-        Modifier.fillMaxWidth().aspectRatio(3f / 2f).background(MaterialTheme.colorScheme.surfaceContainerHighest),
+        Modifier.fillMaxWidth().aspectRatio(ratio).background(MaterialTheme.colorScheme.surfaceContainerHighest),
         contentAlignment = Alignment.Center
     ) {
         if (image != null) {
