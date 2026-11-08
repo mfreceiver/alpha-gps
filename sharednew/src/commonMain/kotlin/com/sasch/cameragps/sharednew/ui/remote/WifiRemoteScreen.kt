@@ -215,12 +215,15 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     /**
      * Auto-opens the photo browser once per connection while in browse-only mode. Leaving
      * the browser deliberately (back) must strand the user on a "no live view" Ready
-     * screen — so the effect never re-opens it; leaving Ready resets the flag and lets the
-     * next connection auto-enter again.
+     * screen — so the effect never re-opens it while Ready holds. The once-flag is bound
+     * to the session lifecycle, not just to non-Ready phases: any observation outside a
+     * live Ready session (Closing/Failed/Idle, or the registry entry fully removed after
+     * cleanup) resets it, so the next connection auto-enters again even when no
+     * intermediate transition state was ever observed.
      */
     fun maybeAutoEnterBrowser() {
-        val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return
-        if (state.phase != WifiRemotePhase.Ready) {
+        val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote
+        if (state == null || state.phase != WifiRemotePhase.Ready) {
             autoEnteredBrowser = false
             return
         }
