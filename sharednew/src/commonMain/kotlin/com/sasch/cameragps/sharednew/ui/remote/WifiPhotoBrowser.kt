@@ -102,6 +102,7 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownloadFormat
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
+import com.sasch.cameragps.sharednew.remote.wifi.defaultSelectedPhotoHandle
 import com.sasch.cameragps.sharednew.remote.wifi.formatLabel
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import com.sasch.cameragps.sharednew.ui.components.verticalScrollbar
@@ -185,7 +186,10 @@ internal fun WifiPhotoBrowser(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             TextButton(
-                                onClick = { controller.leavePhotoBrowser(identifier) },
+                                // Route through navigateBack so browse-only (where the
+                                // browser is the whole session) disconnects instead of
+                                // reopening via the auto-enter effect.
+                                onClick = { viewModel.navigateBack {} },
                                 enabled = !busy
                             ) {
                                 Text(stringResource(Res.string.wifi_remote_browser_back))
@@ -335,12 +339,9 @@ internal fun PhotoDetailsSheet(
     val browser = state.photoBrowser
     val transfer = state.imageTransfer
     var selectedHandle by rememberSaveable(capture.id) {
-        mutableStateOf(
-            // "JPEG only" default: preselect the capture's JPEG file when there is one.
-            if (defaultJpegOnly) capture.files.firstOrNull { it.mimeType == "image/jpeg" }?.handle
-                ?: capture.files.singleOrNull()?.handle
-            else capture.files.singleOrNull()?.handle
-        )
+        // Default-format policy: JPEG-only prefers the JPEG; Original preselects the
+        // first downloadable file so JPG+RAW pairs start with an enabled download button.
+        mutableStateOf(defaultSelectedPhotoHandle(capture.files, defaultJpegOnly))
     }
     var selectedFormat by rememberSaveable(capture.id) { mutableStateOf(WifiPhotoDownloadFormat.Original) }
     val selected = capture.files.firstOrNull { it.handle == selectedHandle }

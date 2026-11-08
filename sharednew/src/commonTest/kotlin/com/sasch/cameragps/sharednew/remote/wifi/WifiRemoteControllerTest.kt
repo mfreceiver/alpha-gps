@@ -1451,13 +1451,19 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val registry = CameraSessionRegistry()
         val connection = pagedConnection().apply {
             downloadResults = Channel(Channel.UNLIMITED)
-            repeat(8) {
-                downloadResults?.trySend(WifiImageTransferState(WifiImageTransferStatus.Saved))
-            }
+            // Unified batch (6 Saved), partial-failure retry run (Saved, Failed), and
+            // the one remaining retry item.
+            repeat(6) { downloadResults?.trySend(WifiImageTransferState(WifiImageTransferStatus.Saved)) }
+            downloadResults?.trySend(WifiImageTransferState(WifiImageTransferStatus.Saved))
+            downloadResults?.trySend(WifiImageTransferState(WifiImageTransferStatus.Failed))
+            downloadResults?.trySend(WifiImageTransferState(WifiImageTransferStatus.Saved))
         }
         val controller =
             WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         val model = WifiRemoteViewModel("camera", controller)
+        // The download request must be derived from the selection, never hand-picked.
+        fun selectedBatch() = model.selectedPhotos.values
+            .flatMap { capture -> capture.files.map { WifiPhotoDownload(it.handle) } }
         controller.connect("camera", "127.0.0.1")
         runCurrent()
         controller.browsePhotos("camera")
@@ -1488,32 +1494,90 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         runCurrent()
         model.reconcilePhotoSelection()
         assertTrue("photo:0" in model.selectedPhotoIds && "photo:40" in model.selectedPhotoIds)
-        controller.downloadPhotos(
-            "camera",
-            listOf(
-                WifiPhotoDownload(0L), WifiPhotoDownload(1L),
-                WifiPhotoDownload(80L), WifiPhotoDownload(81L)
-            )
+        val batch = selectedBatch()
+        // Insertion order: photo:0, then photo:41 (added by select-all), then photo:40
+        // (toggled off/on re-appends at the end).
+        assertEquals(
+            listOf(0L, 1L, 82L, 83L, 80L, 81L),
+            batch.map { it.handle },
+            "The download batch mirrors the selection's insertion order across pages"
         )
+        controller.downloadPhotos("camera", batch)
         runCurrent()
         assertEquals(
-            listOf(0L, 1L, 80L, 81L),
+            listOf(0L, 1L, 82L, 83L, 80L, 81L),
             connection.downloadedHandles,
             "Batch downloads files from every selected page, not just the visible one"
         )
         assertEquals(
             setOf(
                 WifiPhotoDownload(0L), WifiPhotoDownload(1L),
-                WifiPhotoDownload(80L), WifiPhotoDownload(81L)
+                WifiPhotoDownload(80L), WifiPhotoDownload(81L),
+                WifiPhotoDownload(82L), WifiPhotoDownload(83L)
             ),
             registry.get("camera")!!.wifiRemote.photoBrowser.savedDownloads
         )
-        // A refresh starts a new generation: saved markers and selections are invalidated.
+        // A refresh starts a new generation: saved markers and selections are invalidated…
         controller.browsePhotos("camera")
         runCurrent()
         model.reconcilePhotoSelection()
         assertTrue(model.selectedPhotoIds.isEmpty(), "Refreshed catalog invalidates selection")
         assertTrue(registry.get("camera")!!.wifiRemote.photoBrowser.savedDownloads.isEmpty())
+        controller.clearPhotoTransferResult("camera")
+        assertEquals(
+            WifiImageTransferStatus.Idle,
+            registry.get("camera")!!.wifiRemote.imageTransfer.status
+        )
+        // …and stale page-2 handles that fell out of the refreshed catalog cannot be
+        // submitted: the request is dropped instead of downloading.
+        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(82L), WifiPhotoDownload(83L)))
+        runCurrent()
+        assertEquals(
+            listOf(0L, 1L, 82L, 83L, 80L, 81L),
+            connection.downloadedHandles,
+            "Stale handles from an older catalog generation must not download"
+        )
+        assertEquals(
+            WifiImageTransferStatus.Idle,
+            registry.get("camera")!!.wifiRemote.imageTransfer.status,
+            "A dropped stale request must not even start a transfer"
+        )
+        // A partial failure stops the batch and marks only the finished files as saved…
+        controller.browsePhotos("camera", SonyImageTransfer.PAGE_SIZE)
+        runCurrent()
+        model.reconcilePhotoSelection()
+        model.clearPhotoSelection()
+        model.togglePhotoSelection("photo:40")
+        val retryBatch = selectedBatch()
+        assertEquals(listOf(80L, 81L), retryBatch.map { it.handle })
+        controller.downloadPhotos("camera", retryBatch)
+        runCurrent()
+        assertEquals(
+            listOf(0L, 1L, 82L, 83L, 80L, 81L, 80L, 81L),
+            connection.downloadedHandles,
+            "A failing download is attempted but not recorded as saved"
+        )
+        assertEquals(
+            WifiImageTransferStatus.Failed,
+            registry.get("camera")!!.wifiRemote.imageTransfer.status
+        )
+        assertEquals(
+            setOf(WifiPhotoDownload(80L)),
+            registry.get("camera")!!.wifiRemote.photoBrowser.savedDownloads,
+            "Only the item that finished before the failure is marked saved"
+        )
+        // …and a retry only submits what is still unsaved.
+        controller.downloadPhotos("camera", retryBatch)
+        runCurrent()
+        assertEquals(
+            listOf(0L, 1L, 82L, 83L, 80L, 81L, 80L, 81L, 81L),
+            connection.downloadedHandles,
+            "Retrying the batch re-downloads only the failed item"
+        )
+        assertEquals(
+            setOf(WifiPhotoDownload(80L), WifiPhotoDownload(81L)),
+            registry.get("camera")!!.wifiRemote.photoBrowser.savedDownloads
+        )
         controller.closeAndJoin()
     }
 
@@ -1569,6 +1633,41 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         connection.failBrowserExit = false
         controller.closeAndJoin()
         assertEquals(1, connection.cleanup.count { it == "preview" })
+    }
+
+    @Test
+    fun browseOnlyAutoOpensBrowserOnceAndBackDisconnects() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = pagedConnection()
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller).apply { browseOnly = true }
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        assertEquals(WifiRemotePhase.Ready, registry.get("camera")?.wifiRemote?.phase)
+        // The screen effect auto-enters the browser exactly once per connection.
+        model.maybeAutoEnterBrowser()
+        runCurrent()
+        assertTrue(registry.get("camera")!!.wifiRemote.photoBrowser.open)
+        // Leaving the browser deliberately must not re-open it — that was the
+        // browse-only trap door with no way out.
+        controller.leavePhotoBrowser("camera")
+        runCurrent()
+        model.reconcilePhotoSelection()
+        model.maybeAutoEnterBrowser()
+        runCurrent()
+        assertFalse(registry.get("camera")!!.wifiRemote.photoBrowser.open)
+        // Back navigation with the browser open disconnects the session instead of
+        // stranding the user on a live-view-less Ready screen.
+        controller.browsePhotos("camera")
+        runCurrent()
+        model.maybeAutoEnterBrowser()
+        model.navigateBack { error("Browse-only back must disconnect, not exit the screen") }
+        controller.closeAndJoin()
+        assertNull(
+            registry.get("camera"),
+            "Back in browse-only disconnects and fully cleans up the session"
+        )
     }
 
 }
