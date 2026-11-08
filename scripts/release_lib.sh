@@ -47,8 +47,8 @@ parse_version_code_props() {
   local path=${1:-} line n
   [[ -n "$path" && -f "$path" ]] \
     || { rl_fail "versionCode 解析: 文件不存在: '${path:-}'"; return 1; }
-  LC_ALL=C grep -qaP '\x00' "$path" 2>/dev/null
-  local zrc=$?
+  local zrc=0
+  LC_ALL=C grep -qaP '\x00' "$path" 2>/dev/null || zrc=$?   # if/|| 形式：裸 set -e 下 rc1 不触发 errexit
   if (( zrc == 0 )); then
     rl_fail "versionCode 解析: 文件含 NUL 字节（bash 变量无法安全承载 NUL），fail-closed"
     return 1
@@ -57,8 +57,8 @@ parse_version_code_props() {
     rl_fail "versionCode 解析: NUL 探测 grep 异常（rc=$zrc），fail-closed"
     return 1
   fi
-  LC_ALL=C grep -qa $'\r' "$path" 2>/dev/null
-  local crc=$?
+  local crc=0
+  LC_ALL=C grep -qa $'\r' "$path" 2>/dev/null || crc=$?
   if (( crc == 0 )); then
     rl_fail "versionCode 解析: 文件含 CR（平面文件要求纯 LF 行尾），fail-closed"
     return 1
@@ -77,7 +77,19 @@ parse_version_code_props() {
     rl_fail "versionCode 解析: 包含该 key 子串的行必须恰好 1 行，实际 ${n:-0} 行——fail-closed"
     return 1
   fi
-  line=$(LC_ALL=C grep -aF 'alphagps.versionCode' "$path" 2>/dev/null || true)
+  # 抽取行 grep 的 rc 显式区分（不用 `|| true` 吞 rc2/rc127 等）：
+  #   0=正常；1=无匹配（与上面计数==1 矛盾，fail-closed）；≥2=命令异常，fail-closed。
+  # `||` 上下文同时保证裸 set -e 调用下不会因 rc1 提前静默退出。
+  local xrc=0
+  line=$(LC_ALL=C grep -aF 'alphagps.versionCode' "$path" 2>/dev/null) || xrc=$?
+  if (( xrc == 1 )); then
+    rl_fail "versionCode 解析: 抽取 grep 无匹配（与计数 1 矛盾），fail-closed"
+    return 1
+  fi
+  if (( xrc >= 2 )); then
+    rl_fail "versionCode 解析: 抽取 grep 异常（rc=$xrc），fail-closed"
+    return 1
+  fi
   if [[ ! "$line" =~ ^alphagps\.versionCode=[1-9][0-9]{0,9}$ ]]; then
     rl_fail "versionCode 解析: 该 key 所在行必须整行严格匹配 'key=canonical十进制正整数'（无空格/注释/尾随空白/前导零），实际: '$line'"
     return 1
@@ -125,17 +137,44 @@ expected_code_for_tag() {
 # tag_code_or_skip <tag>
 #   assert_code_monotonic 用的单 tag 判定（不入 LEGACY 表的 tag）：
 #     rc=0 → 本定制版 tag，stdout=其 versionCode；
-#     rc=3 → 上游 tag，跳过（tag 提交缺 gradle.properties，或其中无本 key 子串）；
-#     rc=1 → fail-closed（含 key 但解析失败 / git 异常 / grep 异常）。
+#     rc=3 → 上游 tag，跳过（且仅限两种可证明的“上游”情形：
+#            a) tag 提交树里确实不存在 gradle.properties 路径；
+#            b) 文件存在但其中无本 key 子串）；
+#     rc=1 → fail-closed（tag 不可解析 / git ls-tree / git show / grep 异常 /
+#            含 key 但解析失败）。
+#   存在性判定（不再把任意 git show 失败当“上游缺文件”）：
+#     1. `git rev-parse --verify --quiet "$tag^{commit}"` 先确认 tag 可解析为提交；
+#     2. `git ls-tree --name-only "$tag" -- gradle.properties`：命令自身 rc≠0 →
+#        fail-closed；rc=0 且输出恰为该路径 → 存在；rc=0 且输出为空 → 路径不
+#        存在 → 上游跳过；输出含其它内容 → fail-closed（不该发生）。
+#     3. 只有存在才 `git show` 取内容——此时 git show 失败一律 fail-closed。
 #   git show 原始字节经 subshell 内 mktemp 临时文件中转（trap EXIT 清理，含信号路径）。
 tag_code_or_skip() {
   local tag=${1:?}
   (
+    if ! git rev-parse --verify --quiet "$tag^{commit}" >/dev/null 2>&1; then
+      rl_fail "versionCode 单调性: tag $tag 无法解析为提交（rev-parse 失败），fail-closed"
+      exit 1
+    fi
+    local lsrc lout
+    if ! lout=$(git ls-tree --name-only "$tag" -- gradle.properties 2>/dev/null); then
+      lsrc=$?
+      rl_fail "versionCode 单调性: tag $tag 的 gradle.properties 存在性检查 git ls-tree 异常（rc=$lsrc），fail-closed"
+      exit 1
+    fi
+    case "$lout" in
+      gradle.properties) : ;;   # 路径确实存在 → 继续取内容解析
+      '') exit 3 ;;             # 输出空且 rc=0：路径不存在 → 上游 tag，跳过
+      *)
+        rl_fail "versionCode 单调性: tag $tag 的 git ls-tree 输出异常（'$lout'），fail-closed"
+        exit 1 ;;
+    esac
     tmp=$(mktemp "${TMPDIR:-/tmp}/rlmono.XXXXXX") \
       || { rl_fail "versionCode 单调性: 无法创建临时文件，fail-closed"; exit 1; }
     trap 'rm -f -- "$tmp"' EXIT
     if ! git show "$tag:gradle.properties" > "$tmp" 2>/dev/null; then
-      exit 3   # 文件缺失：上游 tag（上游没有本定制版的 key），跳过
+      rl_fail "versionCode 单调性: tag $tag 的 git show 失败（ls-tree 已确认路径存在，非上游缺文件），fail-closed"
+      exit 1
     fi
     LC_ALL=C grep -qaF 'alphagps.versionCode' "$tmp" 2>/dev/null
     local grc=$?

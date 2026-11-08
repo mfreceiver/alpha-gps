@@ -246,31 +246,54 @@ echo "== 场景 19: assert_code_monotonic 不污染调用方 i 变量 =="
 ); RC=$?
 check "调用前后外部变量 i 不变" test "$RC" -eq 0
 
-echo "== 场景 20: 临时文件清理（errexit 失败路径 + TERM 信号） =="
+echo "== 场景 20: 临时文件清理（TERM/INT 信号 + errexit 失败路径，TMPDIR 沙箱计数） =="
 TMPCNT=$TMP/tmpwatch; rm -rf -- "$TMPCNT"; mkdir -p "$TMPCNT"
-# 失败路径：NUL 内容使 parser 失败 → subshell trap EXIT 清理
-OUT=$(cd "$R0" && TMPDIR="$TMPCNT" parse_version_code_from_git v0.9.0-nul 2>/dev/null); RC=$?
-check "NUL 失败路径非零" test "$RC" -ne 0
-check "失败路径无临时文件遗留（实际 $(ls -A "$TMPCNT" | wc -l) 个）" test "$(ls -A "$TMPCNT" | wc -l)" -eq 0
-# TERM 路径：PATH 上放一个 sleep 挂起的 git shim，setsid 起独立进程组后整组 TERM；
-# 前台 git 死后 subshell 走到 EXIT trap → 清理 mktemp 文件。
-GSHIM=$TMP/gitshim; mkdir -p "$GSHIM"
-printf '#!/usr/bin/env bash\nsleep 30\n' > "$GSHIM/git"; chmod +x "$GSHIM/git"
-(
-  cd "$R0" || exit 1
-  setsid bash -c "source '$LIB'; parse_version_code_from_git v0.9.0" >/dev/null 2>&1 &
-  BGPID=$!
-  for _ in $(seq 1 100); do
-    [[ "$(ls -A "$TMPCNT" 2>/dev/null | wc -l)" -gt 0 ]] && break
+# errexit 失败路径：`bash -e` 子进程裸调（TMPDIR 指向独立沙箱计数目录），
+# git show 对不存在 tag 失败 → subshell trap EXIT 清理。
+ER=$TMPCNT/errexit; mkdir -p "$ER"
+( cd "$R0" && TMPDIR="$ER" timeout 20 bash -e -c "source '$LIB'; parse_version_code_from_git v-nonexist" ) >/dev/null 2>&1; ERC=$?
+check "errexit 失败路径非零退出" test "$ERC" -ne 0 -a "$ERC" -ne 124
+check "errexit 失败路径无临时文件遗留（实际 $(ls -A "$ER" 2>/dev/null | wc -l) 个）" test "$(ls -A "$ER" 2>/dev/null | wc -l)" -eq 0
+
+# 信号路径：PATH 注入 sleep 挂起的 fake git，让 `git show` 阻塞；
+# setsid 独立进程组 + 子进程环境带 PATH=shim 与 TMPDIR=沙箱计数目录，
+# 先确认 mktemp 临时文件确实出现（未出现 → 本用例直接判失败，不被后续 kill/wait 覆盖），
+# 再向进程组发信号，等待结束后断言无遗留。
+# sig_case <信号> <被测 lib 路径> → rc0=通过（文件出现过 + 信号后无遗留）
+sig_case() { # $1=SIGTERM/SIGINT $2=lib 路径 $3=tag（默认 v0.9.0，存在于 $R0）
+  local sig=$1 lib=$2 tag=${3:-v0.9.0}
+  local cnt; cnt=$TMPCNT/$sig$(basename "$lib" .sh); rm -rf -- "$cnt"; mkdir -p "$cnt"
+  local shim; shim=$cnt.shim; mkdir -p "$shim"
+  printf '#!/usr/bin/env bash\nsleep 30\n' > "$shim/git"; chmod +x "$shim/git"
+  ( cd "$R0" && setsid env PATH="$shim:$PATH" TMPDIR="$cnt" \
+      bash -c "source '$lib'; parse_version_code_from_git '$tag'" ) >/dev/null 2>&1 &
+  local pid=$! appeared=0
+  for _ in $(seq 1 200); do
+    if [[ "$(ls -A "$cnt" 2>/dev/null | wc -l)" -gt 0 ]]; then appeared=1; break; fi
     sleep 0.05
   done
-  [[ "$(ls -A "$TMPCNT" 2>/dev/null | wc -l)" -gt 0 ]]   # 临时文件已出现（否则后续断言必失败）
-  kill -TERM -- -"$BGPID" 2>/dev/null
-  wait $BGPID 2>/dev/null
-) ; check "TERM 后已捕获到临时文件出现过" test $? -eq 0
-sleep 0.5
-LEFT=$(ls -A "$TMPCNT" 2>/dev/null | wc -l)
-check "TERM 后无临时文件遗留（实际 $LEFT 个）" test "$LEFT" -eq 0
+  if [[ "$appeared" -ne 1 ]]; then
+    kill -KILL -- -"$pid" 2>/dev/null; wait "$pid" 2>/dev/null
+    return 1   # 临时文件从未出现：用例本身失败（不可被 kill/wait 覆盖）
+  fi
+  kill -"$sig" -- -"$pid" 2>/dev/null
+  wait "$pid" 2>/dev/null
+  sleep 0.3
+  [[ "$(ls -A "$cnt" 2>/dev/null | wc -l)" -eq 0 ]]
+}
+check "TERM：临时文件出现过且信号后无遗留" sig_case TERM "$LIB"
+check "INT：临时文件出现过且信号后无遗留" sig_case INT "$LIB"
+# 变异验证：去掉 parse_version_code_from_git 的 trap EXIT 行（改用副本，不动真实 lib），
+# TERM/INT/errexit 三条用例必须全部失败（fail 计数在场景 20b 汇报），还原=不受影响。
+MUTLIB=$TMP/release_lib_notrap.sh
+sed "/trap 'rm -f -- \"\$tmp\"' EXIT/d" "$LIB" > "$MUTLIB"
+MUT_FAIL=0
+if sig_case TERM "$MUTLIB"; then MUT_FAIL=$((MUT_FAIL+1)); echo "FAIL - 变异 TERM 用例意外通过"; else echo "ok   - 变异 TERM 用例如期失败"; fi
+if sig_case INT "$MUTLIB"; then MUT_FAIL=$((MUT_FAIL+1)); echo "FAIL - 变异 INT 用例意外通过"; else echo "ok   - 变异 INT 用例如期失败"; fi
+( cd "$R0" && TMPDIR="$TMPCNT/mut-errexit" bash -e -c "mkdir -p \"\$TMPDIR\"; source '$MUTLIB'; parse_version_code_from_git v-nonexist" ) >/dev/null 2>&1
+MUTLEFT=$(ls -A "$TMPCNT/mut-errexit" 2>/dev/null | wc -l); rm -rf -- "$TMPCNT/mut-errexit"
+if [[ "$MUTLEFT" -eq 0 ]]; then MUT_FAIL=$((MUT_FAIL+1)); echo "FAIL - 变异 errexit 用例意外通过（无遗留）"; else echo "ok   - 变异 errexit 用例如期失败（遗留 $MUTLEFT 个）"; fi
+check "变异验证：3 条用例全部如期失败（意外通过数=$MUT_FAIL）" test "$MUT_FAIL" -eq 0
 
 # ── release_build.sh wiring（沙箱仓库 + fake aapt/apksigner + 真实断言脚本）────
 # 用真实 scripts/release_assert_apk.sh：其 SDK 发现链 local.properties sdk.dir →
@@ -393,6 +416,59 @@ if [[ -s "$TMP/old_lib.sh" ]]; then
 else
   check "旧库 fixture 可提取" test 1 -eq 0
 fi
+
+echo "== 场景 26: tag_code_or_skip git 异常 → fail-closed（mock）/ 路径确实不存在才跳过（真实沙箱） =="
+R7=$TMP/gexc; make_git_repo "$R7"
+commit_file "$R7" gradle.properties 'x=1\n' "upstream props no key"
+git -C "$R7" tag v0.1.2
+commit_file "$R7" gradle.properties 'alphagps.versionCode=5\n' "custom v0.2.0"
+git -C "$R7" tag v0.2.0
+# mock：git 函数对 v0.2.0 的 ls-tree / show 一律 rc=128，其余透传真实 git
+OUT=$(cd "$R7" && {
+  git() {
+    local a
+    for a in "$@"; do [[ "$a" == v0.2.0* ]] && { echo "fatal: mocked git failure" >&2; return 128; }; done
+    command git "$@"
+  }
+  assert_code_monotonic 4 0.2.1
+} 2>"$TMP/err"); RC=$?
+check "git ls-tree/show 对 v0.2.0 返回 128 → assert_code_monotonic 4 0.2.1 非零（fail-closed，不当上游跳过）" test "$RC" -ne 0
+check "错误点名 v0.2.0 判定失败" grep -q "tag v0.2.0 判定失败" "$TMP/err"
+check "错误含 ls-tree 或 rev-parse 或 show fail-closed 关键字" grep -qE "ls-tree 异常|rev-parse 失败|git show 失败" "$TMP/err"
+# mock：rev-parse 对 v0.2.0 失败 → 同样 fail-closed
+OUT=$(cd "$R7" && {
+  git() {
+    if [[ "$1" == rev-parse ]]; then
+      local a; for a in "$@"; do [[ "$a" == v0.2.0* ]] && return 1; done
+    fi
+    command git "$@"
+  }
+  assert_code_monotonic 4 0.2.1
+} 2>"$TMP/err"); RC=$?
+check "rev-parse 对 v0.2.0 失败 → 非零（fail-closed）" test "$RC" -ne 0
+check "错误含『rev-parse 失败』" grep -q "rev-parse 失败" "$TMP/err"
+# 真实沙箱：tag 提交树里确实没有 gradle.properties → 跳过，继续往前找到有文件的 tag
+( cd "$R7" && git rm -q gradle.properties && git -c user.email=t@t -c user.name=t commit -qm "drop props" && git tag v0.2.5-noprops )
+OUT=$(cd "$R7" && assert_code_monotonic 6 0.3.0 2>"$TMP/err"); RC=$?
+check "无 gradle.properties 的上游 tag（v0.2.5-noprops）被跳过，比较落到 v0.2.0(5) → 6>5 通过" \
+  test "$RC" -eq 0 -a "$(grep -c '6 > v0.2.0(versionCode=5)' <<<"$OUT")" -eq 1
+OUT=$(cd "$R7" && assert_code_monotonic 5 0.3.0 2>"$TMP/err"); RC=$?
+check "跳过无文件 tag 后未递增仍拦截（5 ≤ v0.2.0 的 5）" test "$RC" -ne 0
+
+echo "== 场景 27: 抽取 grep rc=2（函数覆盖）→ fail-closed / 裸 set -e 下 props 解析不静默退出 =="
+# 前几次探测（NUL/CR/计数 grep）用真实 grep 正常通过，仅最后的抽取 grep 返回 2
+printf 'a=1\nalphagps.versionCode=7\n' > "$TMP/xrc2.props"
+OUT=$( { grep() { [[ "$1 $2" == "-aF alphagps.versionCode" ]] && return 2; command grep "$@"; }; \
+  parse_version_code_props "$TMP/xrc2.props"; } 2>"$TMP/err"); RC=$?
+check "抽取 grep rc=2 → 非零（fail-closed，不再被 || true 吞掉）" test "$RC" -ne 0
+check "错误含『抽取 grep 异常（rc=2）』" grep -q "抽取 grep 异常（rc=2）" "$TMP/err"
+# 裸 set -e 子进程调用：key 缺失（首个会失败的 grep rc1）→ 走 FAIL 分支返回 1，而非被 errexit 静默杀掉
+printf 'org.gradle.jvmargs=-Xmx1m\n' > "$TMP/nokey.props"
+OUT=$(bash -e -c "source '$LIB'; parse_version_code_props '$TMP/nokey.props'" 2>"$TMP/err"); RC=$?
+check "set -e 下无 key → rc=1 且错误含『恰好 1 行』（非静默提前退出）" test "$RC" -eq 1 -a "$(grep -c "恰好 1 行" "$TMP/err")" -eq 1
+# set -e 下正例仍正常
+OUT=$(bash -e -c "source '$LIB'; parse_version_code_props '$TMP/xrc2.props'" 2>/dev/null); RC=$?
+check "set -e 下正例 → 7" test "$RC" -eq 0 -a "$OUT" == "7"
 
 echo
 SCENARIOS=$(grep -c '^echo "== 场景' -- "$0")
