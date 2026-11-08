@@ -117,10 +117,11 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     fun previewPhoto(captureId: String) {
         val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return
         if (!state.photoBrowser.open) return
+        // Opening the viewer while a catalog load or download is in flight would clear the
+        // transfer result and, with it, the pending batch summary line. Refuse instead.
+        if (state.photoBrowser.loading || state.imageTransfer.busy) return
         val index = groupCameraPhotos(state.photoBrowser.photos).indexOfFirst { it.id == captureId }
         if (index >= 0) {
-            // A batch result line must not be mistaken for the viewer's own download result.
-            batchSummary = null
             controller.clearPhotoTransferResult(identifier)
             viewedPhotoIndex = state.photoBrowser.offset + index
             viewPhotoAt(viewedPhotoIndex!!)
