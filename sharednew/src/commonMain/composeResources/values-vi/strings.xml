@@ -165,7 +165,7 @@
     <string name="guide_remote_description">Máy ảnh like the α6400 cannot use the Bluetooth remote and location linking at the same thời gian — with the remote on, the kết nối or GPS transfer stops working. Newer models (e.g. α7 IV and later) support both.</string>
     <string name="guide_remote_step_camera">On the máy ảnh, switch the Bluetooth remote off:</string>
     <string name="guide_remote_step_camera_path">Menu → Network → Bluetooth Rmt Ctrl → Off</string>
-    <string name="guide_remote_step_app">In Alpha GPS, tap the máy ảnh on the main screen and turn off Bậte remote control'.</string>
+    <string name="guide_remote_step_app">Alpha GPS không còn dùng điều khiển từ xa — chỉ cần cài đặt trên máy ảnh ở trên.</string>
     <string name="guide_link_remote_a6400">Sony Trợ giúp Guide: Bluetooth Rmt Ctrl (α6400)</string>
     <string name="guide_accuracy_title">Location is imprecise or outdated</string>
     <string name="guide_accuracy_description">If ảnh are tagged with a position that is noticeably off, the app usually isn't allowed to use your precise location.</string>
@@ -179,7 +179,6 @@
     <string name="pairing_failed_hint_camera_pairing">• On the máy ảnh, Xóa Cũ pairings: Menu → Network → Bluetooth → Manage Paired Thiết bị.</string>
     <string name="pairing_failed_hint_phone_pairing">• Xóa the máy ảnh from your phone's Bluetooth Cài đặt (Settings → Bluetooth), then try again.</string>
     <string name="scan_timeout_creators_app_hint">Máy ảnh not found? Make sure it is in ghép nối mode. If it was set up with Sony's Creators' App or Imaging Edge Mobile before, Xóa the Cũ ghép nối from the máy ảnh and from your phone's Bluetooth Cài đặt — the troubleshooting guide walks you through it.</string>
-    <string name="remote_control_hint">On some máy ảnh models, remote control cannot be used while location linking is đang hoạt động. If the kết nối or GPS transfer stops working, turn this off.</string>
     <string name="help_menu_item">Tr� giúp</string>
     <string name="associated_devices">Đã ghép nối Devices</string>
     <string name="nearby_cameras">Nearby Máy ảnh</string>
@@ -198,13 +197,10 @@
     <string name="device_association_removed_retry">The thiết bị was already đã ghép nối. The association was removed to prevent duplicates. Please try again.</string>
     <string name="back">Quay lại</string>
     <string name="device_icon">Thiết bị biểu tượng</string>
-    <string name="trigger_shutter">Trigger remote shutter</string>
-    <string name="remote_feature_inactive">Connected. Remote off in máy ảnh or app</string>
     <string name="show_details">Hiện details</string>
     <string name="device_name_with_address">Name: %1$s (%2$s)</string>
     <string name="enable_device">Bật thiết bị</string>
     <string name="enableConstantly">Keep đang hoạt động (Always On)</string>
-    <string name="enable_remote_control">Bật remote control</string>
     <string name="not_paired_tap_to_pair_again">Not paired, please ghép nối the thiết bị in the Bluetooth Cài đặt</string>
     <string name="to_pair_with_your_camera_please">To ghép nối with your máy ảnh \\'%1$s\\', please:</string>
     <string name="_1_turn_on_your_camera">\n1. Turn on your máy ảnh</string>

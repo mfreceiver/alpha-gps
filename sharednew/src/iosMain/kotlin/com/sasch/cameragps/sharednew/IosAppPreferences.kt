@@ -13,7 +13,6 @@ internal object IosAppPreferences {
     private const val keyAutoScanEnabled = "ios.autoScanEnabled"
     private const val keyTransmissionNotifications = "ios.transmissionNotifications"
     private const val keyHapticsEnabled = "ios.hapticsEnabled"
-    private const val keyWifiBrowseOnly = "ios.wifiBrowseOnly"
     private const val keyWifiDefaultDownloadFormat = "ios.wifiDefaultDownloadFormat"
     private const val keyDonationHintLastShown = "ios.donationHintLastShown"
     private const val keyDonationHintShownTimes = "ios.donationHintShownTimes"
@@ -85,15 +84,6 @@ internal object IosAppPreferences {
 
     fun setHapticsEnabled(enabled: Boolean) {
         defaults.setBool(enabled, forKey = keyHapticsEnabled)
-    }
-
-    /** Wi-Fi browse-only mode: default on — connect for GPS logging + photo download, no remote shooting. */
-    fun isWifiBrowseOnly(): Boolean = defaults.objectForKey(keyWifiBrowseOnly)?.let {
-        defaults.boolForKey(keyWifiBrowseOnly)
-    } ?: true
-
-    fun setWifiBrowseOnly(enabled: Boolean) {
-        defaults.setBool(enabled, forKey = keyWifiBrowseOnly)
     }
 
     /** Default Wi-Fi photo download format: "original" (JPG+RAW, default) or "jpeg" (JPG only). */

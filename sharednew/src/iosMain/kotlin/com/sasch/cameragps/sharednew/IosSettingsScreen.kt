@@ -62,8 +62,6 @@ import cameragps.sharednew.generated.resources.tip_jar_error_prefix
 import cameragps.sharednew.generated.resources.tip_jar_loading
 import cameragps.sharednew.generated.resources.tip_jar_thank_you
 import cameragps.sharednew.generated.resources.tip_jar_unavailable
-import cameragps.sharednew.generated.resources.wifi_remote_browse_mode
-import cameragps.sharednew.generated.resources.wifi_remote_browse_mode_description
 import cameragps.sharednew.generated.resources.wifi_remote_default_download_format
 import cameragps.sharednew.generated.resources.wifi_remote_default_download_format_jpeg
 import cameragps.sharednew.generated.resources.wifi_remote_default_download_format_original
@@ -177,16 +175,6 @@ internal fun IosSettingsScreen(
                     description = stringResource(Res.string.haptic_feedback_description),
                     checked = hapticsEnabled,
                     onCheckedChange = onHapticsEnabledChange,
-                )
-                var wifiBrowseOnly by remember { mutableStateOf(IosAppPreferences.isWifiBrowseOnly()) }
-                SharedToggleRow(
-                    title = stringResource(Res.string.wifi_remote_browse_mode),
-                    description = stringResource(Res.string.wifi_remote_browse_mode_description),
-                    checked = wifiBrowseOnly,
-                    onCheckedChange = { enabled ->
-                        IosAppPreferences.setWifiBrowseOnly(enabled)
-                        wifiBrowseOnly = enabled
-                    },
                 )
                 var jpegOnlyDefault by remember {
                     mutableStateOf(IosAppPreferences.isWifiDefaultDownloadFormatJpeg())

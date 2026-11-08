@@ -99,7 +99,7 @@
     <string name="auto_scan">Scan on screen open</string>
     <string name="auto_scan_description">Automatically look for nearby cameras when the devices screen is visible</string>
     <string name="haptic_feedback">Haptic feedback</string>
-    <string name="haptic_feedback_description">Vibrate when the remote shutter is pressed and when the picture is taken</string>
+    <string name="haptic_feedback_description">Vibrate for key actions in the app</string>
     <string name="show_welcome_again_description">Reopen the onboarding flow the next time the app starts</string>
     <string name="log_settings">Log Settings</string>
     <string name="log_level">Log Level</string>
@@ -194,7 +194,7 @@
     <string name="guide_remote_description">Cameras like the α6400 cannot use the Bluetooth remote and location linking at the same time — with the remote on, the connection or GPS transfer stops working. Newer models (e.g. α7 IV and later) support both.</string>
     <string name="guide_remote_step_camera">On the camera, switch the Bluetooth remote off:</string>
     <string name="guide_remote_step_camera_path">MENU → Network → Bluetooth Rmt Ctrl → Off</string>
-    <string name="guide_remote_step_app">In Alpha GPS, tap the camera on the main screen and turn off 'Enable remote control'.</string>
+    <string name="guide_remote_step_app">Alpha GPS no longer uses the remote control feature — only the camera setting above matters.</string>
     <string name="guide_link_remote_a6400">Sony Help Guide: Bluetooth Rmt Ctrl (α6400)</string>
     <string name="guide_accuracy_title">Location is imprecise or outdated</string>
     <string name="guide_accuracy_description">If photos are tagged with a position that is noticeably off, the app usually isn't allowed to use your precise location.</string>
@@ -214,7 +214,6 @@
     <!-- Hint under the scan error when device discovery times out -->
     <string name="scan_timeout_creators_app_hint">Camera not found? Make sure it is in pairing mode. If it was set up with Sony's Creators' App or Imaging Edge Mobile before, remove the old pairing from the camera and from your phone's Bluetooth settings — the troubleshooting guide walks you through it.</string>
     <!-- Hint below the remote-control toggle on the device detail screen -->
-    <string name="remote_control_hint">On some camera models, remote control cannot be used while location linking is active. If the connection or GPS transfer stops working, turn this off.</string>
     <!-- Help menu item -->
     <string name="help_menu_item">Help</string>
     <!-- Additional missing strings for device management -->
@@ -236,13 +235,10 @@
     <string name="device_association_removed_retry">The device was already associated. The association was removed to prevent duplicates. Please try again.</string>
     <string name="back">Back</string>
     <string name="device_icon">Device icon</string>
-    <string name="trigger_shutter">Trigger remote shutter</string>
-    <string name="remote_feature_inactive">Connected. Remote off in camera or app</string>
     <string name="show_details">Show details</string>
     <string name="device_name_with_address">Name: %1$s (%2$s)</string>
     <string name="enable_device">Enable device</string>
     <string name="enableConstantly">Keep active (Always On)</string>
-    <string name="enable_remote_control">Enable remote control</string>
     <string name="not_paired_tap_to_pair_again">Not paired, please pair the device in the bluetooth settings</string>
     <string name="to_pair_with_your_camera_please">To pair with your camera \'%1$s\', please:</string>
     <string name="_1_turn_on_your_camera">\n1. Turn on your camera</string>
@@ -336,12 +332,12 @@
 
     <!-- In-app release notes. -->
     <string name="whats_new_title">What’s new</string>
-    <string name="whats_new_171_zv1">Improved Wi-Fi remote compatibility for the Sony ZV-1 and other older Sony cameras, including live view startup and photo transfer.</string>
+    <string name="whats_new_171_zv1">Improved Wi-Fi compatibility for the Sony ZV-1 and other older Sony cameras, including live view startup and photo transfer.</string>
     <string name="whats_new_171_rx0">Fixed repeated Bluetooth disconnections during location sharing with cameras such as the Sony RX0 II when Always On is disabled.</string>
     <string name="whats_new_version">Version %1$s</string>
     <string name="whats_new_close">Got it</string>
     <string name="whats_new_open">View release notes</string>
-    <string name="whats_new_170_wifi_remote">New experimental Wi-Fi remote with live view, shutter control, and photo browsing and downloads. Currently validated only with the Sony α6700.\n\nTo open it, tap your camera in the device list, then tap “Wi-Fi remote (experimental)”.</string>
+    <string name="whats_new_170_wifi_remote">New experimental Wi-Fi feature with live view, shutter control, and photo browsing and downloads. Currently validated only with the Sony α6700.\n\nTo open it, tap your camera in the device list, then tap “Wi-Fi photo transfer”.</string>
     <string name="whats_new_162_time">View and change automatic time correction in your camera’s details. This setting controls whether the camera adjusts its date and time using your phone.</string>
     <string name="whats_new_162_notifications">Location transmission notifications now update more reliably.</string>
     <string name="whats_new_162_pairing">Updated camera pairing on iOS uses the system accessory picker. Previously paired cameras may need to be authorized again; the app will guide you through it.</string>
@@ -351,9 +347,9 @@
     <string name="welcome_gps_label">Location</string>
     <string name="welcome_gps_title">Geotag your photos</string>
     <string name="welcome_gps_body">Alpha GPS sends your phone’s location to your Sony camera over Bluetooth. The camera saves it with each photo.</string>
-    <string name="welcome_remote_label">Remote control</string>
-    <string name="welcome_remote_title">Shoot from your phone</string>
-    <string name="welcome_remote_body">Use your phone as a remote shutter. On supported cameras, you can also use Wi-Fi to view the live image and transfer photos.</string>
+    <string name="welcome_remote_label">Wi-Fi photo transfer</string>
+    <string name="welcome_remote_title">Browse camera photos from your phone</string>
+    <string name="welcome_remote_body">Browse the photos on your camera over Wi-Fi and download them to your phone.</string>
     <string name="welcome_pair_label">Connection</string>
     <string name="welcome_pair_title">Connect your camera</string>
     <string name="welcome_pair_body">When you’re ready, tap Add camera. Alpha GPS will guide you through pairing your Sony camera with your phone.</string>
@@ -361,13 +357,13 @@
     <string name="welcome_ready_title">Keep your photos geotagged</string>
     <string name="welcome_ready_body">Alpha GPS needs precise location access to geotag your photos. Background access keeps location updates running while your phone is locked.</string>
 
-    <string name="wifi_remote_experimental_title">Experimental Wi-Fi remote</string>
-    <string name="wifi_remote_experimental_message">Wi-Fi remote is experimental and has currently only been validated with the developer’s Sony α6700. Other camera models may behave differently.\n\nPlease report any issues by email or on GitHub. Include your camera model and your phone’s operating system and version (Android or iOS).</string>
-    <string name="wifi_remote_title">Wi-Fi remote (experimental)</string>
-    <string name="wifi_remote_entry_hint">Live view, shutter and photo downloads</string>
+    <string name="wifi_remote_experimental_title">Experimental Wi-Fi photo transfer</string>
+    <string name="wifi_remote_experimental_message">Wi-Fi photo transfer is experimental and has currently only been validated with the developer’s Sony α6700. Other camera models may behave differently.\n\nPlease report any issues by email or on GitHub. Include your camera model and your phone’s operating system and version (Android or iOS).</string>
+    <string name="wifi_remote_title">Wi-Fi photo transfer</string>
+    <string name="wifi_remote_entry_hint">Browse and download photos from the camera</string>
     <string name="wifi_remote_setup">Start the camera’s smartphone Wi-Fi connection, disconnect Creators’ App, then join the camera’s Wi-Fi in phone settings. Enter the camera IP address.</string>
     <string name="wifi_remote_ip">Camera IP address</string>
-    <string name="wifi_remote_setup_detect_address">Start remote shooting on the camera and close Sony’s app, then join the camera’s Wi-Fi in phone settings. Leave the IP address blank to detect it automatically, or enter it manually.</string>
+    <string name="wifi_remote_setup_detect_address">Start the camera’s smartphone connection and close Sony’s app, then join the camera’s Wi-Fi in phone settings. Leave the IP address blank to detect it automatically, or enter it manually.</string>
     <string name="wifi_remote_settings">Open Wi-Fi settings</string>
     <string name="wifi_remote_connect">Connect</string>
     <string name="wifi_remote_disconnect">Disconnect</string>
@@ -377,26 +373,17 @@
     <string name="wifi_remote_shutdown_requested">Disconnected. Camera Wi-Fi shutdown requested.</string>
     <string name="wifi_remote_shutdown_unavailable">Disconnected. The camera did not allow Wi-Fi shutdown; you may need to turn it off on the camera.</string>
     <string name="wifi_remote_shutdown_unconfirmed">Disconnected. Could not confirm the Wi-Fi shutdown request. Check the camera if Wi-Fi remains on.</string>
-    <string name="wifi_remote_connected">Connected to %1$s</string>
-    <string name="wifi_remote_capture">Take photo</string>
-    <string name="wifi_remote_shooting">Taking photo…</string>
-    <string name="wifi_remote_captured">Camera confirmed capture.</string>
-    <string name="wifi_remote_uncertain">Capture could not be confirmed. Check the camera before taking another photo.</string>
-    <string name="wifi_remote_rejected">The camera refused the shutter request. Check its shooting mode and card.</string>
-    <string name="wifi_remote_preview_waiting">Waiting for preview…</string>
-    <string name="wifi_remote_fullscreen">Full-screen preview</string>
-    <string name="wifi_remote_minimize">Minimize preview</string>
-    <string name="wifi_remote_preview_failed">Preview stopped. Disconnect and reconnect to try again.</string>
-    <string name="wifi_remote_invalid_ip">Enter the camera’s IPv4 address, for example the address shown in its Wi-Fi connection details.</string>
+    <string name="wifi_remote_connected">Connected to %1$s</string>    <string name="wifi_remote_fullscreen">Full-screen preview</string>
+    <string name="wifi_remote_minimize">Minimize preview</string>    <string name="wifi_remote_invalid_ip">Enter the camera’s IPv4 address, for example the address shown in its Wi-Fi connection details.</string>
     <string name="wifi_remote_join_wifi">Join the camera’s Wi-Fi network in phone settings, then return here.</string>
     <string name="wifi_remote_permission">Connection permission was denied. Allow Nearby devices in the app’s permission settings, or precise Location on older Android versions, then try again.</string>
     <string name="wifi_connection_failed">Couldn’t open a Wi-Fi connection to the camera.</string>
     <string name="wifi_connection_help">Connection help</string>
     <string name="wifi_connection_help_title">Check connection settings</string>
-    <string name="wifi_connection_help_message">Make sure the camera is ready for remote shooting and this phone is connected to its Wi-Fi.\n\nSome Android versions can block an app’s network access. In App settings, look for “Mobile data &amp; Wi-Fi”, “Network access” or “Restrict data usage”, and allow Wi-Fi for Alpha GPS. Under Permissions, allow Nearby devices or precise Location if requested, and Local network if listed.\n\nReturn here and try connecting again. Setting names vary by phone.</string>
+    <string name="wifi_connection_help_message">Make sure the camera is ready for photo transfer and this phone is connected to its Wi-Fi.\n\nSome Android versions can block an app’s network access. In App settings, look for “Mobile data &amp; Wi-Fi”, “Network access” or “Restrict data usage”, and allow Wi-Fi for Alpha GPS. Under Permissions, allow Nearby devices or precise Location if requested, and Local network if listed.\n\nReturn here and try connecting again. Setting names vary by phone.</string>
     <string name="wifi_remote_failed">Could not connect. Check the camera IP, keep its smartphone connection active, and close other camera-control apps.</string>
     <string name="wifi_remote_lost">The camera connection was lost. Join its Wi-Fi again and reconnect.</string>
-    <string name="wifi_remote_other_camera">Another Wi-Fi remote session is open. Close it before connecting this camera.</string>
+    <string name="wifi_remote_other_camera">Another Wi-Fi photo transfer session is open. Close it before connecting this camera.</string>
     <string name="wifi_remote_auto_setup">Keep the camera connected by Bluetooth and close Creators’ App. Alpha GPS will start camera Wi-Fi and ask your phone to connect.</string>
     <string name="wifi_remote_auto_connect">Tap To Connect automatically</string>
     <string name="wifi_remote_prepare_only_hint">Enable the camera’s Wi-Fi over Bluetooth, then join its network in phone settings. The camera IP will be detected after you join.</string>
@@ -445,7 +432,7 @@
     <string name="wifi_remote_browser_failed">Could not read camera photos or change transfer mode. Retry, or disconnect and reconnect if the camera is busy.</string>
     <string name="wifi_remote_browser_empty">No supported photos on this page.</string>
     <string name="wifi_remote_browser_refresh">Refresh</string>
-    <string name="wifi_remote_browser_back">Back to remote shooting</string>
+    <string name="wifi_remote_browser_back">Disconnect</string>
     <string name="wifi_remote_browser_previous">Previous</string>
     <string name="wifi_remote_browser_next">Next</string>
     <string name="wifi_remote_browser_page">Page %1$d</string>
@@ -460,8 +447,6 @@
     <string name="wifi_remote_transfer_cancel">Cancel</string>
     <string name="wifi_remote_storage_permission">Allow storage access to save photos to your phone.</string>
     <string name="wifi_remote_browse_unsupported">This camera does not advertise supported photo browsing.</string>
-    <string name="wifi_remote_browse_mode">Wi-Fi browse-only mode</string>
-    <string name="wifi_remote_browse_mode_description">Connect to the camera only for GPS logging and photo download, without remote shooting or live view. Turn this off if your camera refuses the connection.</string>
     <string name="wifi_remote_default_download_format">Default download format</string>
     <string name="wifi_remote_default_download_format_jpeg">JPEG only</string>
     <string name="wifi_remote_default_download_format_original">Original (JPG + RAW)</string>

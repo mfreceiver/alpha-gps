@@ -142,7 +142,6 @@ fun AndroidWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
             } else controller.downloadPhotos(identifier, downloads)
         },
         onWifiSettings = { context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) },
-        browseOnly = PreferencesManager.isWifiBrowseOnly(context),
         defaultDownloadFormatJpeg = PreferencesManager.isWifiDefaultDownloadFormatJpeg(context),
         onClose = close)
 }

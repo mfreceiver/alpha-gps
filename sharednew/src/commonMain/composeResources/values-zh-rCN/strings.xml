@@ -253,7 +253,7 @@
     <string name="guide_remote_description">像 α6400 这样的相机不能同时使用蓝牙遥控和位置链接——当遥控器打开时，连接或 GPS 传输停止工作。较新的型号（如 α7 IV 及更高版本）支持这两种。</string>
     <string name="guide_remote_step_camera">在相机上，关闭蓝牙遥控：</string>
     <string name="guide_remote_step_camera_path">MENU → 网络 → Bluetooth遥控 → 关</string>
-    <string name="guide_remote_step_app">在 Alpha GPS 中，点击主屏幕上的相机并关闭“启用遥控功能”。</string>
+    <string name="guide_remote_step_app">Alpha GPS 已不再使用遥控功能，只需在相机上关闭蓝牙遥控即可。</string>
     <string name="guide_link_remote_a6400">索尼帮助指南：Bluetooth遥控（α6400）</string>
     <string name="guide_accuracy_title">位置不精确或过时</string>
     <string name="guide_accuracy_description">如果照片被标记为明显偏离的位置，则应用程序通常不允许使用您的精确位置。</string>
@@ -261,7 +261,7 @@
     <string name="guide_accuracy_step_precise_path_android">设置 → 应用 → Alpha GPS → 权限 → 位置 → 使用精确位置</string>
     <string name="guide_accuracy_step_precise_path_ios">设置 → 隐私和安全 → 定位服务 → Alpha GPS → 精确位置 → 开启</string>
     <string name="haptic_feedback">振动反馈</string>
-    <string name="haptic_feedback_description">按下遥控快门以及完成拍摄时振动</string>
+    <string name="haptic_feedback_description">应用执行操作时提供振动反馈</string>
     <string name="guide_accuracy_step_battery">将应用排除在电池优化之外，以确保传输在后台持续运行：设置 → 应用 → Alpha GPS → 电池 → 不受限制。</string>
     <string name="pairing_failed_device_message">相机“%1$s”拒绝配对。</string>
     <string name="pairing_failed_hint_intro">这通常是因为相机未处于配对模式，或仍与另一台设备保持配对时：</string>
@@ -269,10 +269,6 @@
     <string name="pairing_failed_hint_camera_pairing">• 在相机上，删除旧的配对记录：MENU → 网络 → 蓝牙 → 管理已配对设备。</string>
     <string name="pairing_failed_hint_phone_pairing">• 在手机的蓝牙设置中移除该相机（设置 → 蓝牙），然后重试。</string>
     <string name="scan_timeout_creators_app_hint">未找到相机？请确保其已处于配对模式。如果此前曾使用 Sony 的 Creators' App 或 Imaging Edge Mobile 进行过设置，请从相机和手机的蓝牙设置中删除旧的配对记录——故障排查指南将引导您完成具体操作。</string>
-    <string name="remote_control_hint">在某些相机型号上，启用位置关联时无法使用遥控功能。如果连接或 GPS 传输停止工作，请关闭此功能。</string>
-    <string name="trigger_shutter">触发遥控快门</string>
-    <string name="remote_feature_inactive">已连接。相机或应用中的遥控功能已关闭</string>
-    <string name="enable_remote_control">启用遥控功能</string>
     <string name="enable_pairing_mode_title">启用配对模式</string>
     <string name="enable_pairing_mode_message">如果是第一次将此相机连接到手机，请在继续操作前，务必在相机的设置中启用蓝牙配对模式。如果并非首次连接，直接继续即可</string>
     <string name="enable_pairing_mode_continue">继续</string>
@@ -295,7 +291,7 @@
     <string name="rename_camera_hint">此名称仅在 Alpha GPS 内使用。</string>
     <string name="guide_startup_title">相机启动缓慢或屏幕保持黑屏</string>
     <string name="guide_startup_description">在某些相机上，若开启关机时连接智能手机功能，当启用 Alpha GPS 时可能会导致开机变慢。</string>
-    <string name="guide_startup_step_disable">在相机的“网络”菜单中，将“关机时连接”设为“关”。菜单名称和位置因型号而异。这将在相机关机时禁用智能手机访问；相机开机时，请保持蓝牙开启以用于 GPS 和遥控。</string>
+    <string name="guide_startup_step_disable">在相机的“网络”菜单中，将“关机时连接”设为“关”。菜单名称和位置因型号而异。这将在相机关机时禁用智能手机访问；相机开机时，请保持蓝牙开启以用于 GPS。</string>
     <string name="auto_time_correction">自动时间校正</string>
     <string name="auto_time_correction_hint">允许相机利用来自智能手机的信息自动校正日期和时间。这将更改已连接相机上的设置。</string>
     <string name="auto_area_adjustment">自动区域调整</string>
@@ -309,9 +305,9 @@
     <string name="whats_new_close">知道了</string>
     <string name="whats_new_open">查看更新日志</string>
     <string name="whats_new_title">更新日志</string>
-    <string name="whats_new_171_zv1">改进了索尼 ZV-1 和其他较旧索尼相机的 Wi-Fi 遥控兼容性，包括实时取景启动和照片传输。</string>
+    <string name="whats_new_171_zv1">改进了索尼 ZV-1 和其他较旧索尼相机的 Wi-Fi 兼容性，包括实时取景启动和照片传输。</string>
     <string name="whats_new_171_rx0">修复了索尼 RX0 II 等相机在关闭“始终开启”模式时，位置共享过程中反复断开蓝牙连接的问题。</string>
-    <string name="whats_new_170_wifi_remote">新增实验性 Wi-Fi 遥控功能，支持实时取景、快门控制，以及浏览和下载图像。目前仅在索尼 α6700 上验证过。\n\n打开方式：在设备列表中点击你的相机，然后点击“Wi-Fi remote (experimental)”。</string>
+    <string name="whats_new_170_wifi_remote">新增实验性 Wi-Fi 照片功能，支持实时取景、快门控制，以及浏览和下载图像。目前仅在索尼 α6700 上验证过。\n\n打开方式：在设备列表中点击你的相机，然后点击“Wi-Fi 照片传输”。</string>
     <string name="whats_new_162_time">在相机的详细信息中查看并切换自动时间校正。该设置决定相机是否使用手机调整其日期和时间。</string>
     <string name="whats_new_162_notifications">位置传输通知现已能更稳定地更新。</string>
     <string name="whats_new_162_pairing">iOS 上的相机配对已更新，现改用系统配件选择器。此前已配对的相机可能需要重新授权，应用将引导您完成操作。</string>
@@ -321,18 +317,18 @@
     <string name="welcome_gps_label">位置</string>
     <string name="welcome_gps_title">为照片添加位置信息</string>
     <string name="welcome_gps_body">Alpha GPS 通过蓝牙将手机的位置信息发送到你的索尼相机。相机会将其保存到每张照片中。</string>
-    <string name="welcome_remote_title">用手机遥控拍摄</string>
-    <string name="welcome_remote_body">将手机作为遥控快门。在支持的相机上，还可以通过 Wi-Fi 查看实时画面并传输照片。</string>
+    <string name="welcome_remote_title">用手机浏览相机照片</string>
+    <string name="welcome_remote_body">通过 Wi-Fi 浏览相机里的照片，并下载到手机。</string>
     <string name="welcome_pair_label">连接</string>
     <string name="welcome_pair_title">连接相机</string>
     <string name="welcome_pair_body">准备好后，点按“添加相机”。Alpha GPS 会引导您将索尼相机与手机配对。</string>
     <string name="welcome_ready_label">位置访问</string>
     <string name="welcome_ready_title">为照片持续记录位置</string>
     <string name="welcome_ready_body">Alpha GPS 需要访问精确位置，才能为照片添加地理位置信息。后台位置访问可让位置更新在手机锁屏时继续运行。</string>
-    <string name="wifi_remote_experimental_title">实验性 Wi-Fi 遥控</string>
-    <string name="wifi_remote_experimental_message">Wi-Fi 遥控功能仍处于实验阶段，目前仅在开发者的索尼 α6700 上验证过。其他相机型号的表现可能不同。\n\n如遇问题，请通过电子邮件或 GitHub 反馈，并注明相机型号及手机操作系统和版本（Android 或 iOS）。</string>
-    <string name="wifi_remote_title">Wi-Fi 遥控（实验性）</string>
-    <string name="wifi_remote_entry_hint">实时取景、遥控快门和照片下载</string>
+    <string name="wifi_remote_experimental_title">实验性 Wi-Fi 照片传输</string>
+    <string name="wifi_remote_experimental_message">Wi-Fi 照片传输功能仍处于实验阶段，目前仅在开发者的索尼 α6700 上验证过。其他相机型号的表现可能不同。\n\n如遇问题，请通过电子邮件或 GitHub 反馈，并注明相机型号及手机操作系统和版本（Android 或 iOS）。</string>
+    <string name="wifi_remote_title">Wi-Fi 照片传输</string>
+    <string name="wifi_remote_entry_hint">浏览并下载相机里的照片</string>
     <string name="wifi_remote_setup">启动相机的智能手机 Wi-Fi 连接，断开 Creators’ App 的连接，然后在手机设置中连接相机的 Wi-Fi，并输入相机的 IP 地址。</string>
     <string name="wifi_remote_ip">相机 IP 地址</string>
     <string name="wifi_remote_settings">打开 Wi-Fi 设置</string>
@@ -344,22 +340,13 @@
     <string name="wifi_remote_shutdown_requested">已断开连接，并已请求关闭相机 Wi-Fi。</string>
     <string name="wifi_remote_shutdown_unavailable">已断开连接。相机不允许关闭 Wi-Fi，您可能需要在相机上手动关闭。</string>
     <string name="wifi_remote_shutdown_unconfirmed">已断开连接，但无法确认 Wi-Fi 关闭请求。如果相机 Wi-Fi 仍开启，请在相机上检查。</string>
-    <string name="wifi_remote_connected">已连接到 %1$s</string>
-    <string name="wifi_remote_capture">拍照</string>
-    <string name="wifi_remote_shooting">正在拍照…</string>
-    <string name="wifi_remote_captured">相机已确认拍摄。</string>
-    <string name="wifi_remote_uncertain">无法确认是否已拍摄。再次拍照前，请先检查相机。</string>
-    <string name="wifi_remote_rejected">相机拒绝了快门请求。请检查拍摄模式和存储卡。</string>
-    <string name="wifi_remote_preview_waiting">正在等待预览画面…</string>
-    <string name="wifi_remote_fullscreen">全屏预览</string>
-    <string name="wifi_remote_minimize">缩小预览画面</string>
-    <string name="wifi_remote_preview_failed">预览已停止。请断开连接后重新连接。</string>
-    <string name="wifi_remote_invalid_ip">请输入相机的 IPv4 地址，例如其 Wi-Fi 连接详情中显示的地址。</string>
+    <string name="wifi_remote_connected">已连接到 %1$s</string>    <string name="wifi_remote_fullscreen">全屏预览</string>
+    <string name="wifi_remote_minimize">缩小预览画面</string>    <string name="wifi_remote_invalid_ip">请输入相机的 IPv4 地址，例如其 Wi-Fi 连接详情中显示的地址。</string>
     <string name="wifi_remote_join_wifi">请在手机设置中连接相机的 Wi-Fi 网络，然后返回此处。</string>
     <string name="wifi_remote_permission">连接权限遭拒。请在应用权限设置中允许“附近的设备”，旧版 Android 则需允许访问精确位置，然后重试。</string>
     <string name="wifi_remote_failed">无法连接。请检查相机 IP 地址，保持相机的智能手机连接处于开启状态，并关闭其他相机控制应用。</string>
     <string name="wifi_remote_lost">与相机的连接已中断。请重新连接相机的 Wi-Fi，然后重试。</string>
-    <string name="wifi_remote_other_camera">另一个 Wi-Fi 遥控会话正在运行。请先关闭该会话，再连接这台相机。</string>
+    <string name="wifi_remote_other_camera">另一个 Wi-Fi 照片传输会话正在运行。请先关闭该会话，再连接这台相机。</string>
     <string name="wifi_remote_auto_setup">保持相机的蓝牙连接，并关闭 Creators’ App。Alpha GPS 将启动相机 Wi-Fi，并请求手机连接。</string>
     <string name="wifi_remote_auto_connect">一键自动连接</string>
     <string name="wifi_remote_prepare_only_hint">通过蓝牙开启相机 Wi-Fi，然后在手机设置中连接相机网络。连接后将自动检测相机 IP 地址。</string>
@@ -408,7 +395,7 @@
     <string name="wifi_remote_browser_failed">无法读取相机照片或切换传输模式。请重试；如果相机正忙，请断开连接后重新连接。</string>
     <string name="wifi_remote_browser_empty">此页没有支持的照片。</string>
     <string name="wifi_remote_browser_refresh">刷新</string>
-    <string name="wifi_remote_browser_back">返回遥控拍摄</string>
+    <string name="wifi_remote_browser_back">断开连接</string>
     <string name="wifi_remote_browser_previous">上一页</string>
     <string name="wifi_remote_browser_next">下一页</string>
     <string name="wifi_remote_browser_page">第 %1$d 页</string>
@@ -423,8 +410,6 @@
     <string name="wifi_remote_transfer_cancel">取消</string>
     <string name="wifi_remote_storage_permission">请允许访问存储空间以便将照片保存到手机。</string>
     <string name="wifi_remote_browse_unsupported">此相机未声明支持照片浏览功能。</string>
-    <string name="wifi_remote_browse_mode">Wi-Fi 仅浏览模式</string>
-    <string name="wifi_remote_browse_mode_description">连接相机仅用于 GPS 记录和照片下载，不进行遥控拍摄和实时取景。如果相机无法建立连接，请关闭此选项。</string>
     <string name="wifi_remote_default_download_format">默认下载格式</string>
     <string name="wifi_remote_default_download_format_jpeg">仅 JPEG</string>
     <string name="wifi_remote_default_download_format_original">原片（JPG + RAW）</string>
@@ -435,10 +420,10 @@
     <string name="wifi_remote_ios_settings">应用权限</string>
     <string name="wifi_remote_ios_permission">请在应用设置中允许访问“本地网络”，然后重新连接。</string>
     <string name="wifi_remote_ios_opening">正在连接相机… 如果 iOS 弹出提示，请允许访问“本地网络”。</string>
-    <string name="welcome_remote_label">遥控拍摄</string>
-    <string name="wifi_remote_setup_detect_address">请先在相机上启动遥控拍摄并关闭索尼的 App，然后在手机设置中连接相机的 Wi-Fi。IP 地址请留空以自动检测，或者手动输入。</string>
+    <string name="welcome_remote_label">Wi-Fi 照片传输</string>
+    <string name="wifi_remote_setup_detect_address">请先在相机上启动智能手机连接并关闭索尼的 App，然后在手机设置中连接相机的 Wi-Fi。IP 地址请留空以自动检测，或者手动输入。</string>
     <string name="wifi_connection_failed">无法建立与相机的 Wi-Fi 连接。</string>
     <string name="wifi_connection_help">连接帮助</string>
     <string name="wifi_connection_help_title">检查连接设置</string>
-    <string name="wifi_connection_help_message">请确保相机已准备好进行遥控拍摄，且本手机已连接至相机的 Wi-Fi。\n\n部分 Android 版本可能会限制应用的网络访问权限。请前往“应用设置”，查找“移动数据和 Wi-Fi”、“网络访问”或“限制联网/数据用量”等选项，并允许 Alpha GPS 使用 Wi-Fi。在“权限”设置中，根据提示允许访问“附近设备”或“精确位置”；如果列表中有“本地网络”，也请一并允许。\n\n完成后返回此处重新尝试连接。具体的设置名称因手机品牌而异。</string>
+    <string name="wifi_connection_help_message">请确保相机已准备好进行照片传输，且本手机已连接至相机的 Wi-Fi。\n\n部分 Android 版本可能会限制应用的网络访问权限。请前往“应用设置”，查找“移动数据和 Wi-Fi”、“网络访问”或“限制联网/数据用量”等选项，并允许 Alpha GPS 使用 Wi-Fi。在“权限”设置中，根据提示允许访问“附近设备”或“精确位置”；如果列表中有“本地网络”，也请一并允许。\n\n完成后返回此处重新尝试连接。具体的设置名称因手机品牌而异。</string>
 </resources>

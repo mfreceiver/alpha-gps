@@ -27,7 +27,6 @@ object PreferencesManager {
     private const val KEY_IGNORE_PERMISSIONS = "ignore_permissions"
     private const val KEY_LOCATION_PROVIDER = "location_provider"
     private const val KEY_HAPTICS_ENABLED = "haptics_enabled"
-    private const val KEY_WIFI_BROWSE_ONLY = "wifi_browse_only"
     private const val KEY_WIFI_DEFAULT_DOWNLOAD_FORMAT = "wifi_default_download_format"
     private const val KEY_TRANSMISSION_EVENT_SOUNDS_ENABLED = "transmission_event_sounds_enabled"
     private const val KEY_SOUND_LOCATION_ACQUIRED = "sound_location_acquired"
@@ -216,17 +215,6 @@ object PreferencesManager {
 
     fun isHapticsEnabled(context: Context): Boolean {
         return getPreferences(context).getBoolean(KEY_HAPTICS_ENABLED, true)
-    }
-
-    /** Wi-Fi browse-only mode: default on — connect for GPS logging + photo download, no remote shooting. */
-    fun isWifiBrowseOnly(context: Context): Boolean {
-        return getPreferences(context).getBoolean(KEY_WIFI_BROWSE_ONLY, true)
-    }
-
-    fun setWifiBrowseOnly(context: Context, enabled: Boolean) {
-        getPreferences(context).edit {
-            putBoolean(KEY_WIFI_BROWSE_ONLY, enabled)
-        }
     }
 
     /** Default Wi-Fi photo download format: "original" (JPG+RAW, default) or "jpeg" (JPG only). */

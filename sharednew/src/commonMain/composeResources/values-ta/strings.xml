@@ -157,13 +157,10 @@
     <string name="device_association_removed_retry">சாதனம் ஏற்கனவே இணைக்கப்பட்டுள்ளது. நகல்களைத் தடுக்க சங்கம் அகற்றப்பட்டது. மீண்டும் முயற்சிக்கவும்.</string>
     <string name="back">பின்</string>
     <string name="device_icon">சாதன படவுரு</string>
-    <string name="trigger_shutter">ரிமோட் சட்டரைத் தூண்டவும்</string>
-    <string name="remote_feature_inactive">இணைக்கப்பட்டது. கேமரா அல்லது ஆப்சில் ரிமோட் ஆஃப்</string>
     <string name="show_details">விவரங்களைக் காட்டு</string>
     <string name="device_name_with_address">பெயர்: %1$s (%2$s)</string>
     <string name="enable_device">சாதனத்தை இயக்கு</string>
     <string name="enableConstantly">செயலில் இருங்கள் (எப்போதும் இயக்கத்தில்)</string>
-    <string name="enable_remote_control">ரிமோட் கண்ட்ரோலை இயக்கவும்</string>
     <string name="not_paired_tap_to_pair_again">இணைக்கப்படவில்லை, ஊடலை அமைப்புகளில் சாதனத்தை இணைக்கவும்</string>
     <string name="to_pair_with_your_camera_please">உங்கள் கேமரா \\'%1$s\\' உடன் இணைக்க, தயவுசெய்து:</string>
     <string name="_1_turn_on_your_camera">\n1. உங்கள் கேமராவை இயக்கவும்</string>
