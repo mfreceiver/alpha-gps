@@ -33,8 +33,6 @@ import cameragps.sharednew.generated.resources.enable_auto_start_description
 import cameragps.sharednew.generated.resources.haptic_feedback
 import cameragps.sharednew.generated.resources.haptic_feedback_description
 import cameragps.sharednew.generated.resources.reset_welcome
-import cameragps.sharednew.generated.resources.wifi_remote_browse_mode
-import cameragps.sharednew.generated.resources.wifi_remote_browse_mode_description
 import cameragps.sharednew.generated.resources.wifi_remote_default_download_format
 import cameragps.sharednew.generated.resources.wifi_remote_default_download_format_jpeg
 import cameragps.sharednew.generated.resources.wifi_remote_default_download_format_original
@@ -166,38 +164,6 @@ internal fun AppControlsCard(
             modifier = Modifier.padding(vertical = 8.dp),
             color = MaterialTheme.colorScheme.outlineVariant
         )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = stringResource(Res.string.wifi_remote_browse_mode),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = stringResource(Res.string.wifi_remote_browse_mode_description),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            var isWifiBrowseOnly by remember {
-                mutableStateOf(PreferencesManager.isWifiBrowseOnly(context))
-            }
-            Switch(
-                checked = isWifiBrowseOnly,
-                onCheckedChange = { enabled ->
-                    PreferencesManager.setWifiBrowseOnly(context, enabled)
-                    isWifiBrowseOnly = enabled
-                }
-            )
-        }
 
         Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
             Text(

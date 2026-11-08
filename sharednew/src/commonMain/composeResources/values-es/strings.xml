@@ -239,9 +239,6 @@
     <string name="donation_dialog_title">¿Disfruta del GPS Alpha?</string>
     <string name="donation_dialog_message">Si la aplicación le ayuda en su fotografía, una pequeña donación ayuda a continuar con el desarrollo. Esto es completamente opcional.</string>
     <string name="donation_dialog_confirm">Apoyar proyecto</string>
-    <string name="trigger_shutter">Disparador remoto</string>
-    <string name="remote_feature_inactive">Conectado. Desactivado de forma remota desde la cámara o la aplicación</string>
-    <string name="enable_remote_control">Habilitar control remoto</string>
     <string name="guide_title">Guía de Solución de Problemas</string>
     <string name="guide_intro">Pulsa aquí para reparaciones paso a paso para las incidencias más comunes.</string>
     <string name="guide_open_button">Abre la guía de solución de problemas</string>
@@ -268,7 +265,7 @@
     <string name="guide_remote_step_camera">En la cámara, apague el Bluetooth remoto:</string>
     <string name="guide_remote_step_camera_path">MENÚ → Red → Bluetooth Rmt Ctrl → Apagar</string>
     <string name="guide_location_link_description">En cámaras con la distribución de menú más antiguo (p.ej. α6400, ZV-E10, α6100, α7 III) al enlazar el lugar deben activarlo manualmente. Las cámaras más modernas automáticamente lo hacen cuando la app se conecta.</string>
-    <string name="guide_remote_step_app">En GPS Alpha, pulse la cámara en la pantalla principal y apague 'Habilitar control remoto'.</string>
+    <string name="guide_remote_step_app">Alpha GPS ya no utiliza el control remoto; solo importa el ajuste de la cámara indicado arriba.</string>
     <string name="guide_link_remote_a6400">Guía de Ayuda Sony: Bluetooth RMt Ctrl (α6400)</string>
     <string name="guide_accuracy_title">La localización es imprecisa o antigua</string>
     <string name="guide_accuracy_description">Si las fotos están etiquetadas con una posición que sea novedosa fuera, la app usualmente no está concedida utilizar lugares precisos.</string>
@@ -282,7 +279,6 @@
     <string name="pairing_failed_hint_camera_pairing">• En la cámara, borre el emparejado anterior: MENÚ → Red → Bluetooth → Gestionar dispositivo emparejado.</string>
     <string name="pairing_failed_hint_phone_pairing">* Retire la cámara de sus ajustes del Bluetooth del teléfono (Ajustes → Bluetooth), después inténtelo otra vez.</string>
     <string name="scan_timeout_creators_app_hint">¿Cámara no encontrada? Asegúrese que esté en modo emparejado. Si fue configurado con la App Sony Creators o Imaging Edge Mobile antes, retire el emparejado anterior desde la cámara y desde sus ajustes de Bluetooth del teléfono; la guía de solución de problemas le camina para esto.</string>
-    <string name="remote_control_hint">En algunos modelos de cámara, el control remoto no puede ser utilizado mientras enlace la localización está activada. Si la conexión o la transferencia GPS se detiene, apáguelo.</string>
     <string name="haptic_feedback">Respuesta háptica</string>
-    <string name="haptic_feedback_description">Vibrar al pulsar el disparador remoto y al tomar la foto</string>
+    <string name="haptic_feedback_description">Vibrar para las acciones principales de la app</string>
 </resources>

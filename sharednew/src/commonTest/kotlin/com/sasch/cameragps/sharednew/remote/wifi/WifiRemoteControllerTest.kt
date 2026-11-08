@@ -679,33 +679,6 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     }
 
     @Test
-    fun backFromFullScreenOnlyShrinksThePreview() = runTest {
-        val registry = CameraSessionRegistry()
-        val connection = Connection()
-        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
-        val model = WifiRemoteViewModel("camera", controller)
-        model.expandPreview()
-        assertFalse(model.fullScreenPreview)
-        controller.connect("camera", "127.0.0.1")
-        runCurrent()
-        model.expandPreview()
-        assertFalse(model.fullScreenPreview, "Wait for a live preview before expanding")
-        registry.updateWifiRemote("CAMERA", registry.get("camera")!!.wifiRemote.copy(
-            hasLiveView = true, preview = WifiPreviewStatus.Streaming))
-        model.expandPreview()
-        assertTrue(model.fullScreenPreview)
-
-        model.navigateBack { error("Minimizing must not exit remote shooting") }
-        runCurrent()
-
-        assertFalse(model.fullScreenPreview)
-        assertEquals("CAMERA", controller.owner.value)
-        assertEquals(1, connection.previewStarts)
-        assertTrue(connection.cleanup.isEmpty())
-        controller.closeAndJoin()
-    }
-
-    @Test
     fun backDuringDownloadDoesNotDisconnectOrLeaveTheGallery() = runTest {
         val registry = CameraSessionRegistry()
         val connection = Connection()

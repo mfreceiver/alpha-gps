@@ -67,7 +67,7 @@ class AppServices(context: Context) {
     val wifiRemote = createAndroidWifiRemoteController(
         appContext, scope, orchestrator,
         // Read at every connect: the setting can change while the app lives.
-        browseOnly = { PreferencesManager.isWifiBrowseOnly(appContext) },
+        browseOnly = { true },
     )
     val pairingFailedDevice: StateFlow<String?> = _pairingFailedDevice
 

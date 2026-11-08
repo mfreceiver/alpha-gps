@@ -251,7 +251,6 @@
     <string name="donation_dialog_message">Falls die App dich beim Fotografieren unterstützt, würde ich mich über eine kleine Spende freuen. Das ist natürlich komplett optional, unterstützt jedoch die Weiterentwicklung.</string>
     <string name="donation_dialog_confirm">Unterstütze das Projekt</string>
     <string name="donation_dialog_dismiss">Nicht jetzt</string>
-    <string name="enable_remote_control">Fernbedienung aktivieren</string>
     <!-- Troubleshooting guide (visual step-by-step screen, shared by both platforms) -->
     <string name="guide_title">Fehlerbehebung</string>
     <string name="guide_intro">Tippe hier für Schritt-für-Schritt-Lösungen für die häufigsten Probleme.</string>
@@ -279,11 +278,11 @@
     <string name="guide_remote_description">Kameras wie die α6400 können Bluetooth-Fernbedienung und Standortverknüpfung nicht gleichzeitig nutzen — ist die Fernbedienung eingeschaltet, bricht die Verbindung oder GPS-Übertragung ab. Neuere Modelle (z. B. α7 IV und neuer) unterstützen beides.</string>
     <string name="guide_remote_step_camera">Schalte an der Kamera die Bluetooth-Fernbedienung aus:</string>
     <string name="guide_remote_step_camera_path">MENU → Netzwerk → Bluetooth-Fernbed. → Aus</string>
-    <string name="guide_remote_step_app">Tippe in Alpha GPS auf dem Hauptbildschirm auf die Kamera und deaktiviere 'Fernbedienung aktivieren'.</string>
+    <string name="guide_remote_step_app">Alpha GPS nutzt die Fernsteuerung nicht mehr – entscheidend ist nur die Kamera-Einstellung oben.</string>
     <string name="guide_link_remote_a6400">Sony-Hilfe: Bluetooth-Fernbedienung (α6400)</string>
     <string name="guide_startup_title">Kamera startet langsam oder der Bildschirm bleibt schwarz</string>
     <string name="guide_startup_description">Bei manchen Kameras können Smartphone-Verbindungen im ausgeschalteten Zustand den Start verzögern, wenn Alpha GPS aktiviert ist.</string>
-    <string name="guide_startup_step_disable">Schalte im Netzwerkmenü der Kamera die Verbindung mit dem Smartphone bei ausgeschalteter Kamera aus (im englischen Menü 'Cnct. while Power OFF' oder 'Cnct. during Power OFF'). Name und Menüposition hängen vom Modell ab. Der Smartphone-Zugriff bei ausgeschalteter Kamera ist dann deaktiviert. Lass Bluetooth für GPS und Fernsteuerung bei eingeschalteter Kamera aktiviert.</string>
+    <string name="guide_startup_step_disable">Schalte im Netzwerkmenü der Kamera die Verbindung mit dem Smartphone bei ausgeschalteter Kamera aus (im englischen Menü 'Cnct. while Power OFF' oder 'Cnct. during Power OFF'). Name und Menüposition hängen vom Modell ab. Der Smartphone-Zugriff bei ausgeschalteter Kamera ist dann deaktiviert. Lass Bluetooth für GPS bei eingeschalteter Kamera aktiviert.</string>
     <string name="guide_accuracy_title">Standort ist ungenau oder veraltet</string>
     <string name="guide_accuracy_description">Werden Fotos mit einer deutlich abweichenden Position versehen, darf die App meist nicht den genauen Standort verwenden.</string>
     <string name="guide_accuracy_step_precise">Erlaube Alpha GPS den genauen Standort:</string>
@@ -299,11 +298,8 @@
     <!-- Hint under the scan error when device discovery times out -->
     <string name="scan_timeout_creators_app_hint">Kamera nicht gefunden? Stelle sicher, dass sie im Kopplungsmodus ist. Wurde sie zuvor mit Sonys Creators' App oder Imaging Edge Mobile eingerichtet, entferne die alte Kopplung an der Kamera und in den Bluetooth-Einstellungen deines Telefons — die Fehlerbehebung führt dich durch die Schritte.</string>
     <!-- Hint below the remote-control toggle on the device detail screen -->
-    <string name="remote_control_hint">Bei manchen Kameramodellen kann die Fernbedienung nicht gleichzeitig mit der Standortverknüpfung genutzt werden. Falls die Verbindung oder GPS-Übertragung nicht mehr funktioniert, schalte diese Option aus.</string>
-    <string name="trigger_shutter">Fernauslöser</string>
-    <string name="remote_feature_inactive">Verbunden. Fernauslöser deaktiviert in der Kamera oder in der App</string>
     <string name="haptic_feedback">Haptisches Feedback</string>
-    <string name="haptic_feedback_description">Lässt das Smartphone vibrieren, wenn der Fernauslöser aktiviert wird</string>
+    <string name="haptic_feedback_description">Vibration bei wichtigen Aktionen in der App</string>
     <string name="auto_time_correction">Automatische Zeitkorrektur</string>
     <string name="auto_time_correction_hint">Die Kamera korrigiert Datum und Uhrzeit automatisch anhand der Informationen deines Smartphones. Dies ändert die Einstellung auf der verbundenen Kamera.</string>
     <string name="auto_area_adjustment">Automatische Gebietsanpassung</string>
@@ -315,12 +311,12 @@
     <string name="camera_setting_retry">Kameraeinstellungen aktualisieren</string>
     <!-- In-app release notes. -->
     <string name="whats_new_title">Was ist neu?</string>
-    <string name="whats_new_171_zv1">Verbesserte Kompatibilität der WLAN-Fernsteuerung mit der Sony ZV-1 und anderen älteren Sony-Kameras, einschließlich Livebild-Start und Fotoübertragung.</string>
+    <string name="whats_new_171_zv1">Verbesserte WLAN-Kompatibilität für die Sony ZV-1 und andere ältere Sony-Kameras, einschließlich Live-View-Start und Fotoübertragung.</string>
     <string name="whats_new_171_rx0">Wiederholte Bluetooth-Verbindungsabbrüche bei der Standortübertragung mit Kameras wie der Sony RX0 II wurden behoben, wenn Always On deaktiviert ist.</string>
     <string name="whats_new_version">Version %1$s</string>
     <string name="whats_new_close">Verstanden</string>
     <string name="whats_new_open">Versionshinweise anzeigen</string>
-    <string name="whats_new_170_wifi_remote">Neue experimentelle WLAN-Fernsteuerung mit Livebild, Fotoauslösung sowie Bildanzeige und Downloads. Bisher nur mit der Sony α6700 getestet.\n\nTippe zum Öffnen in der Geräteliste auf deine Kamera und anschließend auf „WLAN-Fernbedienung (experimentell)“.</string>
+    <string name="whats_new_170_wifi_remote">Neue experimentelle WLAN-Funktion mit Live-View, Fernauslöser sowie Ansehen und Herunterladen von Fotos. Bisher nur mit dem Sony α6700 getestet.\n\nZum Öffnen tippe im Geräten auf deine Kamera und dann auf „WLAN-Fotoübertragung“.</string>
     <string name="whats_new_162_time">Du kannst die automatische Zeitkorrektur jetzt in den Kameradetails ansehen und ändern. Diese Einstellung steuert, ob die Kamera Datum und Uhrzeit anhand deines Smartphones anpasst.</string>
     <string name="whats_new_162_notifications">Benachrichtigungen zur Standortübertragung werden jetzt zuverlässiger aktualisiert.</string>
     <string name="whats_new_162_pairing">Die Kamera-Kopplung unter iOS nutzt jetzt die Zubehörauswahl des Systems. Bereits gekoppelte Kameras müssen möglicherweise erneut autorisiert werden. Die App führt dich durch die Schritte.</string>
@@ -330,22 +326,22 @@
     <string name="welcome_gps_label">Standort</string>
     <string name="welcome_gps_title">Deine Fotos. \n Mit Standortdaten.</string>
     <string name="welcome_gps_body">Alpha GPS überträgt den Standort deines Handys per Bluetooth an deine Sony-Kamera. Die Kamera speichert ihn zusammen mit deinen Fotos.</string>
-    <string name="welcome_remote_label">Fernsteuerung</string>
-    <string name="welcome_remote_title">Kamera fernsteuern</string>
-    <string name="welcome_remote_body">Nutze dein Handy als Fernauslöser. Bei unterstützten Kameras kannst du über WLAN auch das Livebild ansehen und Fotos übertragen.</string>
+    <string name="welcome_remote_label">WLAN-Fotoübertragung</string>
+    <string name="welcome_remote_title">Kamerafotos vom Smartphone aus ansehen</string>
+    <string name="welcome_remote_body">Sieh dir die Fotos auf der Kamera über WLAN an und lade sie auf dein Smartphone.</string>
     <string name="welcome_pair_label">Verbindung</string>
     <string name="welcome_pair_title">Verbinde deine Kamera</string>
     <string name="welcome_pair_body">Tippe auf Kamera hinzufügen, wenn du bereit bist. Alpha GPS führt dich durch die Kopplung deiner Sony-Kamera mit deinem Handy.</string>
     <string name="welcome_ready_label">Standortzugriff</string>
     <string name="welcome_ready_title">Halte den Aufnahmeort fest</string>
     <string name="welcome_ready_body">Alpha GPS benötigt deinen genauen Standort, um deine Fotos mit Geodaten zu versehen. Mit Standortzugriff im Hintergrund läuft die Übertragung auch bei gesperrtem Handy weiter.</string>
-    <string name="wifi_remote_experimental_title">Experimentelle WLAN-Fernbedienung</string>
-    <string name="wifi_remote_experimental_message">WLAN-Fernbedienung ist experimentell und wurde bis jetzt nur auf meiner A6700 getestet. Andere Kameras könnten sich anders verhalten.\n\nBitte melde auftretende Fehler oder Probleme per Mail oder auf Github. Inkludiere dein Kamera-Modell und deine Betriebssysteme (Android oder iOS) und dessen Version.</string>
-    <string name="wifi_remote_title">WLAN-Fernbedienung (experimentell)</string>
-    <string name="wifi_remote_entry_hint">Live-Ansicht, Auslöser und Foto-Downloads</string>
+    <string name="wifi_remote_experimental_title">Experimentelle WLAN-Fotoübertragung</string>
+    <string name="wifi_remote_experimental_message">Die WLAN-Fotoübertragung ist experimentell und wurde bisher nur mit dem Sony α6700 des Entwicklers getestet. Andere Kameramodelle können sich anders verhalten.\n\nBitte melde Probleme per E-Mail oder auf GitHub. Nenne dein Kameramodell sowie Betriebssystem und Version deines Smartphones (Android oder iOS).</string>
+    <string name="wifi_remote_title">WLAN-Fotoübertragung</string>
+    <string name="wifi_remote_entry_hint">Fotos auf der Kamera ansehen und herunterladen</string>
     <string name="wifi_remote_setup">Starte an der Kamera die WLAN-Verbindung für Smartphones und trenne die Verbindung zur Creators’ App. Verbinde dich anschließend in den Einstellungen deines Smartphones mit dem WLAN der Kamera. Gib die IP-Adresse der Kamera ein.</string>
     <string name="wifi_remote_ip">IP-Adresse der Kamera</string>
-    <string name="wifi_remote_setup_detect_address">Starte die Fernaufnahme an der Kamera und schließe die Sony-App. Verbinde dich anschließend in den Einstellungen deines Smartphones mit dem WLAN der Kamera. Lass die IP-Adresse leer, um sie automatisch zu ermitteln, oder gib sie manuell ein.</string>
+    <string name="wifi_remote_setup_detect_address">Starte die Smartphone-Verbindung der Kamera und schließe die App von Sony, dann verbinde dich in den Telefoneinstellungen mit dem WLAN der Kamera. Lasse die IP-Adresse leer, um sie automatisch zu erkennen, oder gib sie manuell ein.</string>
     <string name="wifi_remote_settings">Öffne die WLAN-Einstellungen</string>
     <string name="wifi_remote_connect">Verbinden</string>
     <string name="wifi_remote_disconnect">Verbindung trennen</string>
@@ -354,18 +350,9 @@
     <string name="wifi_remote_closing">WLAN-Verbindung der Kamera wird beendet…</string>
     <string name="wifi_remote_shutdown_requested">Verbindung getrennt. WLAN wird in Kamera deaktiviert.</string>
     <string name="wifi_remote_shutdown_unavailable">Verbindung getrennt. Konnte WLAN auf Kamera nicht ausschalten, möglicherweise musst du WLAN manuell ausschalten.</string>
-    <string name="wifi_remote_connected">Verbunden mit %1$s</string>
-    <string name="wifi_remote_capture">Foto aufnehmen</string>
-    <string name="wifi_remote_shooting">Foto wird aufgenommen…</string>
-    <string name="wifi_remote_captured">Kamera hat Aufnahme bestätigt.</string>
-    <string name="wifi_remote_uncertain">Konnte Aufnahme nicht bestätigen. Überprüfe die Kamera bevor du fortfährst.</string>
-    <string name="wifi_remote_rejected">Die Kamera hat die Aufnahme abgelehnt. Überprüfe die Einstellungen und die SD Karte.</string>
-    <string name="wifi_remote_preview_waiting">Warte auf Vorschau…</string>
-    <string name="wifi_remote_fullscreen">Vollbild-Vorschau</string>
+    <string name="wifi_remote_connected">Verbunden mit %1$s</string>    <string name="wifi_remote_fullscreen">Vollbild-Vorschau</string>
     <string name="wifi_remote_minimize">Vorschau verkleinern</string>
-    <string name="wifi_remote_shutdown_unconfirmed">Verbindung getrennt. Die Anforderung zum Deaktivieren des WLANs konnte nicht bestätigt werden. Überprüfe die Kamera, falls das WLAN weiterhin aktiviert ist.</string>
-    <string name="wifi_remote_preview_failed">Die Vorschau wurde angehalten. Trenne die Verbindung und stelle sie erneut her, um es noch einmal zu versuchen.</string>
-    <string name="wifi_remote_invalid_ip">Die IP-Adresse der Kamera eingeben. Diese kann in den WLAN-Einstellungen der Kamera oder des Smartphones gefunden werden.</string>
+    <string name="wifi_remote_shutdown_unconfirmed">Verbindung getrennt. Die Anforderung zum Deaktivieren des WLANs konnte nicht bestätigt werden. Überprüfe die Kamera, falls das WLAN weiterhin aktiviert ist.</string>    <string name="wifi_remote_invalid_ip">Die IP-Adresse der Kamera eingeben. Diese kann in den WLAN-Einstellungen der Kamera oder des Smartphones gefunden werden.</string>
     <string name="wifi_remote_join_wifi">Verbinde dich mit dem WLAN-Netzwerk der Kamera und komme hier zurück.</string>
     <string name="wifi_remote_permission">Die Verbindungsberechtigung wurde verweigert. Erlaube in den Berechtigungseinstellungen der App „Geräte in der Nähe“ oder bei älteren Android-Versionen „Genauer Standort“ und versuche es dann erneut.</string>
     <string name="wifi_connection_failed">Die WLAN-Verbindung zur Kamera konnte nicht geöffnet werden.</string>
@@ -374,7 +361,7 @@
     <string name="wifi_connection_help_message">Stelle sicher, dass die Kamera für Fernaufnahmen bereit und dieses Smartphone mit ihrem WLAN verbunden ist.\n\nEinige Android-Versionen können den Netzwerkzugriff einer App blockieren. Suche in den App-Einstellungen nach „Mobile Daten &amp; WLAN“, „Netzwerkzugriff“ oder „Datennutzung einschränken“ und erlaube WLAN für Alpha GPS. Erlaube unter „Berechtigungen“ bei Bedarf „Geräte in der Nähe“ oder „Genauer Standort“ sowie „Lokales Netzwerk“, falls aufgeführt.\n\nKehre anschließend hierher zurück und versuche die Verbindung erneut. Die Bezeichnungen können je nach Smartphone abweichen.</string>
     <string name="wifi_remote_failed">Die Verbindung konnte nicht hergestellt werden. Überprüfe die IP-Adresse der Kamera, halte ihre Smartphone-Verbindung aktiv und schließe andere Apps zur Kamerasteuerung.</string>
     <string name="wifi_remote_lost">Die Verbindung zur Kamera wurde unterbrochen. Verbinde dich erneut mit dem WLAN der Kamera und stelle die Verbindung in der App wieder her.</string>
-    <string name="wifi_remote_other_camera">Es ist eine weitere WLAN-Sitzung der Kamera aktiv. Schließe diese, bevor du diese Kamera verbindest.</string>
+    <string name="wifi_remote_other_camera">Es ist eine weitere WLAN-Fotoübertragungssitzung aktiv. Schließe diese, bevor du diese Kamera verbindest.</string>
     <string name="wifi_remote_auto_setup">Lasse die Kamera über Bluetooth verbunden und schließe die Creators’ App. Alpha GPS aktiviert das WLAN der Kamera und fordert das Smartphone auf, eine Verbindung herzustellen.</string>
     <string name="wifi_remote_auto_connect">Tippe um Verbindung herzustellen</string>
     <string name="wifi_remote_prepare_only_hint">Aktiviere das WLAN der Kamera über Bluetooth und verbinde das Smartphone anschließend in den Telefoneinstellungen mit deren Netzwerk. Die IP-Adresse der Kamera wird nach dem Verbindungsaufbau erkannt.</string>
@@ -423,7 +410,7 @@
     <string name="wifi_remote_browser_failed">Die Fotos auf der Kamera konnten nicht gelesen oder der Übertragungsmodus konnte nicht gewechselt werden. Versuche es erneut. Falls die Kamera beschäftigt ist, trenne die Verbindung und stelle sie erneut her.</string>
     <string name="wifi_remote_browser_empty">Keine unterstützten Fotos auf dieser Seite.</string>
     <string name="wifi_remote_browser_refresh">Aktualisieren</string>
-    <string name="wifi_remote_browser_back">Zurück zur Fernsteuerung</string>
+    <string name="wifi_remote_browser_back">Verbindung trennen</string>
     <string name="wifi_remote_browser_previous">Zurück</string>
     <string name="wifi_remote_browser_next">Weiter</string>
     <string name="wifi_remote_browser_page">Seite %1$d</string>

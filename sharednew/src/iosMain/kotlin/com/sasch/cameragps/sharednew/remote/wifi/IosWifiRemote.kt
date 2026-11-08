@@ -1,6 +1,5 @@
 package com.sasch.cameragps.sharednew.remote.wifi
 
-import com.sasch.cameragps.sharednew.IosAppPreferences
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionOrchestrator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
@@ -31,7 +30,7 @@ private class IosWifiRemoteConnector : WifiRemoteConnector {
             openSonyWifiSession(connections, scope, host,
                 CameraHttpTransport(IosCameraByteConnection::open), imageStore,
                 ::decodeIosCameraThumbnail, ::decodeIosCameraPreview,
-                browseOnly = IosAppPreferences.isWifiBrowseOnly(),
+                browseOnly = true,
             )
         }
     }

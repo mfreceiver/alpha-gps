@@ -165,7 +165,7 @@
     <string name="guide_remote_description">Камеры уровня α6400 не могут одновременно использовать пульт Bluetooth и привязку местоположения. При включенном пульте передача координат или подключение перестают работать. Более новые модели (например, α7 IV и новее) поддерживают обе функции одновременно.</string>
     <string name="guide_remote_step_camera">На камере выключите пульт Bluetooth:</string>
     <string name="guide_remote_step_camera_path">MENU → Сеть → Дист. управл. Bluetooth → Выкл</string>
-    <string name="guide_remote_step_app">В Alpha GPS выберите вашу камеру на главном экране и отключите пункт «Разрешить дистанционное управление».</string>
+    <string name="guide_remote_step_app">Alpha GPS больше не использует дистанционное управление — важна только настройка камеры, указанная выше.</string>
     <string name="guide_link_remote_a6400">Справка Sony: Дист. управл. Bluetooth (α6400)</string>
     <string name="guide_accuracy_title">Местоположение неточное или устаревшее</string>
     <string name="guide_accuracy_description">Если координаты на фото заметно смещены, это обычно означает, что приложению не разрешено использовать точную геопозицию.</string>
@@ -179,7 +179,6 @@
     <string name="pairing_failed_hint_camera_pairing">• Удалите старые сопряжения на камере: MENU → Сеть → Bluetooth → Управл. сопряжен. устр.</string>
     <string name="pairing_failed_hint_phone_pairing">• Удалите камеру из настроек Bluetooth вашего телефона (Настройки → Bluetooth), затем повторите попытку.</string>
     <string name="scan_timeout_creators_app_hint">Камера не найдена? Убедитесь, что она переведена в режим сопряжения. Если ранее она подключалась через приложения Creators\\' App или Imaging Edge Mobile от Sony, удалите старые настройки связи как в самой камере, так и в списке устройств Bluetooth телефона. Подробнее об этом написано в руководстве по неполадкам.</string>
-    <string name="remote_control_hint">На некоторых моделях камер невозможно использовать дистанционное управление одновременно с привязкой местоположения. Если связь или передача GPS прекращается, отключите этот пункт.</string>
     <string name="help_menu_item">Справка</string>
     <string name="associated_devices">Привязанные устройства</string>
     <string name="nearby_cameras">Камеры поблизости</string>
@@ -198,13 +197,10 @@
     <string name="device_association_removed_retry">Устройство уже было привязано. Связь была сброшена во избежание дублирования. Пожалуйста, попробуйте снова.</string>
     <string name="back">Назад</string>
     <string name="device_icon">Иконка устройства</string>
-    <string name="trigger_shutter">Дистанционный спуск затвора</string>
-    <string name="remote_feature_inactive">Подключено. Дистанционный спуск отключен на камере или в приложении</string>
     <string name="show_details">Показать детали</string>
     <string name="device_name_with_address">Имя: %1$s (%2$s)</string>
     <string name="enable_device">Включить устройство</string>
     <string name="enableConstantly">Постоянная активность (Always On)</string>
-    <string name="enable_remote_control">Включить дистанционное управление</string>
     <string name="not_paired_tap_to_pair_again">Сопряжение отсутствует, свяжите устройства в настройках Bluetooth</string>
     <string name="to_pair_with_your_camera_please">Чтобы выполнить сопряжение с вашей камерой «%1$s», пожалуйста:</string>
     <string name="_1_turn_on_your_camera">\n1. Включите камеру</string>
