@@ -10,7 +10,9 @@
 #   7. restore 时 mv 失败：非零退出、备份保留、源文件未动、输出人工恢复提示。
 # 另含 release_build.sh 端到端 wiring 场景（见末尾 run_parent_*）：
 #   8. 构建失败 → EXIT trap 还原，构建文件回到原文；
-#   9. 构建成功但还原 mv 失败 → 脚本非零退出、备份保留（后续归档/tag/发布不会执行）。
+#   9. 构建成功但还原 mv 失败 → 脚本非零退出、备份保留（后续归档/tag/发布不会执行）；
+#  10. 残留备份 B 与源文件 A 字节不同 → inject 拒绝、父层 EXIT trap 不激活：
+#      A/B 均逐字节原样、备份未消费、未进入 gradlew/后续步骤。
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)
@@ -181,9 +183,34 @@ RC=$?
 check "release_build.sh 非零退出（还原失败不继续）" test "$RC" -ne 0
 check "备份保留（等人工恢复）" test -f "$SB2/app/build.gradle.kts.release-bak"
 check "改写后的构建文件未被覆盖回残缺态（仍含 v9.9.9 注入）" grep -q 'versionName = "v9.9.9"' "$SB2/app/build.gradle.kts"
-check "未走到归档/断言/发布步骤" test ! -d "$SB2/release" && ! grep -q "归档" "$TMP/parent3.log"
+check "未创建 release/ 目录" test ! -d "$SB2/release"
+# 用归档步骤的独有日志锚点（"归档完成"）判定：--allow-dirty 的 warn 本身含"归档"字样，
+# 直接 grep "归档" 会误报（此前的复合条件因此从未真正通过过）。
+check "未输出归档步骤日志" bash -c '! grep -q "归档完成" "$1"' _ "$TMP/parent3.log"
 check "输出人工恢复提示" grep -q "人工恢复" "$TMP/parent3.log"
 
+echo "== 场景 10: 残留备份 ≠ 源文件 → 父层不接管未知备份 =="
+clean_shims
+SB3=$(setup_sandbox 'echo RAN > gradlew-ran-marker; exit 0')
+make_keytool_shim "$SB3"
+# 源文件 A：在原文基础上附加未提交修改（与备份 B 字节不同）
+printf '\n// uncommitted local edit (A)\n' >> "$SB3/app/build.gradle.kts"
+cp -- "$SB3/app/build.gradle.kts" "$TMP/A.gradle.kts"
+printf '// stale backup from crashed run (B)\n' > "$SB3/app/build.gradle.kts.release-bak"
+cp -- "$SB3/app/build.gradle.kts.release-bak" "$TMP/B.release-bak"
+( cd "$SB3" && PATH="$SB3/home/jdk/bin:$TMP/shim:$PATH" HOME="$SB3/home" JAVA_HOME="$SB3/home/jdk" \
+    DSH_KEYSTORE_PASSWORD=x DSH_KEY_PASSWORD=x \
+    bash scripts/release_build.sh 9.9.9 --allow-dirty ) > "$TMP/parent4.log" 2>&1
+RC=$?
+check "release_build.sh 非零退出（inject 拒绝残留备份）" test "$RC" -ne 0
+check "输出残留备份拒绝信息" grep -q "残留备份" "$TMP/parent4.log"
+check "源文件 A 逐字节原样" cmp -s -- "$TMP/A.gradle.kts" "$SB3/app/build.gradle.kts"
+check "残留备份 B 逐字节原样且未被消费" cmp -s -- "$TMP/B.release-bak" "$SB3/app/build.gradle.kts.release-bak"
+check "未进入 gradlew（marker 未生成）" test ! -e "$SB3/gradlew-ran-marker"
+check "未创建 release/ 目录" test ! -d "$SB3/release"
+
 echo
-echo "结果: PASS=$PASS FAIL=$FAILED"
+SCENARIOS=$(grep -c '^echo "== 场景' -- "$0")
+TOTAL=$((PASS+FAILED))
+echo "结果: ${SCENARIOS} 场景 / ${TOTAL} 断言: PASS=$PASS FAIL=$FAILED"
 [[ "$FAILED" -eq 0 ]]

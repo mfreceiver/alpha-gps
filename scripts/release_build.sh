@@ -310,7 +310,8 @@ fi
 
 # ─── 版本注入（sed 改写 + 构建后还原）────────────────────────────────────
 # app/build.gradle.kts 硬编码 versionName = "vX.Y.Z"（无 env 注入），构建前改写、
-# 无论如何（成功/失败/中断经 EXIT trap）还原备份。备份/还原的 fail-closed 语义
+# 无论如何（成功/失败/中断经 EXIT trap）还原备份；父层 trap 仅在 inject 成功、
+# 还原责任交接完成后激活。备份/还原的 fail-closed 语义
 # （备份完整校验后才激活恢复责任；还原失败保留备份并终止）在
 # scripts/release_version_inject.sh 中实现并由 scripts/release_version_inject_test.sh
 # 做故障注入自测。
@@ -326,8 +327,12 @@ restore_gradle() {
     exit 1
   fi
 }
+# 先注入、后激活 trap：只有 inject 成功返回（helper 已确认备份完整并把还原责任
+# 移交父层）后，父层 EXIT trap 才接管还原。inject 失败（含残留备份拒绝）时父层
+# 绝不 mv 未知/残留备份去覆盖源文件——helper 自身的 cp+cmp 门槛与 trap 已保证
+# 源文件未被改动或已自动还原。
+bash "$VERSION_INJECT" inject "$BUILD_GRADLE" "$EMBED_NAME" || fail "版本注入失败（源文件已还原或未改动；父层不接管残留备份）"
 trap restore_gradle EXIT
-bash "$VERSION_INJECT" inject "$BUILD_GRADLE" "$EMBED_NAME" || fail "版本注入失败（源文件已还原或未改动）"
 
 # ─── 构建 ────────────────────────────────────────────────────────────────
 log "构建 :app:assembleFossRelease（versionName=$EMBED_NAME）"
