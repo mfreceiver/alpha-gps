@@ -221,7 +221,9 @@ internal fun WifiPhotoViewer(
                         PhotoJpegOnlyActions(
                             current.detailPlan(policy, state.canConvertHeif), state,
                             onDownload = { handle, format ->
-                                onDownload(listOf(WifiPhotoDownload(handle, format)))
+                                viewModel.downloadSinglePhoto(
+                                    WifiPhotoDownload(handle, format), onDownload
+                                )
                             },
                         )
                     }
@@ -272,13 +274,8 @@ internal fun WifiPhotoViewer(
                     showDetails = false
                 },
                 onDownload = { handle, format ->
-                    onDownload(
-                        listOf(
-                            WifiPhotoDownload(
-                                handle,
-                                format
-                            )
-                        )
+                    viewModel.downloadSinglePhoto(
+                        WifiPhotoDownload(handle, format), onDownload
                     )
                 },
                 onCancel = { viewModel.controller.cancelPhotoOperation(viewModel.identifier) },

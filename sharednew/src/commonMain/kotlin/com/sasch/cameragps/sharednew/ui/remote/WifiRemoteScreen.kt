@@ -172,7 +172,7 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         // itself survives paging and is only cleared explicitly or on catalog changes.
         val capture = groupCameraPhotos(state.photoBrowser.photos).firstOrNull { it.id == captureId }
             ?: return
-        batchSummary = null
+        recordBatchSummary(null)
         selectedPhotos = if (captureId in selectedPhotos) selectedPhotos - captureId
         else selectedPhotos + (captureId to capture)
     }
@@ -181,14 +181,14 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return
         if (!state.photoBrowser.open || state.photoBrowser.loading || state.imageTransfer.busy) return
         // "Select all on this page" unions with selections kept from other pages.
-        batchSummary = null
+        recordBatchSummary(null)
         selectedPhotos = selectedPhotos +
                 groupCameraPhotos(state.photoBrowser.photos).associateBy { it.id }
     }
 
     fun clearPhotoSelection() {
         selectedPhotos = emptyMap()
-        batchSummary = null
+        recordBatchSummary(null)
     }
 
     /**
@@ -209,6 +209,21 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     internal fun recordBatchSummary(summary: WifiBatchSummary?) {
         settledBatchSummary = null
         batchSummary = summary
+    }
+
+    /**
+     * Single-photo download entry (viewer page / details sheet). Drops any batch summary
+     * first: the summary describes a different transfer, and a leftover one-file batch
+     * summary must never settle off this single file's result ("downloaded 1" while the
+     * batch's own file was never saved). Batch downloads go through [recordBatchSummary]
+     * plus the caller's batch button instead.
+     */
+    internal fun downloadSinglePhoto(
+        download: WifiPhotoDownload,
+        onDownload: (List<WifiPhotoDownload>) -> Unit,
+    ) {
+        recordBatchSummary(null)
+        onDownload(listOf(download))
     }
 
     /**

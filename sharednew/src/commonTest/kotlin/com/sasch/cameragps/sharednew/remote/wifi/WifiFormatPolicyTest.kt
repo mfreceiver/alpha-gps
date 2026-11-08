@@ -215,6 +215,29 @@ class WifiFormatPolicyTest {
         assertFalse(WifiBatchSummary(0, mapOf(WifiSkipReason.NoJpeg to 1)).isComplete(WifiImageTransferState()))
     }
 
+    @Test
+    fun settledBatchSummaryOnlyShowsWhenTheTransferIsQuietAndSuccessful() {
+        // Truth table over the transfer statuses; summarySettled=true throughout.
+        for (status in WifiImageTransferStatus.entries) {
+            val transfer = WifiImageTransferState(status)
+            val expected = when (status) {
+                WifiImageTransferStatus.Saved, WifiImageTransferStatus.Idle -> true
+                else -> false
+            }
+            assertEquals(
+                expected, shouldShowBatchSummary(true, transfer),
+                "settled summary visibility for $status",
+            )
+        }
+        // Without a settled summary the transfer status always shows.
+        for (status in WifiImageTransferStatus.entries) {
+            assertFalse(
+                shouldShowBatchSummary(false, WifiImageTransferState(status)),
+                "unsettled summary must never show, even for $status",
+            )
+        }
+    }
+
     // --- sizes ----------------------------------------------------------------------
 
     @Test
