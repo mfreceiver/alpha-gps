@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # alpha-gps 发版脚本（精简移植自另一个内部项目的发版脚本，保留 fail-closed 精神）：
 #   - 版本注入：app/build.gradle.kts 的 versionName 硬编码（无 v 前缀，如 "0.1.0"），构建前
-#     sed 改写、构建后（含失败）自动还原；versionCode 不做公式镜像，一律从产物 manifest 读取
+#     sed 改写、构建后（含失败）自动还原；versionCode 实际值来自产物 manifest，
+#     预期值来自受控源码（app/build.gradle.kts 独立解析）
 #   - 产物 app/build/outputs/apk/foss/release/app-foss-release.apk（签名可用时）归档为
 #     release/alpha-gps-<版本>.apk；release/ 只留最新版，SHA256SUMS 每次全量重生成
 #   - 断言：构建后必须调用 scripts/release_assert_apk.sh（签名者/证书钉定/包名/版本/权限）
@@ -402,7 +403,7 @@ done
 [[ "$OUT_APK" != *-unsigned.apk ]] || warn "产物为 unsigned（签名配置未生效；断言大概率失败）"
 pass "构建完成: $OUT_APK"
 
-# ─── 读取构建产物版本（versionCode 单一来源 = 产物 manifest）─────────────
+# ─── 读取构建产物版本（versionCode 实际值 = 产物 manifest；预期值 = 受控源码）──
 log "读取构建产物版本"
 find_aapt
 EMBEDDED_NAME=$(apk_version_name "$OUT_APK")
