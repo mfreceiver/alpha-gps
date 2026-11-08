@@ -1,17 +1,135 @@
 #!/usr/bin/env bash
 # release_lib.sh —— 发版脚本共用纯函数（release_build.sh source；自测脚本直接 source）。
 # 全部函数遵循 fail-closed：解析/门禁失败 → stderr 带关键字 + 非零返回。
-# 依赖 perl 做注释剥离（本机标准配置）；perl 缺失时剥离输出为空 → 解析得 0 处 → fail-closed。
+# 依赖 python3 做注释剥离（真词法状态机）；python3 缺失/执行失败/输入含不支持构造
+#   → 显式 FAIL 提示依赖并以非零返回，fail-closed。
 
 rl_fail() { echo "FAIL $1" >&2; }   # 注意：调用方必须紧跟 `return 1`（在 `||` 里不会替调用方退出函数）
 rl_warn() { echo "WARN $1" >&2; }
 
-# rl_strip_kotlin_comments: stdin → stdout，剔除 /* ... */ 块注释与 // 行注释后再做模式匹配。
-#   已知取舍：字符串字面量内的 "//"（如 URL）也会被截断——只影响该行行尾，不会制造/消灭
-#   整行的 applicationId/versionCode 赋值；字符串内的 "/*" 会吞掉后续行——最坏效果是把
-#   真实赋值藏起来 → 计数为 0 → fail-closed，方向安全。
+# rl_strip_kotlin_comments_file <文件>: 词法级剔除 Kotlin 注释，文件其余内容（含字符串原文、
+#   换行结构）原样输出到 stdout。逐字符状态机，正确处理：
+#     - `//` 行注释（保留换行）；
+#     - `/* */` 块注释，**支持 Kotlin 合法的嵌套**（按深度计数），块内换行保留以维持行结构；
+#     - 普通字符串 "..."：`\"` 等反斜杠转义、`${...}` 字符串模板（模板内出现引号等复杂构造
+#       → 不支持 → 整体 fail-closed 拒绝）；
+#     - 三引号 raw string """..."""（内容原样保留，其中的 // /* 不当注释）；
+#     - 字符字面量 'x' / '\''。
+#   输入包含 NUL 字节、块注释/字符串/raw string/字符字面量未闭合、模板未闭合、
+#   模板内嵌引号、文件不可读 → stderr FAIL + 非零返回（fail-closed，绝不静默输出残缺结果）。
+#   说明：NUL 必须在此层拒绝——bash 变量无法承载 NUL，`read -d ''` 会截断出错误结果。
+rl_strip_kotlin_comments_file() {
+  command -v python3 >/dev/null 2>&1 \
+    || { rl_fail "注释剥离: 缺少依赖 python3（词法扫描工具不可用），fail-closed"; return 1; }
+  if python3 - "${1:?}" <<'RL_PY'
+import sys
+def die(msg):
+    sys.stderr.write("FAIL 注释剥离: %s\n" % msg)
+    sys.exit(1)
+try:
+    with open(sys.argv[1], "r", encoding="utf-8", errors="surrogateescape") as f:
+        d = f.read()
+except OSError as e:
+    die("文件不可读: %s" % e)
+if "\0" in d:
+    die("输入包含 NUL 字节，明确拒绝（bash 变量无法安全承载 NUL），fail-closed")
+out = []
+i, n = 0, len(d)
+while i < n:
+    c = d[i]
+    if c == "/" and i + 1 < n and d[i + 1] == "/":
+        j = d.find("\n", i)
+        i = n if j < 0 else j                      # 行注释吞到行尾，保留 \n
+    elif c == "/" and i + 1 < n and d[i + 1] == "*":
+        depth, i = 1, i + 2
+        while i < n and depth:
+            if d[i] == "/" and i + 1 < n and d[i + 1] == "*":
+                depth += 1; i += 2
+            elif d[i] == "*" and i + 1 < n and d[i + 1] == "/":
+                depth -= 1; i += 2
+            else:
+                if d[i] == "\n":
+                    out.append("\n")               # 块内换行保留，维持行结构
+                i += 1
+        if depth:
+            die("块注释未闭合")
+    elif c == '"':
+        if d[i:i + 3] == '"""':
+            j = d.find('"""', i + 3)
+            if j < 0:
+                die("raw string（三引号）未闭合")
+            out.append(d[i:j + 3]); i = j + 3
+        else:
+            j = i + 1; buf = ['"']; closed = False
+            while j < n:
+                ch = d[j]
+                if ch == "\\":
+                    if j + 1 >= n:
+                        die("字符串未闭合（结尾悬挂反斜杠）")
+                    buf.append(d[j:j + 2]); j += 2
+                elif ch == '"':
+                    buf.append('"'); j += 1; closed = True; break
+                elif ch == "$" and j + 1 < n and d[j + 1] == "{":
+                    buf.append("${"); j += 2; dep = 1
+                    while j < n and dep:
+                        c2 = d[j]
+                        if c2 == '"':
+                            die("不支持: 字符串模板 ${...} 内嵌引号，整体 fail-closed")
+                        if c2 == "{":
+                            dep += 1
+                        elif c2 == "}":
+                            dep -= 1
+                        if dep:
+                            buf.append(c2)
+                        j += 1
+                    if dep:
+                        die("字符串模板 ${...} 未闭合")
+                    buf.append("}")
+                else:
+                    buf.append(ch); j += 1
+            if not closed:
+                die("字符串未闭合")
+            out.append("".join(buf)); i = j
+    elif c == "'":
+        j = i + 1; buf = ["'"]
+        if j < n and d[j] == "\\":
+            if j + 1 >= n:
+                die("字符字面量未闭合")
+            buf.append(d[j:j + 2]); j += 2
+        elif j < n:
+            buf.append(d[j]); j += 1
+        if j >= n or d[j] != "'":
+            die("字符字面量未闭合")
+        buf.append("'"); out.append("".join(buf)); i = j + 1
+    else:
+        out.append(c); i += 1
+        continue
+    continue
+sys.stdout.write("".join(out))
+RL_PY
+  then
+    return 0
+  else
+    rl_fail "注释剥离: 词法扫描失败（rc=$?），fail-closed"
+    return 1
+  fi
+}
+
+# rl_strip_kotlin_comments: stdin → stdout（rl_strip_kotlin_comments_file 的流式包装）。
+#   stdin 经临时文件中转（不经 bash 变量，避免 NUL 截断/内容丢失），读取失败有明确报错。
 rl_strip_kotlin_comments() {
-  perl -0pe 's{/\*.*?\*/}{}gs; s{//[^\n]*}{}g' 2>/dev/null || true
+  local tmp
+  tmp=$(mktemp "${TMPDIR:-/tmp}/rlstrip.XXXXXX") \
+    || { rl_fail "注释剥离: 无法创建临时文件，fail-closed"; return 1; }
+  if ! cat > "$tmp"; then
+    rm -f -- "$tmp"
+    rl_fail "注释剥离: stdin 读取失败/不可用，fail-closed"
+    return 1
+  fi
+  rl_strip_kotlin_comments_file "$tmp"
+  local rc=$?
+  rm -f -- "$tmp"
+  return "$rc"
 }
 
 # rl_check_code <值>: canonical 十进制正整数（^[1-9][0-9]{0,9}$）且 ≤ 2147483647
@@ -31,17 +149,17 @@ rl_check_code() {
 #   （避免挂起等待交互输入）。
 #   stdout 输出解析到的 N。
 parse_version_code() {
-  local src
+  local stripped
   if [[ "${1:-}" == "-" ]]; then
     [[ -t 0 ]] && { rl_fail "versionCode 解析: stdin 是终端（会挂起等待输入），fail-closed"; return 1; }
-    IFS= read -r -d '' src || true   # fd0 关闭/EOF 立即返回，不再经 cat
+    # stdin 直接流式进词法剥离（不经过 bash 变量，NUL/读取失败在剥离层显式 fail-closed）
+    stripped=$(rl_strip_kotlin_comments) || return 1
   else
     [[ -n "${1:-}" && -f "$1" ]] || { rl_fail "versionCode 解析: 文件不存在: '${1:-}'"; return 1; }
-    src=$(<"$1")
+    stripped=$(rl_strip_kotlin_comments_file "$1") || return 1
   fi
   local -a hits
-  mapfile -t hits < <(rl_strip_kotlin_comments <<<"$src" \
-    | sed -nE 's/^[[:space:]]*versionCode[[:space:]]*=[[:space:]]*([0-9]+)[[:space:]]*$/\1/p')
+  mapfile -t hits < <(sed -nE 's/^[[:space:]]*versionCode[[:space:]]*=[[:space:]]*([0-9]+)[[:space:]]*$/\1/p' <<<"$stripped")
   if (( ${#hits[@]} != 1 )); then
     rl_fail "versionCode 解析: 'versionCode = N'（整行）必须恰好匹配 1 处，实际 ${#hits[@]} 处——fail-closed"
     return 1
@@ -57,17 +175,16 @@ parse_version_code() {
 #   stdout 输出解析到的包名（rc=0）；0 处/多处/文件不可读 → rc≠0 + FAIL 关键字
 #   （调用方据此区分“身份无法确定”并 fail-closed，绝不静默当上游）。
 parse_application_id() {
-  local src
+  local stripped
   if [[ "${1:-}" == "-" ]]; then
     [[ -t 0 ]] && { rl_fail "applicationId 解析: stdin 是终端（会挂起等待输入），fail-closed"; return 1; }
-    IFS= read -r -d '' src || true
+    stripped=$(rl_strip_kotlin_comments) || return 1
   else
     [[ -n "${1:-}" && -f "$1" ]] || { rl_fail "applicationId 解析: 文件不存在: '${1:-}'"; return 1; }
-    src=$(<"$1")
+    stripped=$(rl_strip_kotlin_comments_file "$1") || return 1
   fi
   local -a ids
-  mapfile -t ids < <(rl_strip_kotlin_comments <<<"$src" \
-    | sed -nE 's/^[[:space:]]*applicationId[[:space:]]*=[[:space:]]*"([^"]+)"[[:space:]]*$/\1/p')
+  mapfile -t ids < <(sed -nE 's/^[[:space:]]*applicationId[[:space:]]*=[[:space:]]*"([^"]+)"[[:space:]]*$/\1/p' <<<"$stripped")
   if (( ${#ids[@]} != 1 )); then
     rl_fail "applicationId 解析: 'applicationId = \"...\"'（整行）必须恰好匹配 1 处，实际 ${#ids[@]} 处——身份无法确定，fail-closed"
     return 1
@@ -95,11 +212,22 @@ assert_code_monotonic() {
   local expect=$1 cur=$2
   rl_check_code "$expect" && [[ "$cur" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
     || { rl_fail "versionCode 单调性: 参数非法 expect='$expect' cur='$cur'"; return 1; }
-  # 先把枚举结果收进变量并逐级检查退出码：git/sort 任一失败 → fail-closed，
-  # 不用 process substitution（会吞掉管道里非末段命令的失败）。
-  local all_tags sorted
+  # 先把枚举结果收进变量并逐级检查退出码：git / grep / sort 任一失败 → fail-closed。
+  # 不用 process substitution（会吞掉管道里非末段命令的失败），也不用 `|| true` 吞 grep
+  # 的异常退出码（rc2/rc127 等）——那种吞法会把“过滤出错”伪装成“没有前 tag”→ 误 WARN 放行。
+  local all_tags prev_tags sorted grc
   all_tags=$(git tag --list 2>/dev/null) || { rl_fail "versionCode 单调性: git tag 枚举失败（不在 git 仓库/git 异常），fail-closed"; return 1; }
-  sorted=$( { printf '%s\n' "$all_tags" | grep -Ex 'v[0-9]+\.[0-9]+\.[0-9]+' || true; printf 'v%s\n' "$cur"; } | sort -Vu ) \
+  if prev_tags=$(printf '%s\n' "$all_tags" | grep -Ex 'v[0-9]+\.[0-9]+\.[0-9]+' 2>/dev/null); then
+    grc=0
+  else
+    grc=$?
+  fi
+  # grep 只允许 0（有匹配）/ 1（无匹配）；2（用法/IO 错误）、127（命令不存在）等 → fail-closed
+  case "$grc" in
+    0|1) ;;
+    *) rl_fail "versionCode 单调性: tag 过滤 grep 异常（rc=$grc），fail-closed"; return 1 ;;
+  esac
+  sorted=$( { printf '%s\n' "$prev_tags"; printf 'v%s\n' "$cur"; } | sort -Vu ) \
     || { rl_fail "versionCode 单调性: tag 排序失败（sort -Vu），fail-closed"; return 1; }
   local -a tags=()
   local tag content aid prev_code
@@ -107,6 +235,7 @@ assert_code_monotonic() {
   # 版本排序（sort -V）中严格排在 v$cur 之前的 tag；无该 tag 时用 v$cur 自身做分区点同样正确
   while IFS= read -r tag; do
     [[ "$tag" == "v$cur" ]] && break
+    [[ -n "$tag" ]] || continue   # 空行（无匹配/空枚举时 printf 产生的空行）不入列
     tags+=("$tag")
   done <<<"$sorted"
   for (( i=${#tags[@]}-1; i>=0; i-- )); do
