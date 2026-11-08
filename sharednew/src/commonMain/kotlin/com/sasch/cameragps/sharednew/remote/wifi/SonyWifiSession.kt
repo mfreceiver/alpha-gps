@@ -157,8 +157,14 @@ private class SonyWifiConnection(
         current?.transfer?.closeBrowser()
     }
 
+    override val hasLiveViewStream: Boolean get() = !browseOnly
+
     override val images = flow {
-        // Browse-only sessions never start the live-view HTTP stream; collectors just idle.
+        // Browse-only sessions never start the live-view HTTP stream, so this flow
+        // completes immediately. Callers should consult [hasLiveViewStream] and not
+        // collect it in that case; the early return stays as a safe fallback for
+        // any collector that does (a normal completion upstream must not be read
+        // as a live-view failure).
         if (browseOnly) return@flow
         val session = checkNotNull(current)
         check(session.ready.purpose == SonySessionPurpose.RemoteShooting)

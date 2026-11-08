@@ -49,6 +49,13 @@ internal interface WifiRemoteConnection {
 
     /** End transfer mode without reopening a shooting session during teardown. */
     suspend fun prepareToDisconnect() = closePhotoBrowser()
+
+    /**
+     * Whether this connection exposes a live-view stream at all. Browse-only sessions
+     * never start the live-view HTTP stream; the controller reports the preview as
+     * [WifiPreviewStatus.Unavailable] instead of collecting an immediately-complete flow.
+     */
+    val hasLiveViewStream: Boolean get() = true
     val images: Flow<ImageBitmap>
     val lost: Flow<Unit>
     suspend fun capture(): WifiCaptureStatus
@@ -637,6 +644,11 @@ class WifiRemoteController internal constructor(
     }
 
     private fun startPreview(id: String, connection: WifiRemoteConnection, parent: CoroutineScope) {
+        if (!connection.hasLiveViewStream) {
+            log.i { "Wi-Fi live view unavailable for this connection (browse-only?)" }
+            updateReady(id) { it.copy(hasLiveView = false, preview = WifiPreviewStatus.Unavailable) }
+            return
+        }
         previewJob = parent.launch {
             var receivedFrame = false
             log.i { "Wi-Fi live view starting" }
