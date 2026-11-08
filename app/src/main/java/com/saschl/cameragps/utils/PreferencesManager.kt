@@ -28,6 +28,7 @@ object PreferencesManager {
     private const val KEY_LOCATION_PROVIDER = "location_provider"
     private const val KEY_HAPTICS_ENABLED = "haptics_enabled"
     private const val KEY_WIFI_BROWSE_ONLY = "wifi_browse_only"
+    private const val KEY_WIFI_DEFAULT_DOWNLOAD_FORMAT = "wifi_default_download_format"
     private const val KEY_TRANSMISSION_EVENT_SOUNDS_ENABLED = "transmission_event_sounds_enabled"
     private const val KEY_SOUND_LOCATION_ACQUIRED = "sound_location_acquired"
     private const val KEY_SOUND_LOCATION_INVALID = "sound_location_invalid"
@@ -225,6 +226,17 @@ object PreferencesManager {
     fun setWifiBrowseOnly(context: Context, enabled: Boolean) {
         getPreferences(context).edit {
             putBoolean(KEY_WIFI_BROWSE_ONLY, enabled)
+        }
+    }
+
+    /** Default Wi-Fi photo download format: "original" (JPG+RAW, default) or "jpeg" (JPG only). */
+    fun isWifiDefaultDownloadFormatJpeg(context: Context): Boolean {
+        return getPreferences(context).getString(KEY_WIFI_DEFAULT_DOWNLOAD_FORMAT, "original") == "jpeg"
+    }
+
+    fun setWifiDefaultDownloadFormatJpeg(context: Context, jpegOnly: Boolean) {
+        getPreferences(context).edit {
+            putString(KEY_WIFI_DEFAULT_DOWNLOAD_FORMAT, if (jpegOnly) "jpeg" else "original")
         }
     }
 

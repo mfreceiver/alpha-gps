@@ -14,6 +14,7 @@ internal object IosAppPreferences {
     private const val keyTransmissionNotifications = "ios.transmissionNotifications"
     private const val keyHapticsEnabled = "ios.hapticsEnabled"
     private const val keyWifiBrowseOnly = "ios.wifiBrowseOnly"
+    private const val keyWifiDefaultDownloadFormat = "ios.wifiDefaultDownloadFormat"
     private const val keyDonationHintLastShown = "ios.donationHintLastShown"
     private const val keyDonationHintShownTimes = "ios.donationHintShownTimes"
     private const val keyForceDonationDialogOnNextStart = "ios.forceDonationDialogOnNextStart"
@@ -93,6 +94,14 @@ internal object IosAppPreferences {
 
     fun setWifiBrowseOnly(enabled: Boolean) {
         defaults.setBool(enabled, forKey = keyWifiBrowseOnly)
+    }
+
+    /** Default Wi-Fi photo download format: "original" (JPG+RAW, default) or "jpeg" (JPG only). */
+    fun isWifiDefaultDownloadFormatJpeg(): Boolean =
+        (defaults.stringForKey(keyWifiDefaultDownloadFormat) ?: "original") == "jpeg"
+
+    fun setWifiDefaultDownloadFormatJpeg(jpegOnly: Boolean) {
+        defaults.setObject(if (jpegOnly) "jpeg" else "original", forKey = keyWifiDefaultDownloadFormat)
     }
 
     fun isTransmissionNotificationsEnabled(): Boolean =

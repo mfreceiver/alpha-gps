@@ -61,13 +61,25 @@ internal fun IosWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
         wifiSettingsLabel = stringResource(Res.string.wifi_remote_ios_settings),
         onDownloadPhotos = { downloads ->
             scope.launch {
+                // Capture the catalog generation the request targets; the permission dialog can
+                // outlive a browser refresh, and a stale request must not download a new catalog.
+                val generation = controller.sessions.value[identifier.uppercase()]
+                    ?.wifiRemote?.photoBrowser?.browserGeneration
                 if (requestIosPhotoSavePermission()) {
-                    if (UIApplication.sharedApplication.applicationState != UIApplicationState.UIApplicationStateBackground)
-                        controller.downloadPhotos(identifier, downloads)
+                    if (UIApplication.sharedApplication.applicationState != UIApplicationState.UIApplicationStateBackground) {
+                        val browser = controller.sessions.value[identifier.uppercase()]
+                            ?.wifiRemote?.photoBrowser
+                        if (browser != null && generation != null &&
+                            browser.open && browser.browserGeneration == generation
+                        ) {
+                            controller.downloadPhotos(identifier, downloads)
+                        }
+                    }
                 } else controller.imageStoragePermissionDenied(identifier)
             }
         },
         browseOnly = IosAppPreferences.isWifiBrowseOnly(),
+        defaultDownloadFormatJpeg = IosAppPreferences.isWifiDefaultDownloadFormatJpeg(),
         onClose = {
             logIosLifecycle("Wi-Fi remote screen closed by user -> Wi-Fi disconnect requested")
             controller.disconnect(identifier)

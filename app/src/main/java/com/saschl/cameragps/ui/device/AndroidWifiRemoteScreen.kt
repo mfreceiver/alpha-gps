@@ -63,15 +63,23 @@ fun AndroidWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
     }
     var pendingPhotos by rememberSaveable { mutableStateOf(emptyList<Long>()) }
     var pendingPhotoFormats by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var pendingPhotoGeneration by rememberSaveable { mutableStateOf(-1L) }
     val storagePermission =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             val downloads = pendingPhotos.zip(pendingPhotoFormats) { handle, format ->
                 WifiPhotoDownload(handle, WifiPhotoDownloadFormat.valueOf(format))
             }
+            val generation = pendingPhotoGeneration
             pendingPhotos = emptyList()
             pendingPhotoFormats = emptyList()
+            pendingPhotoGeneration = -1L
             if (granted && downloads.isNotEmpty() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-                controller.downloadPhotos(identifier, downloads)
+                // The permission dialog can outlive a browser refresh: only download when the
+                // catalog generation the request was made against is still current.
+                val browser = controller.sessions.value[identifier.uppercase()]?.wifiRemote?.photoBrowser
+                if (browser != null && browser.open && browser.browserGeneration == generation) {
+                    controller.downloadPhotos(identifier, downloads)
+                }
             }
             else if (!granted) controller.imageStoragePermissionDenied(identifier)
         }
@@ -128,11 +136,14 @@ fun AndroidWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
             ) {
                 pendingPhotos = downloads.map { it.handle }
                 pendingPhotoFormats = downloads.map { it.format.name }
+                pendingPhotoGeneration = controller.sessions.value[identifier.uppercase()]
+                    ?.wifiRemote?.photoBrowser?.browserGeneration ?: -1L
                 storagePermission.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
             } else controller.downloadPhotos(identifier, downloads)
         },
         onWifiSettings = { context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) },
         browseOnly = PreferencesManager.isWifiBrowseOnly(context),
+        defaultDownloadFormatJpeg = PreferencesManager.isWifiDefaultDownloadFormatJpeg(context),
         onClose = close)
 }
 

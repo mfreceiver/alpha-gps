@@ -64,6 +64,9 @@ import cameragps.sharednew.generated.resources.tip_jar_thank_you
 import cameragps.sharednew.generated.resources.tip_jar_unavailable
 import cameragps.sharednew.generated.resources.wifi_remote_browse_mode
 import cameragps.sharednew.generated.resources.wifi_remote_browse_mode_description
+import cameragps.sharednew.generated.resources.wifi_remote_default_download_format
+import cameragps.sharednew.generated.resources.wifi_remote_default_download_format_jpeg
+import cameragps.sharednew.generated.resources.wifi_remote_default_download_format_original
 import com.diamondedge.logging.LogLevel
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController
 import com.sasch.cameragps.sharednew.ui.settings.SharedLanguageSettingsCard
@@ -185,6 +188,37 @@ internal fun IosSettingsScreen(
                         wifiBrowseOnly = enabled
                     },
                 )
+                var jpegOnlyDefault by remember {
+                    mutableStateOf(IosAppPreferences.isWifiDefaultDownloadFormatJpeg())
+                }
+                Text(
+                    text = stringResource(Res.string.wifi_remote_default_download_format),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                listOf(
+                    false to Res.string.wifi_remote_default_download_format_original,
+                    true to Res.string.wifi_remote_default_download_format_jpeg
+                ).forEach { (jpegOnly, label) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                IosAppPreferences.setWifiDefaultDownloadFormatJpeg(jpegOnly)
+                                jpegOnlyDefault = jpegOnly
+                            }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = jpegOnlyDefault == jpegOnly, onClick = null)
+                        Text(
+                            text = stringResource(label),
+                            modifier = Modifier.padding(start = 8.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
             }
 
             IosTipJarCard(

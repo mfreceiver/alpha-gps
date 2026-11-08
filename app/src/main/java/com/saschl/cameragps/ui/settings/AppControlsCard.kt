@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +35,9 @@ import cameragps.sharednew.generated.resources.haptic_feedback_description
 import cameragps.sharednew.generated.resources.reset_welcome
 import cameragps.sharednew.generated.resources.wifi_remote_browse_mode
 import cameragps.sharednew.generated.resources.wifi_remote_browse_mode_description
+import cameragps.sharednew.generated.resources.wifi_remote_default_download_format
+import cameragps.sharednew.generated.resources.wifi_remote_default_download_format_jpeg
+import cameragps.sharednew.generated.resources.wifi_remote_default_download_format_original
 import cameragps.sharednew.generated.resources.will_show_welcome
 import com.saschl.cameragps.service.LocationSenderService
 import com.saschl.cameragps.utils.PreferencesManager
@@ -192,6 +197,42 @@ internal fun AppControlsCard(
                     isWifiBrowseOnly = enabled
                 }
             )
+        }
+
+        Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            Text(
+                text = stringResource(Res.string.wifi_remote_default_download_format),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            var jpegOnlyDefault by remember {
+                mutableStateOf(PreferencesManager.isWifiDefaultDownloadFormatJpeg(context))
+            }
+            listOf(
+                false to Res.string.wifi_remote_default_download_format_original,
+                true to Res.string.wifi_remote_default_download_format_jpeg
+            ).forEach { (jpegOnly, label) ->
+                Row(
+                    Modifier.fillMaxWidth().selectable(
+                        selected = jpegOnlyDefault == jpegOnly,
+                        onClick = {
+                            PreferencesManager.setWifiDefaultDownloadFormatJpeg(context, jpegOnly)
+                            jpegOnlyDefault = jpegOnly
+                        }
+                    ).padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = jpegOnlyDefault == jpegOnly,
+                        onClick = null
+                    )
+                    Text(
+                        text = stringResource(label),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+            }
         }
 
         HorizontalDivider(
