@@ -5,7 +5,6 @@ import android.content.Intent
 import com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants
 import com.sasch.cameragps.sharednew.ui.device.DeviceDetailServiceActions
 import com.saschl.cameragps.service.LocationSenderService
-import com.saschl.cameragps.service.ServiceCommandRouter
 import timber.log.Timber
 
 class AndroidDeviceDetailServiceActions(
@@ -31,19 +30,5 @@ class AndroidDeviceDetailServiceActions(
             putExtra("address", normalized)
         }
         context.startService(shutdownIntent)
-    }
-
-    override fun setRemoteControlMonitoring(deviceAddress: String, enabled: Boolean) {
-        if (!LocationSenderService.isRunning) {
-            return
-        }
-
-        val normalized = deviceAddress.uppercase()
-        val intent = Intent(context, LocationSenderService::class.java).apply {
-            action = SonyBluetoothConstants.ACTION_SET_REMOTE_CONTROL_MONITORING
-            putExtra("address", normalized)
-            putExtra(ServiceCommandRouter.EXTRA_REMOTE_CONTROL_ENABLED, enabled)
-        }
-        context.startService(intent)
     }
 }

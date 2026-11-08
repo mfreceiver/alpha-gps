@@ -9,10 +9,8 @@ interface DeviceDetailDataSource {
     suspend fun ensureDeviceExists(deviceId: String, deviceName: String? = null)
     suspend fun isDeviceEnabled(deviceId: String): Boolean
     suspend fun isAlwaysOnEnabled(deviceId: String): Boolean
-    suspend fun isRemoteControlEnabled(deviceId: String): Boolean
     suspend fun setDeviceEnabled(deviceId: String, enabled: Boolean)
     suspend fun setAlwaysOnEnabled(deviceId: String, enabled: Boolean)
-    suspend fun setRemoteControlEnabled(deviceId: String, enabled: Boolean)
     suspend fun getDeviceName(deviceId: String): String?
 
     /** Persists a name a person chose, so it is never replaced by a hardware name. */
@@ -22,7 +20,6 @@ interface DeviceDetailDataSource {
 interface DeviceDetailServiceActions {
     fun startAlwaysOn(deviceAddress: String)
     fun requestShutdown(deviceAddress: String)
-    fun setRemoteControlMonitoring(deviceAddress: String, enabled: Boolean)
 }
 
 data class DeviceDetailToggleState(
@@ -30,7 +27,6 @@ data class DeviceDetailToggleState(
     val deviceName: String = "",
     val isDeviceEnabled: Boolean = true,
     val isAlwaysOnEnabled: Boolean = false,
-    val isRemoteControlEnabled: Boolean = false,
 )
 
 class DeviceDetailStateStore(
@@ -47,7 +43,6 @@ class DeviceDetailStateStore(
                 deviceName = dataSource.getDeviceName(normalized) ?: deviceName.orEmpty(),
                 isAlwaysOnEnabled = dataSource.isAlwaysOnEnabled(normalized),
                 isDeviceEnabled = dataSource.isDeviceEnabled(normalized),
-                isRemoteControlEnabled = dataSource.isRemoteControlEnabled(normalized),
             )
         }
     }
@@ -64,17 +59,6 @@ class DeviceDetailStateStore(
         dataSource.ensureDeviceExists(normalized, deviceName)
         dataSource.setAlwaysOnEnabled(normalized, enabled)
         _uiState.update { it.copy(isAlwaysOnEnabled = enabled) }
-    }
-
-    suspend fun setRemoteControlEnabled(
-        deviceId: String,
-        enabled: Boolean,
-        deviceName: String? = null
-    ) {
-        val normalized = deviceId.uppercase()
-        dataSource.ensureDeviceExists(normalized, deviceName)
-        dataSource.setRemoteControlEnabled(normalized, enabled)
-        _uiState.update { it.copy(isRemoteControlEnabled = enabled) }
     }
 
     suspend fun setDeviceName(deviceId: String, name: String) {

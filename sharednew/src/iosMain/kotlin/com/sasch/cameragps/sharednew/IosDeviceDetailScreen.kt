@@ -53,20 +53,12 @@ internal fun IosDeviceDetailScreen(
             return deviceDao.isDeviceAlwaysOnEnabled(deviceId.uppercase())
         }
 
-        override suspend fun isRemoteControlEnabled(deviceId: String): Boolean {
-            return deviceDao.isRemoteControlEnabled(deviceId.uppercase())
-        }
-
         override suspend fun setDeviceEnabled(deviceId: String, enabled: Boolean) {
             deviceDao.setDeviceEnabled(deviceId.uppercase(), enabled)
         }
 
         override suspend fun setAlwaysOnEnabled(deviceId: String, enabled: Boolean) {
             deviceDao.setAlwaysOnEnabled(deviceId.uppercase(), enabled)
-        }
-
-        override suspend fun setRemoteControlEnabled(deviceId: String, enabled: Boolean) {
-            deviceDao.setRemoteControlEnabled(deviceId.uppercase(), enabled)
         }
 
         override suspend fun getDeviceName(deviceId: String): String? {

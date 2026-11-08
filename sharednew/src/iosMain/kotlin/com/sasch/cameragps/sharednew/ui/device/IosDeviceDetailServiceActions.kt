@@ -5,7 +5,6 @@ import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController
 /**
  * iOS implementation of [DeviceDetailServiceActions].
  * On iOS there is no foreground service concept, so always-on/shutdown are no-ops.
- * Remote control monitoring is delegated to the BLE controller.
  */
 class IosDeviceDetailServiceActions : DeviceDetailServiceActions {
 
@@ -16,9 +15,4 @@ class IosDeviceDetailServiceActions : DeviceDetailServiceActions {
     override fun requestShutdown(deviceAddress: String) {
         // No service shutdown concept on iOS
     }
-
-    override fun setRemoteControlMonitoring(deviceAddress: String, enabled: Boolean) {
-        IosBluetoothController.setRemoteStatusMonitoringEnabled(deviceAddress, enabled)
-    }
 }
-

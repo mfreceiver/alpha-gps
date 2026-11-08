@@ -451,11 +451,6 @@ class CameraSessionOrchestrator(
         timeSync.onDeviceReady(id)
         autoCorrection.refresh(id)
 
-        val remoteEnabled = runCatching { deviceDao.isRemoteControlEnabled(id) }
-            .getOrDefault(false)
-        if (remoteEnabled) {
-            remoteControl.startRemoteStatusMonitoring(id)
-        }
         _events.tryEmit(OrchestratorEvent.HandshakeCompleted(id))
     }
 }

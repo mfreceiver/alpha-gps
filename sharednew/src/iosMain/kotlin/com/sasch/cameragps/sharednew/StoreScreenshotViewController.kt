@@ -89,7 +89,6 @@ fun StoreScreenshotViewController(scenario: String): UIViewController {
                         onOpenSettings = {},
                         onOpenHelp = {},
                         onConnect = {},
-                        onTriggerRemoteShutter = {},
                         onDelete = {},
                         onOpenDetails = {},
                     )

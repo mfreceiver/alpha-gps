@@ -1,25 +1,20 @@
 package com.sasch.cameragps.sharednew.ui.devicelist
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,15 +32,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.android_12_requires_keep_alive
-import cameragps.sharednew.generated.resources.camera_24px
 import cameragps.sharednew.generated.resources.cancel
 import cameragps.sharednew.generated.resources.connected
 import cameragps.sharednew.generated.resources.delete
@@ -60,19 +52,14 @@ import cameragps.sharednew.generated.resources.keyboard_arrow_right_24px
 import cameragps.sharednew.generated.resources.location_linking_disabled_by_camera
 import cameragps.sharednew.generated.resources.nearby_cameras
 import cameragps.sharednew.generated.resources.not_paired_tap_to_pair_again
-import cameragps.sharednew.generated.resources.remote_feature_inactive
 import cameragps.sharednew.generated.resources.saved_devices
 import cameragps.sharednew.generated.resources.show_details
 import cameragps.sharednew.generated.resources.tap_to_connect
 import cameragps.sharednew.generated.resources.transmission_active
 import cameragps.sharednew.generated.resources.transmission_inactive
-import cameragps.sharednew.generated.resources.trigger_shutter
 import com.sasch.cameragps.sharednew.bluetooth.BluetoothDeviceInfo
-import com.sasch.cameragps.sharednew.ui.ShutterPulseIcon
 import com.sasch.cameragps.sharednew.ui.TransmissionDot
-import com.sasch.cameragps.sharednew.ui.components.AdaptiveAction
 import com.sasch.cameragps.sharednew.ui.components.ScrollbarLazyColumn
-import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -93,7 +80,6 @@ fun SharedDeviceList(
     hapticsEnabled: Boolean = true,
     contentPadding: PaddingValues = PaddingValues(top = 16.dp, bottom = 16.dp),
     onConnect: (BluetoothDeviceInfo) -> Unit,
-    onTriggerRemoteShutter: (BluetoothDeviceInfo) -> Unit,
     onDelete: (BluetoothDeviceInfo) -> Unit,
     onOpenDetails: (BluetoothDeviceInfo) -> Unit,
     onOpenTroubleshooting: () -> Unit,
@@ -178,7 +164,6 @@ fun SharedDeviceList(
                     showKeepAliveHint = showKeepAliveHint,
                     hapticsEnabled = hapticsEnabled,
                     onConnect = { onConnect(device) },
-                    onTriggerRemoteShutter = { onTriggerRemoteShutter(device) },
                     onDeleteRequest = { deviceToDelete = device },
                     onOpenDetails = { onOpenDetails(device) },
                     onOpenTroubleshooting = onOpenTroubleshooting,
@@ -206,7 +191,6 @@ fun SharedDeviceList(
                     showKeepAliveHint = showKeepAliveHint,
                     hapticsEnabled = hapticsEnabled,
                     onConnect = { deviceToPair = device },
-                    onTriggerRemoteShutter = { onTriggerRemoteShutter(device) },
                     onOpenDetails = { onOpenDetails(device) },
                     onOpenTroubleshooting = onOpenTroubleshooting,
                 )
@@ -275,7 +259,6 @@ private fun SwipeToDeleteDeviceCard(
     showKeepAliveHint: Boolean,
     hapticsEnabled: Boolean,
     onConnect: () -> Unit,
-    onTriggerRemoteShutter: () -> Unit,
     onDeleteRequest: () -> Unit,
     onOpenDetails: () -> Unit,
     onOpenTroubleshooting: () -> Unit,
@@ -327,7 +310,6 @@ private fun SwipeToDeleteDeviceCard(
             showKeepAliveHint = showKeepAliveHint,
             hapticsEnabled = hapticsEnabled,
             onConnect = onConnect,
-            onTriggerRemoteShutter = onTriggerRemoteShutter,
             onOpenDetails = onOpenDetails,
             onOpenTroubleshooting = onOpenTroubleshooting,
         )
@@ -342,25 +324,10 @@ private fun DeviceCard(
     showKeepAliveHint: Boolean,
     hapticsEnabled: Boolean,
     onConnect: () -> Unit,
-    onTriggerRemoteShutter: () -> Unit,
     onOpenDetails: () -> Unit,
     onOpenTroubleshooting: () -> Unit,
 ) {
     val isTransmissionActive = item?.isTransmissionActive == true
-    val isRemoteFeatureActive = item?.isRemoteFeatureActive == true
-    val isShutterActive = item?.isShutterActive == true
-    val haptics = LocalHapticFeedback.current
-    // Success buzz when the shutter sequence ends
-    var wasShutterActive by remember { mutableStateOf(false) }
-    LaunchedEffect(isShutterActive) {
-        val sequenceFinished = wasShutterActive && !isShutterActive
-        wasShutterActive = isShutterActive
-        if (sequenceFinished && hapticsEnabled) {
-            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-            delay(160)
-            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-        }
-    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -441,11 +408,7 @@ private fun DeviceCard(
                 )
             }
             val statusText = when {
-                // Remote-active needs no extra text: the shutter button says it all.
-                device.isConnected && isRemoteFeatureActive ->
-                    stringResource(Res.string.connected)
-
-                device.isConnected -> stringResource(Res.string.remote_feature_inactive)
+                device.isConnected -> stringResource(Res.string.connected)
 
                 !device.isSaved -> stringResource(Res.string.tap_to_connect)
 
@@ -462,32 +425,6 @@ private fun DeviceCard(
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
                 )
-            }
-            if (device.isSaved && isRemoteFeatureActive) {
-                AdaptiveAction(modifier = Modifier.padding(top = 12.dp)) { actionModifier ->
-                    FilledTonalButton(
-                        onClick = {
-                            if (hapticsEnabled) {
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            }
-                            onTriggerRemoteShutter()
-                        },
-                        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary),
-                        modifier = actionModifier
-                            .heightIn(min = 52.dp),
-                    ) {
-                        ShutterPulseIcon(
-                            isActive = isShutterActive,
-                            painter = painterResource(Res.drawable.camera_24px),
-                            contentDescription = null,
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            stringResource(Res.string.trigger_shutter),
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
-                    }
-                }
             }
         }
     }
