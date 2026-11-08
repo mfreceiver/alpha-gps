@@ -334,6 +334,17 @@ internal fun WifiPhotoBrowser(
                             )
                         }
                     }
+                    if (selecting) IconButton(
+                        onClick = { viewModel.previewPhoto(capture.id) },
+                        modifier = Modifier.align(Alignment.BottomStart).padding(2.dp).size(40.dp)
+                            .background(Color.Black.copy(alpha = 0.55f), CircleShape),
+                    ) {
+                        Icon(
+                            painterResource(Res.drawable.search_24px),
+                            contentDescription = stringResource(Res.string.wifi_remote_preview_photo),
+                            tint = Color.White, modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
             }
             item(span = { GridItemSpan(maxLineSpan) }) {
