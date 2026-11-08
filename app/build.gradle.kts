@@ -42,11 +42,14 @@ android {
 
 
     defaultConfig {
-        applicationId = "com.saschl.cameragps"
+        // Custom build: distinct applicationId so it installs alongside the
+        // original com.saschl.cameragps. Namespace stays com.saschl.cameragps
+        // so Kotlin packages / R class are untouched.
+        applicationId = "cn.vectory.alphagps"
         minSdk = 26
         targetSdk = 37
-        versionCode = 172
-        versionName = "v1.7.2"
+        versionCode = 1
+        versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
