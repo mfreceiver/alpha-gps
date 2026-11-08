@@ -302,7 +302,7 @@
     <string name="camera_setting_failed">Pengaturan kamera tidak dapat dikonfirmasi. Segarkan untuk memeriksa nilainya saat ini.</string>
     <string name="camera_setting_retry">Segarkan pengaturan kamera</string>
     <string name="whats_new_title">Yang baru</string>
-    <string name="whats_new_171_zv1">Perbaikan kompatibilitas Wi-Fi untuk Sony ZV-1 dan kamera Sony lama lainnya, termasuk mulai pratinjau langsung dan transfer foto.</string>
+    <string name="whats_new_171_zv1">Perbaikan kompatibilitas Wi-Fi untuk Sony ZV-1 dan kamera Sony lama lainnya, termasuk transfer foto.</string>
     <string name="whats_new_171_rx0">Memperbaiki koneksi Bluetooth yang berulang kali terputus saat berbagi lokasi dengan kamera seperti Sony RX0 II ketika mode Selalu Aktif dinonaktifkan.</string>
     <string name="whats_new_version">Versi %1$s</string>
     <string name="whats_new_close">Mengerti</string>

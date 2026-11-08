@@ -204,7 +204,7 @@
     <string name="guide_accuracy_step_battery">Exclude the app from battery optimization so transmission keeps running in the background: Settings → Apps → Alpha GPS → Battery → Unrestricted.</string>
     <string name="guide_startup_title">Camera starts slowly or its screen stays black</string>
     <string name="guide_startup_description">On some cameras, allowing smartphone connections while the camera is off can delay startup when Alpha GPS is enabled.</string>
-    <string name="guide_startup_step_disable">In the camera's Network menu, set 'Cnct. while Power OFF' or 'Cnct. during Power OFF' to Off. The name and menu location vary by model. This disables smartphone access while the camera is off; keep Bluetooth enabled for GPS and remote control when the camera is on.</string>
+    <string name="guide_startup_step_disable">In the camera's Network menu, set 'Cnct. while Power OFF' or 'Cnct. during Power OFF' to Off. The name and menu location vary by model. This disables smartphone access while the camera is off; keep Bluetooth enabled for GPS and time sync when the camera is on.</string>
     <!-- Contextual pairing-failure troubleshooting (shown when the camera rejects pairing) -->
     <string name="pairing_failed_device_message">The camera '%1$s' refused the pairing.</string>
     <string name="pairing_failed_hint_intro">This often happens when the camera is not in pairing mode or is still paired with another device:</string>
@@ -332,12 +332,12 @@
 
     <!-- In-app release notes. -->
     <string name="whats_new_title">What’s new</string>
-    <string name="whats_new_171_zv1">Improved Wi-Fi compatibility for the Sony ZV-1 and other older Sony cameras, including live view startup and photo transfer.</string>
+    <string name="whats_new_171_zv1">Improved Wi-Fi compatibility for the Sony ZV-1 and other older Sony cameras, including photo transfer.</string>
     <string name="whats_new_171_rx0">Fixed repeated Bluetooth disconnections during location sharing with cameras such as the Sony RX0 II when Always On is disabled.</string>
     <string name="whats_new_version">Version %1$s</string>
     <string name="whats_new_close">Got it</string>
     <string name="whats_new_open">View release notes</string>
-    <string name="whats_new_170_wifi_remote">New experimental Wi-Fi feature with live view, shutter control, and photo browsing and downloads. Currently validated only with the Sony α6700.\n\nTo open it, tap your camera in the device list, then tap “Wi-Fi photo transfer”.</string>
+    <string name="whats_new_170_wifi_remote">New experimental Wi-Fi feature for browsing and downloading photos. Currently validated only with the Sony α6700.\n\nTo open it, tap your camera in the device list, then tap “Wi-Fi photo transfer”.</string>
     <string name="whats_new_162_time">View and change automatic time correction in your camera’s details. This setting controls whether the camera adjusts its date and time using your phone.</string>
     <string name="whats_new_162_notifications">Location transmission notifications now update more reliably.</string>
     <string name="whats_new_162_pairing">Updated camera pairing on iOS uses the system accessory picker. Previously paired cameras may need to be authorized again; the app will guide you through it.</string>
