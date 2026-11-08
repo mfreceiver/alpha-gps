@@ -43,6 +43,7 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoBatchFormat
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
+import com.sasch.cameragps.sharednew.remote.wifi.defaultBatchFormats
 import com.sasch.cameragps.sharednew.remote.wifi.photoBatchDownloads
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -65,12 +66,9 @@ internal fun PhotoBatchDownloadSheet(
         )
     }.filterValues { it.isNotEmpty() }
     var formats by remember {
-        // "JPEG only" default preselects JPEG; otherwise keep the single-option-or-empty default.
-        mutableStateOf(
-            (if (defaultJpegOnly && WifiPhotoBatchFormat.Jpeg in options) setOf(WifiPhotoBatchFormat.Jpeg)
-            else null)
-                ?: options.keys.singleOrNull()?.let { setOf(it) }.orEmpty()
-        )
+        // Default-format policy: Original → all original formats; JPEG-only → JPEG (and
+        // deliberately nothing if no JPEG is available). See defaultBatchFormats.
+        mutableStateOf(defaultBatchFormats(options.keys, defaultJpegOnly))
     }
     val downloads = photoBatchDownloads(
         captures,
