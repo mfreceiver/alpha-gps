@@ -244,6 +244,7 @@ internal fun WifiPhotoViewer(
                         Text(stringResource(Res.string.wifi_remote_browser_previous))
                     }
                     TextButton(onClick = {
+                        viewModel.noteBatchCompletion()
                         viewModel.controller.clearPhotoTransferResult(viewModel.identifier)
                         showDetails = true
                     }, enabled = current != null) {
@@ -266,6 +267,7 @@ internal fun WifiPhotoViewer(
                 state = state,
                 previewLoading = screenPreview?.loading == true,
                 onDismiss = {
+                    viewModel.noteBatchCompletion()
                     viewModel.controller.clearPhotoTransferResult(viewModel.identifier)
                     showDetails = false
                 },

@@ -529,6 +529,89 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         model.selectAllPhotos()
         assertNull(model.batchSummary)
         model.recordBatchSummary(summary)
+        model.clearPhotoSelection()
+        assertNull(model.batchSummary)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun batchSummarySettlesOnceCompleteAndSurvivesPreviewRoundTrips() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = pagedConnection()
+        connection.downloadResults = Channel(Channel.UNLIMITED)
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        model.togglePhotoSelection("photo:0")
+        model.togglePhotoSelection("photo:1")
+        // Real batch flow: record the plan's summary, then actually download it.
+        model.recordBatchSummary(WifiBatchSummary(2, emptyMap()))
+        assertFalse(model.batchSummarySettled(), "a pending batch must not show the summary yet")
+        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(0), WifiPhotoDownload(2)))
+        runCurrent()
+        assertFalse(model.batchSummarySettled(), "an in-flight batch must not show the summary")
+        repeat(2) {
+            connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Saved))
+            runCurrent()
+        }
+        val transfer = registry.get("camera")!!.wifiRemote.imageTransfer
+        assertEquals(WifiImageTransferStatus.Saved, transfer.status)
+        assertTrue(model.batchSummarySettled(), "a finished batch must be settled")
+        // Preview round-trip: the viewer clears the transfer result, but the VM keeps the
+        // settled state and the selection.
+        model.previewPhoto("photo:0")
+        assertEquals(0, model.viewedPhotoIndex)
+        assertTrue(model.batchSummarySettled(), "opening the viewer must keep the settled summary")
+        model.closePhoto()
+        assertNull(model.viewedPhotoIndex)
+        assertTrue(model.batchSummarySettled(), "returning to the grid must keep the settled summary")
+        assertEquals(
+            listOf("photo:0", "photo:1"), model.selectedPhotoIds.toList(),
+            "a preview round-trip must not touch the selection"
+        )
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun batchSummarySettlementResetsForNewBatchesFailuresAndSelectionChanges() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = pagedConnection()
+        connection.downloadResults = Channel(Channel.UNLIMITED)
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        // First batch of one file completes.
+        model.togglePhotoSelection("photo:0")
+        model.recordBatchSummary(WifiBatchSummary(1, emptyMap()))
+        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(0)))
+        runCurrent()
+        connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Saved))
+        runCurrent()
+        assertTrue(model.batchSummarySettled())
+        // A retry/new batch (unsaved items only) records a fresh summary and must reset
+        // the settled state while the transfer runs.
+        model.togglePhotoSelection("photo:1")
+        model.recordBatchSummary(WifiBatchSummary(1, emptyMap()))
+        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(2)))
+        runCurrent()
+        assertFalse(model.batchSummarySettled(), "a new batch must reset the settled state")
+        // A failing batch never settles: the transfer status shows instead.
+        connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Failed))
+        runCurrent()
+        assertEquals(WifiImageTransferStatus.Failed, registry.get("camera")!!.wifiRemote.imageTransfer.status)
+        assertFalse(model.batchSummarySettled(), "a failed batch must not settle")
+        // Changing the selection clears the summary entirely.
+        model.togglePhotoSelection("photo:2")
+        assertNull(model.batchSummary)
+        assertFalse(model.batchSummarySettled())
         controller.closeAndJoin()
     }
 

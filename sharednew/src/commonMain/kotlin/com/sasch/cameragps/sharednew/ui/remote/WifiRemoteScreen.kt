@@ -77,6 +77,7 @@ import com.diamondedge.logging.logging
 import com.sasch.cameragps.sharednew.remote.wifi.SonyImageTransfer
 import com.sasch.cameragps.sharednew.remote.wifi.WifiBatchSummary
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
+import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteController
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteFailure
@@ -122,6 +123,7 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         if (state.photoBrowser.loading || state.imageTransfer.busy) return
         val index = groupCameraPhotos(state.photoBrowser.photos).indexOfFirst { it.id == captureId }
         if (index >= 0) {
+            noteBatchCompletion()
             controller.clearPhotoTransferResult(identifier)
             viewedPhotoIndex = state.photoBrowser.offset + index
             viewPhotoAt(viewedPhotoIndex!!)
@@ -129,6 +131,7 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     }
 
     fun closePhoto() {
+        noteBatchCompletion()
         controller.clearPhotoTransferResult(identifier)
         viewedPhotoIndex = null
         controller.clearPhotoPreview(identifier)
@@ -139,6 +142,7 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return
         val browser = state.photoBrowser
         if (!browser.open) return
+        noteBatchCompletion()
         val captures = groupCameraPhotos(browser.photos)
         val count = captures.size
         if (index in browser.offset until browser.offset + count) {
@@ -194,9 +198,39 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     internal var batchSummary by mutableStateOf<WifiBatchSummary?>(null)
         private set
 
+    /**
+     * The batch whose summary has already been observed complete. Lives in the ViewModel
+     * (not composition) so a preview round-trip — which removes the browser composable and
+     * clears the transfer result — cannot lose the finished batch line. Reset whenever a
+     * new batch summary is recorded; a null batchSummary renders it moot.
+     */
+    private var settledBatchSummary: WifiBatchSummary? = null
+
     internal fun recordBatchSummary(summary: WifiBatchSummary?) {
+        settledBatchSummary = null
         batchSummary = summary
     }
+
+    /**
+     * Latches the current batch summary as complete if the transfer finished it. Must be
+     * called before anything clears the transfer result (preview/viewer round-trips);
+     * does nothing when no batch is pending or it already settled.
+     */
+    internal fun noteBatchCompletion() {
+        val summary = batchSummary ?: return
+        if (settledBatchSummary != null) return
+        if (summary.isComplete(currentImageTransfer())) settledBatchSummary = summary
+    }
+
+    /** True when the "Downloaded N, skipped M" line should show instead of the transfer status. */
+    internal fun batchSummarySettled(): Boolean {
+        val summary = batchSummary ?: return false
+        return settledBatchSummary === summary || summary.isComplete(currentImageTransfer())
+    }
+
+    private fun currentImageTransfer(): WifiImageTransferState =
+        controller.sessions.value[identifier.uppercase()]?.wifiRemote?.imageTransfer
+            ?: WifiImageTransferState()
 
     fun reconcilePhotoSelection() {
         val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote
