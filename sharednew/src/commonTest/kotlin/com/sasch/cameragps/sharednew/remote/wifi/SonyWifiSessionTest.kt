@@ -232,6 +232,7 @@ class SonyWifiSessionTest : WifiLoggingTest() {
             liveView.join()
             assertFalse(connection.canCapture)
             assertTrue(connection.canTransferImages)
+            assertFalse(connection.hasLiveViewStream, "Browse-only must not advertise a live-view stream")
             assertEquals(listOf(listOf(1L, 1L)), camera.openModes())
             assertEquals("DSC0007.JPG", connection.openPhotoBrowser().photos.single().filename)
             assertEquals(
@@ -440,6 +441,7 @@ class SonyWifiSessionTest : WifiLoggingTest() {
         val camera = Camera()
         val connection = camera.open(backgroundScope)
         try {
+            assertTrue(connection.hasLiveViewStream, "A shooting session must advertise the live-view stream")
             connection.openPhotoBrowser()
             val loss = async { connection.lost.first() }
             camera.channels.last().replies.close()

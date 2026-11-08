@@ -128,6 +128,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         var captures = 0
         var shutdownEnabled = false
         var previewStarts = 0
+        override var hasLiveViewStream: Boolean = true
         override val images: Flow<ImageBitmap> = flow {
             previewStarts++
             try { awaitCancellation() } finally { cleanup += "preview" }
@@ -1662,12 +1663,106 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         controller.browsePhotos("camera")
         runCurrent()
         model.maybeAutoEnterBrowser()
-        model.navigateBack { error("Browse-only back must disconnect, not exit the screen") }
+        try {
+            model.navigateBack { error("Browse-only back must disconnect, not exit the screen") }
+            // Back itself must have started teardown immediately — a Closing phase
+            // here proves it, without any closeAndJoin()/disconnect() call that
+            // would disconnect on its own and mask a broken Back path.
+            assertEquals(
+                WifiRemotePhase.Closing,
+                registry.get("camera")?.wifiRemote?.phase,
+                "Back in browse-only must trigger disconnect right away"
+            )
+            // Drive only the scheduler: the runSession finally block must finish the
+            // cleanup (prepareToDisconnect → close → Idle) and the registry entry
+            // must vanish without any further disconnect call.
+            runCurrent()
+            assertNull(
+                registry.get("camera"),
+                "Back in browse-only disconnects and fully cleans up the session"
+            )
+        } finally {
+            controller.closeAndJoin()
+        }
+    }
+
+    @Test
+    fun browseOnlyReconnectAfterCleanupAutoEntersBrowserAgain() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = pagedConnection()
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller).apply { browseOnly = true }
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        model.maybeAutoEnterBrowser()
+        runCurrent()
+        assertTrue(registry.get("camera")!!.wifiRemote.photoBrowser.open)
+        controller.disconnect("camera")
         controller.closeAndJoin()
-        assertNull(
-            registry.get("camera"),
-            "Back in browse-only disconnects and fully cleans up the session"
+        // After cleanup the registry entry is gone; the Compose effect only ever
+        // observes this null state (same effect keys on reconnect — no transition
+        // state in between). maybeAutoEnterBrowser called at null must reset the
+        // once-flag, or the next connection never auto-enters.
+        assertNull(registry.get("camera"))
+        model.maybeAutoEnterBrowser()
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        assertEquals(WifiRemotePhase.Ready, registry.get("camera")?.wifiRemote?.phase)
+        model.maybeAutoEnterBrowser()
+        runCurrent()
+        assertTrue(
+            registry.get("camera")!!.wifiRemote.photoBrowser.open,
+            "A fresh connection after null-cleanup must auto-enter the browser again"
         )
+        // And Back on the reconnected session still disconnects.
+        try {
+            model.navigateBack { error("Browse-only back must disconnect, not exit the screen") }
+            assertEquals(WifiRemotePhase.Closing, registry.get("camera")?.wifiRemote?.phase)
+            runCurrent()
+            assertNull(registry.get("camera"))
+        } finally {
+            controller.closeAndJoin()
+        }
+    }
+
+    @Test
+    fun nonBrowseOnlyBackLeavesBrowserWithoutDisconnecting() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = pagedConnection()
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller).apply { browseOnly = false }
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        assertTrue(registry.get("camera")!!.wifiRemote.photoBrowser.open)
+        // Outside browse-only, Back leaves the photo browser and keeps the
+        // remote-shooting session alive; the screen is not exited either.
+        model.navigateBack { error("Back must leave the browser, not exit the screen") }
+        runCurrent()
+        assertFalse(registry.get("camera")!!.wifiRemote.photoBrowser.open)
+        assertEquals(WifiRemotePhase.Ready, registry.get("camera")?.wifiRemote?.phase)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun connectionWithoutLiveViewStreamReportsPreviewUnavailable() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = Connection().apply { hasLiveViewStream = false }
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        assertEquals(WifiRemotePhase.Ready, registry.get("camera")?.wifiRemote?.phase)
+        // A connection that has no live-view stream (browse-only) must not collect
+        // the immediately-complete images flow and must not report a preview
+        // failure — the stream was never supposed to run.
+        assertEquals(0, connection.previewStarts)
+        assertEquals(WifiPreviewStatus.Unavailable, registry.get("camera")!!.wifiRemote.preview)
+        assertFalse(registry.get("camera")!!.wifiRemote.hasLiveView)
+        controller.closeAndJoin()
     }
 
 }
