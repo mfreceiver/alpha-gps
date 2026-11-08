@@ -48,7 +48,7 @@ android {
         applicationId = "cn.vectory.alphagps"
         minSdk = 26
         targetSdk = 37
-        versionCode = 3
+        versionCode = providers.gradleProperty("alphagps.versionCode").get().toInt()
         versionName = "0.1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
