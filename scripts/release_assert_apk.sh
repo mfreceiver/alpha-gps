@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # alpha-gps APK 断言（移植自 dshdroid/scripts/release_assert_apk.sh，fail-closed 全硬门）：
 #   apksigner: verify 通过 + 单一签名者 + 证书 SHA256 与期望一致 + 拒绝 debug 主体
-#   aapt badging: package='com.saschl.cameragps'（app/build.gradle.kts applicationId）、
+#   aapt badging: package=cn.vectory.alphagps（app/build.gradle.kts applicationId）、
 #                 INTERNET 权限、versionName/versionCode 与期望一致
 # 用法: scripts/release_assert_apk.sh <apk> <期望versionName> <期望versionCode> <期望证书SHA256>
 set -euo pipefail
@@ -11,7 +11,7 @@ if [[ $# -ne 4 ]]; then
   exit 1
 fi
 APK_PATH=$1; EXPECT_NAME=$2; EXPECT_CODE=$3; EXPECT_SHA=$4
-EXPECT_PACKAGE='com.saschl.cameragps'   # app/build.gradle.kts applicationId
+EXPECT_PACKAGE='cn.vectory.alphagps'   # app/build.gradle.kts applicationId
 
 if [[ -t 2 ]]; then
   C_RED=$'\033[31m'; C_GRN=$'\033[32m'; C_BLU=$'\033[34m'; C_RST=$'\033[0m'
