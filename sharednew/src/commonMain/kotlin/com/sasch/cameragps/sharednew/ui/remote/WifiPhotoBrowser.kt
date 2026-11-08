@@ -127,6 +127,7 @@ import com.sasch.cameragps.sharednew.remote.wifi.formatByteSize
 import com.sasch.cameragps.sharednew.remote.wifi.formatLabel
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import com.sasch.cameragps.sharednew.remote.wifi.jpegOnlyBatchPlan
+import com.sasch.cameragps.sharednew.remote.wifi.shouldShowBatchSummary
 import com.sasch.cameragps.sharednew.remote.wifi.toSummary
 import com.sasch.cameragps.sharednew.ui.components.verticalScrollbar
 import kotlinx.coroutines.launch
@@ -243,7 +244,8 @@ internal fun WifiPhotoBrowser(
         val summary = viewModel.batchSummary
         // Completion is latched in the ViewModel (noteBatchCompletion), so a preview
         // round-trip — which clears the transfer result — keeps the finished batch line.
-        if (summary != null && viewModel.batchSummarySettled()) {
+        // A busy/failed/cancelled transfer always shows its own status instead.
+        if (summary != null && shouldShowBatchSummary(viewModel.batchSummarySettled(), transfer)) {
             Text(
                 if (summary.skippedCount == 0) stringResource(
                     Res.string.wifi_remote_batch_summary_no_skip, summary.downloaded

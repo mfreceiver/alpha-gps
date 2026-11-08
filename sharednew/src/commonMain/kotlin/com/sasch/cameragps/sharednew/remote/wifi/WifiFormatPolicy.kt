@@ -159,6 +159,15 @@ internal data class WifiBatchSummary(val downloaded: Int, val skipped: Map<WifiS
 
 internal fun WifiJpegBatchPlan.toSummary() = WifiBatchSummary(downloads.size, skipped)
 
+/**
+ * Whether the settled batch summary line may replace the transfer status line on the
+ * grid. A busy, failed or cancelled transfer always wins: the user must see what the
+ * current download is doing instead of a stale "downloaded N, skipped M" result.
+ */
+internal fun shouldShowBatchSummary(summarySettled: Boolean, transfer: WifiImageTransferState): Boolean =
+    summarySettled && (transfer.status == WifiImageTransferStatus.Saved ||
+            transfer.status == WifiImageTransferStatus.Idle)
+
 /** "512 KB", "4.8 MB", "48 MB", "1.2 GB" — binary units, no locale-specific formatting. */
 internal fun formatByteSize(bytes: Long): String {
     val kb = 1024L
