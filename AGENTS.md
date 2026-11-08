@@ -9,7 +9,7 @@
 ## 构建与发版要点
 - 开发分支 `feature/browse-only-download`，远端 `primary`（`https://forge.example.com:443/owner/alphagps.git`）；`origin` 是上游 Saschl/alpha-gps，仅用于 fetch，同步方式：fetch → main 快进 → merge（不 rebase）进功能分支。
 - 包名 `cn.vectory.alphagps`（与上游 `com.saschl.cameragps` 共存），签名复用统一密钥，证书 SHA256 `18ff24c5...97d7`。
-- 发版：`scripts/release_build.sh <X.Y.Z>` 构建归档并打 tag，`--publish-only` 推送并发布 Primary forge Release。**versionCode 需手动 bump**（`app/build.gradle.kts`），发版前对 APK 另行按预期 versionCode 用 `scripts/release_assert_apk.sh` 独立断言。发版属对外动作，须用户确认。
+- 发版：`scripts/release_build.sh <X.Y.Z>` 构建归档并打 tag，`--publish-only` 推送并发布 Primary forge Release。**versionCode 仍手动 bump**（`app/build.gradle.kts`），发版脚本会从源码独立解析预期 versionCode 断言 APK 并校验相对上一发布 tag 递增（`scripts/release_lib.sh`）。发版属对外动作，须用户确认。
 - iOS 目标默认禁用（`gradle.properties` 的 `alphagps.enableIos=false`），源码保留；Linux 无法编译 iOS。
 - 验证命令：`./gradlew --no-daemon :sharednew:testAndroidHostTest :app:testFossDebugUnitTest :app:assembleFossDebug :app:compileFossDebugAndroidTestKotlin`。
 - 本机 `local.properties` 的 `sdk.dir=/home/user/Android/Sdk` 不入库（已被 .gitignore 忽略）。
