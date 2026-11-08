@@ -13,9 +13,16 @@ plugins {
 
     id("androidx.room")
     id("com.google.devtools.ksp")
-    alias(libs.plugins.sentry.kotlin.multiplatform)
+    // Applied conditionally below via the alphagps.enableIos switch.
+    alias(libs.plugins.sentry.kotlin.multiplatform) apply false
 
 }
+
+// Personal customization switch: when false (default) no iOS targets, source sets,
+// KSP configurations or Apple plugins are registered, so Android builds never touch
+// them; all iOS sources stay on disk for clean upstream merges. Re-enable on a Mac
+// with -Palphagps.enableIos=true.
+val enableIos = providers.gradleProperty("alphagps.enableIos").orNull == "true"
 
 compose.resources {
     publicResClass = true
@@ -110,16 +117,20 @@ val generateSupportedLanguages = tasks.register("generateSupportedLanguages") {
 //
 // Beyond that the plugin is inert for Android work: it only configures Apple
 // binaries, only on a Mac host, and only when an Apple compile task is actually
-// in the requested task graph.
-sentryKmp {
-    autoInstall.enabled.set(false)
+// in the requested task graph. It is only applied at all when iOS targets are
+// enabled (alphagps.enableIos=true).
+if (enableIos) {
+    apply(plugin = "io.sentry.kotlin.multiplatform.gradle")
+    configure<io.sentry.kotlin.multiplatform.gradle.SentryExtension> {
+        autoInstall.enabled.set(false)
 
-    // Without this the plugin file-walks the repo root looking for a .xcodeproj,
-    // which here means walking website/node_modules (138 MB).
-    linker.xcodeprojPath.set(rootProject.layout.projectDirectory.dir("iosApp/alphagps.xcodeproj").asFile.absolutePath)
-    // Escape hatch for a checkout that has never been opened in Xcode:
-    // -Psentry.cocoa.frameworkPath=/path/to/Sentry-Dynamic.xcframework
-    linker.frameworkPath.set(providers.gradleProperty("sentry.cocoa.frameworkPath"))
+        // Without this the plugin file-walks the repo root looking for a .xcodeproj,
+        // which here means walking website/node_modules (138 MB).
+        linker.xcodeprojPath.set(rootProject.layout.projectDirectory.dir("iosApp/alphagps.xcodeproj").asFile.absolutePath)
+        // Escape hatch for a checkout that has never been opened in Xcode:
+        // -Psentry.cocoa.frameworkPath=/path/to/Sentry-Dynamic.xcframework
+        linker.frameworkPath.set(providers.gradleProperty("sentry.cocoa.frameworkPath"))
+    }
 }
 
 val heifTestFixturesDir = layout.buildDirectory.dir("generated/heifTestFixtures/kotlin")
@@ -289,15 +300,17 @@ kotlin {
          }
      }*/
 
-    iosArm64 {
-        binaries.framework {
-            baseName = xcfName
+    if (enableIos) {
+        iosArm64 {
+            binaries.framework {
+                baseName = xcfName
+            }
         }
-    }
 
-    iosSimulatorArm64 {
-        binaries.framework {
-            baseName = xcfName
+        iosSimulatorArm64 {
+            binaries.framework {
+                baseName = xcfName
+            }
         }
     }
 
@@ -360,12 +373,16 @@ kotlin {
             }
         }
 
-        iosTest {
-            kotlin.srcDir(generateHeifTestFixtures)
+        if (enableIos) {
+            iosTest {
+                kotlin.srcDir(generateHeifTestFixtures)
+            }
         }
 
         if (sonyImageFixtures.isPresent) {
-            for (target in listOf("iosTest", "androidDeviceTest")) {
+            val fixtureTestTargets = if (enableIos) listOf("iosTest", "androidDeviceTest")
+            else listOf("androidDeviceTest")
+            for (target in fixtureTestTargets) {
                 getByName(target) {
                     kotlin.srcDir("src/cameraImageTest/kotlin")
                     kotlin.srcDir("src/${target.removeSuffix("Test")}CameraImageTest/kotlin")
@@ -374,8 +391,9 @@ kotlin {
             }
         }
 
-        iosMain {
-            dependencies {
+        if (enableIos) {
+            iosMain {
+                dependencies {
                 // Add iOS-specific dependencies here. This a source set created by Kotlin Gradle
                 // Plugin (KGP) that each specific iOS target (e.g., iosX64) depends on as
                 // part of KMP’s default source set hierarchy. Note that this source set depends
@@ -386,7 +404,8 @@ kotlin {
                 // Sentry Java SDK into :sharednew's Android artifact and therefore
                 // into the foss (F-Droid) flavor of :app, which must stay free of
                 // proprietary dependencies.
-                implementation(libs.sentry.kotlin.multiplatform)
+                    implementation(libs.sentry.kotlin.multiplatform)
+                }
             }
         }
     }
@@ -395,8 +414,10 @@ kotlin {
 
 dependencies {
     add("kspAndroid", libs.androidx.room.compiler)
-    add("kspIosSimulatorArm64", libs.androidx.room.compiler)
-    add("kspIosArm64", libs.androidx.room.compiler)
+    if (enableIos) {
+        add("kspIosSimulatorArm64", libs.androidx.room.compiler)
+        add("kspIosArm64", libs.androidx.room.compiler)
+    }
 }
 
 room {
