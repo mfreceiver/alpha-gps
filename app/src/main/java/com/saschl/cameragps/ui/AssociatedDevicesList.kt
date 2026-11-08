@@ -1,6 +1,5 @@
 package com.saschl.cameragps.ui
 
-import android.content.Intent
 import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -11,13 +10,11 @@ import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.no_devices_message
 import cameragps.sharednew.generated.resources.no_devices_title
 import com.sasch.cameragps.sharednew.bluetooth.BluetoothDeviceInfo
-import com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants
 import com.sasch.cameragps.sharednew.ui.devicelist.DeviceListViewModel
 import com.sasch.cameragps.sharednew.ui.devicelist.EmptyStateCard
 import com.sasch.cameragps.sharednew.ui.devicelist.SharedDeviceList
 import com.saschl.cameragps.AppServices
 import com.saschl.cameragps.service.AssociatedDeviceCompat
-import com.saschl.cameragps.service.LocationSenderService
 import com.saschl.cameragps.ui.device.SCREENSHOT_MODE
 import com.saschl.cameragps.ui.device.mockDeviceListItems
 import com.saschl.cameragps.utils.PreferencesManager
@@ -73,18 +70,6 @@ fun AssociatedDevicesList(
         // Read on every recomposition so a toggle in settings applies on return
         hapticsEnabled = PreferencesManager.isHapticsEnabled(context),
         onConnect = { }, // tap-to-pair path: Android never lists unsaved devices
-        onTriggerRemoteShutter = { info ->
-            if (!SCREENSHOT_MODE) {
-                val shutterIntent = Intent(
-                    context.applicationContext,
-                    LocationSenderService::class.java
-                ).apply {
-                    action = SonyBluetoothConstants.ACTION_TRIGGER_SHUTTER_SEQUENCE
-                    putExtra("address", info.identifier)
-                }
-                context.startService(shutterIntent)
-            }
-        },
         onDelete = { info -> resolve(info)?.let(onDisassociate) },
         onOpenDetails = { info -> resolve(info)?.let(onConnect) },
         onOpenTroubleshooting = onOpenTroubleshooting,

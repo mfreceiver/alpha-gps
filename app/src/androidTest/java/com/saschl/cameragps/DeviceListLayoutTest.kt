@@ -16,7 +16,6 @@ import cameragps.sharednew.generated.resources.add_camera
 import cameragps.sharednew.generated.resources.device_list_need_help
 import cameragps.sharednew.generated.resources.guide_open_button
 import cameragps.sharednew.generated.resources.location_linking_disabled_by_camera
-import cameragps.sharednew.generated.resources.trigger_shutter
 import com.sasch.cameragps.sharednew.bluetooth.BluetoothDeviceInfo
 import com.sasch.cameragps.sharednew.ui.devicelist.AddCameraButton
 import com.sasch.cameragps.sharednew.ui.devicelist.DeviceListItem
@@ -84,7 +83,6 @@ class DeviceListLayoutTest {
                             devices = devices,
                             items = emptyMap(),
                             onConnect = {},
-                            onTriggerRemoteShutter = {},
                             onDelete = {},
                             onOpenDetails = {},
                             onOpenTroubleshooting = {},
@@ -102,15 +100,12 @@ class DeviceListLayoutTest {
     }
 
     @Test
-    fun savedCameraAndShutterKeepSeparateActionsInsideSharedLayout() {
+    fun savedCameraOpensDetailsWithoutConnecting() {
         val device = BluetoothDeviceInfo("CAMERA", "My Sony", isConnected = true, isSaved = true)
         var details: BluetoothDeviceInfo? = null
-        var shutter: BluetoothDeviceInfo? = null
         var connections = 0
-        lateinit var shutterLabel: String
         compose.setContent {
             MaterialTheme {
-                shutterLabel = stringResource(Res.string.trigger_shutter)
                 DeviceListLayout(onNeedHelp = {}) {
                     SharedDeviceList(
                         devices = listOf(device),
@@ -126,7 +121,6 @@ class DeviceListLayoutTest {
                         ),
                         hapticsEnabled = false,
                         onConnect = { connections++ },
-                        onTriggerRemoteShutter = { shutter = it },
                         onDelete = {},
                         onOpenDetails = { details = it },
                         onOpenTroubleshooting = {},
@@ -135,11 +129,6 @@ class DeviceListLayoutTest {
             }
         }
 
-        compose.onNodeWithText(shutterLabel).performClick()
-        compose.runOnIdle {
-            assertEquals(device, shutter)
-            assertEquals(null, details)
-        }
         compose.onNodeWithText(device.name).performClick()
         compose.runOnIdle {
             assertEquals(device, details)
@@ -175,7 +164,6 @@ class DeviceListLayoutTest {
                         ),
                         hapticsEnabled = false,
                         onConnect = {},
-                        onTriggerRemoteShutter = {},
                         onDelete = {},
                         onOpenDetails = { detailsRequests++ },
                         onOpenTroubleshooting = { helpRequests++ },

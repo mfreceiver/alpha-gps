@@ -47,11 +47,9 @@ import cameragps.sharednew.generated.resources.cancel_button
 import cameragps.sharednew.generated.resources.dialog_ok
 import cameragps.sharednew.generated.resources.enableConstantly
 import cameragps.sharednew.generated.resources.enable_device
-import cameragps.sharednew.generated.resources.enable_remote_control
 import cameragps.sharednew.generated.resources.hint_if_issues_after_switching
 import cameragps.sharednew.generated.resources.info_24px
 import cameragps.sharednew.generated.resources.keyboard_arrow_right_24px
-import cameragps.sharednew.generated.resources.remote_control_hint
 import cameragps.sharednew.generated.resources.rename_camera_hint
 import cameragps.sharednew.generated.resources.rename_camera_label
 import cameragps.sharednew.generated.resources.rename_camera_save
@@ -187,18 +185,6 @@ fun DeviceDetailContent(
                                 "\n\n" + stringResource(Res.string.hint_if_issues_after_switching),
                     )
                 }
-            }
-
-            item {
-                DeviceToggleRow(
-                    title = stringResource(Res.string.enable_remote_control),
-                    checked = state.isRemoteControlEnabled,
-                    enabled = state.isDeviceEnabled && state.buttonEnabled,
-                    onCheckedChange = { enabled ->
-                        viewModel.setRemoteControlStatus(enabled, deviceId)
-                    },
-                    infoText = stringResource(Res.string.remote_control_hint),
-                )
             }
 
             for (setting in CameraAutoCorrectionSetting.entries) {

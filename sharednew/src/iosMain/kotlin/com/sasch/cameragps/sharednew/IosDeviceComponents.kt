@@ -65,7 +65,6 @@ internal fun DeviceListContent(
     onOpenSettings: () -> Unit,
     onOpenHelp: () -> Unit,
     onConnect: (BluetoothDeviceInfo) -> Unit,
-    onTriggerRemoteShutter: (BluetoothDeviceInfo) -> Unit,
     onDelete: (BluetoothDeviceInfo) -> Unit,
     onOpenDetails: (BluetoothDeviceInfo) -> Unit,
 ) {
@@ -152,7 +151,6 @@ internal fun DeviceListContent(
                     items = items,
                     hapticsEnabled = hapticsEnabled,
                     onConnect = onConnect,
-                    onTriggerRemoteShutter = onTriggerRemoteShutter,
                     onDelete = onDelete,
                     onOpenDetails = onOpenDetails,
                     onOpenTroubleshooting = onOpenHelp,

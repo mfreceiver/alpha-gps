@@ -36,7 +36,6 @@ import cameragps.sharednew.generated.resources.add_camera
 import cameragps.sharednew.generated.resources.device_list_need_help
 import cameragps.sharednew.generated.resources.pairing_preparation_search
 import cameragps.sharednew.generated.resources.pairing_preparation_step_ready
-import cameragps.sharednew.generated.resources.trigger_shutter
 import com.sasch.cameragps.sharednew.bluetooth.BluetoothDeviceInfo
 import com.sasch.cameragps.sharednew.ui.device.SharedDevicesScreen
 import com.sasch.cameragps.sharednew.ui.devicelist.AddCameraButton
@@ -66,13 +65,10 @@ class AdaptiveLayoutTest {
         }
         lateinit var add: String
         lateinit var help: String
-        lateinit var shutter: String
-        var shutterPresses = 0
         compose.setContent {
             TestViewport(width.value) {
                 add = stringResource(Res.string.add_camera)
                 help = stringResource(Res.string.device_list_need_help)
-                shutter = stringResource(Res.string.trigger_shutter)
                 SharedDevicesScreen(title = "Cameras", topBarActions = {}) {
                     DeviceListLayout(onNeedHelp = {}, header = { AddCameraButton {} }) {
                         SharedDeviceList(
@@ -92,7 +88,6 @@ class AdaptiveLayoutTest {
                             onDelete = {},
                             onOpenDetails = {},
                             onOpenTroubleshooting = {},
-                            onTriggerRemoteShutter = { shutterPresses++ },
                         )
                     }
                 }
@@ -108,11 +103,6 @@ class AdaptiveLayoutTest {
         assertTrue(list.width < wide.width * 0.72f)
         assertTrue(abs((list.left - wide.left).value - (wide.right - list.right).value) < wide.width.value * 0.02f)
         assertTrue(compose.onNodeWithText(add).getUnclippedBoundsInRoot().width < wide.width / 2)
-        assertTrue(
-            compose.onNodeWithText(shutter).getUnclippedBoundsInRoot().width < wide.width / 2
-        )
-        compose.onNodeWithText(shutter).assertIsDisplayed().performClick()
-        compose.runOnIdle { assertEquals(1, shutterPresses) }
         compose.onNode(hasScrollToIndexAction()).performScrollToIndex(30)
         compose.onNodeWithText("Camera 30").assertIsDisplayed()
         compose.runOnIdle { width.value = 320.dp }
@@ -122,12 +112,10 @@ class AdaptiveLayoutTest {
     }
 
     @Test
-    fun longCameraNameAndShutterLabelWrapWithLargeText() {
+    fun longCameraNameWrapsWithLargeText() {
         val name = "Sony camera with a long custom name for landscape photography"
-        lateinit var shutter: String
         compose.setContent {
             TestViewport(320.dp, fontScale = 2f) {
-                shutter = stringResource(Res.string.trigger_shutter)
                 SharedDeviceList(
                     devices = listOf(
                         BluetoothDeviceInfo(
@@ -152,11 +140,10 @@ class AdaptiveLayoutTest {
                     onDelete = {},
                     onOpenDetails = {},
                     onOpenTroubleshooting = {},
-                    onTriggerRemoteShutter = {},
                 )
             }
         }
-        for (text in listOf(name, shutter)) {
+        for (text in listOf(name)) {
             val results = mutableListOf<TextLayoutResult>()
             compose.onNodeWithText(text, useUnmergedTree = true)
                 .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
@@ -166,7 +153,7 @@ class AdaptiveLayoutTest {
                 results.single().hasVisualOverflow
             )
         }
-        compose.onNodeWithText(shutter).assertIsDisplayed()
+        compose.onNodeWithText(name).assertIsDisplayed()
     }
 
     @Test

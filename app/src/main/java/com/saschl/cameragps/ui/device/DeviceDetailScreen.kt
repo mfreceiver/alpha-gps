@@ -68,19 +68,12 @@ private fun createAndroidDataSource(dao: CameraDeviceDAO): DeviceDetailDataSourc
         override suspend fun isAlwaysOnEnabled(deviceId: String) =
             dao.isDeviceAlwaysOnEnabled(deviceId)
 
-        override suspend fun isRemoteControlEnabled(deviceId: String) =
-            dao.isRemoteControlEnabled(deviceId)
-
         override suspend fun setDeviceEnabled(deviceId: String, enabled: Boolean) {
             dao.setDeviceEnabled(deviceId, enabled)
         }
 
         override suspend fun setAlwaysOnEnabled(deviceId: String, enabled: Boolean) {
             dao.setAlwaysOnEnabled(deviceId, enabled)
-        }
-
-        override suspend fun setRemoteControlEnabled(deviceId: String, enabled: Boolean) {
-            dao.setRemoteControlEnabled(deviceId, enabled)
         }
 
         override suspend fun getDeviceName(deviceId: String) = dao.getDeviceName(deviceId)

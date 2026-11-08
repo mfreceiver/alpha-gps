@@ -55,14 +55,6 @@ class DeviceDetailViewModel(
         }
     }
 
-    fun setRemoteControlStatus(enabled: Boolean, device: String) {
-        val normalizedDevice = device.uppercase()
-        viewModelScope.launch {
-            stateStore.setRemoteControlEnabled(normalizedDevice, enabled)
-            serviceActions.setRemoteControlMonitoring(normalizedDevice, enabled)
-        }
-    }
-
     fun setAlwaysOnEnabled(enabled: Boolean, deviceAddress: String) {
         viewModelScope.launch {
             stateStore.setAlwaysOnEnabled(deviceAddress, enabled)

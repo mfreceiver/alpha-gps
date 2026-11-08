@@ -715,6 +715,10 @@ class CameraLocationLinkingTest {
         f.transport.hasCameraStatus = true
         f.connect("A")
         runCurrent()
+        // The app no longer auto-starts remote monitoring after the handshake (the UI
+        // entry points are gone); enable it explicitly to exercise the FF01/FF02 path.
+        f.orchestrator.setRemoteMonitoring("A", true)
+        runCurrent()
         assertFalse(f.session("A").remoteFeatureActive)
         assertTrue(f.transport.operations.none { (_, op) ->
             op == BleOperation.Subscribe(Sony.CAMERA_STATUS_UUID, true) ||
@@ -739,6 +743,10 @@ class CameraLocationLinkingTest {
         f.dao.remoteEnabled = true
         f.transport.hasCameraStatus = true
         f.connect("A")
+        runCurrent()
+        // The app no longer auto-starts remote monitoring after the handshake (the UI
+        // entry points are gone); enable it explicitly to exercise the FF01/FF02 path.
+        f.orchestrator.setRemoteMonitoring("A", true)
         runCurrent()
         advanceTimeBy(501)
         runCurrent()
@@ -768,6 +776,10 @@ class CameraLocationLinkingTest {
         f.dao.remoteEnabled = true
         f.transport.hasCameraStatus = true
         f.connect("A")
+        runCurrent()
+        // The app no longer auto-starts remote monitoring after the handshake (the UI
+        // entry points are gone); enable it explicitly to exercise the FF01/FF02 path.
+        f.orchestrator.setRemoteMonitoring("A", true)
         runCurrent()
         advanceTimeBy(501)
         runCurrent()
