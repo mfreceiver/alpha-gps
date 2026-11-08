@@ -405,7 +405,7 @@
     <string name="wifi_remote_location_required">This Android version requires phone Location to be turned on for automatic Wi-Fi joining.</string>
     <string name="wifi_remote_browse">Browse camera photos</string>
     <string name="wifi_remote_browser_title">Camera photos</string>
-    <string name="wifi_remote_browser_tap_hint">Tap a photo to view and swipe through pictures. Touch and hold to select multiple photos.</string>
+    <string name="wifi_remote_browser_tap_hint">Tap to view, long-press to select</string>
     <string name="wifi_remote_viewer_back">Back to camera photos</string>
     <string name="wifi_remote_viewer_position">%1$d / %2$d</string>
     <string name="wifi_remote_viewer_details">Details &amp; download</string>
@@ -416,7 +416,7 @@
     <string name="wifi_remote_selection_clear">Cancel selection</string>
     <string name="wifi_remote_selection_all">Select all on page</string>
     <string name="wifi_remote_batch_formats">Choose formats to download</string>
-    <string name="wifi_remote_batch_formats_hint">Downloads matching files from the selected photos. You can choose more than one format. Files already saved in this session or exceeding the download limit are skipped.</string>
+    <string name="wifi_remote_batch_formats_hint">Choose which formats to download. Photos already saved or over the size limit are skipped.</string>
     <string name="wifi_remote_batch_file_count">%1$d files</string>
     <string name="wifi_remote_batch_download">Download %1$d files</string>
     <string name="wifi_remote_batch_progress">Saved %1$d of %2$d files</string>
@@ -425,7 +425,7 @@
     <string name="wifi_remote_photo_captured">Captured: %1$s</string>
     <string name="wifi_remote_photo_format">Choose a format to download</string>
     <string name="wifi_remote_download_format">Download %1$s</string>
-    <string name="wifi_remote_photo_download_hint">Originals are saved to your photo library and stay on the camera. Keep this screen open until the download finishes.</string>
+    <string name="wifi_remote_photo_download_hint">Saved to your photo library; the camera keeps its files. Keep this screen open until the download finishes.</string>
     <string name="wifi_remote_photo_close">Close</string>
     <string name="wifi_remote_browser_hint">Download original JPEG, RAW and HEIF files to your photo library. Browses card slot 1 on newer cameras. Files stay on the camera. Keep this screen open until the download finishes.</string>
     <string name="wifi_remote_browser_loading">Reading camera photos…</string>
@@ -448,8 +448,8 @@
     <string name="wifi_remote_storage_permission">Allow storage access to save photos to your phone.</string>
     <string name="wifi_remote_browse_unsupported">This camera does not advertise supported photo browsing.</string>
     <string name="wifi_remote_default_download_format">Default download format</string>
-    <string name="wifi_remote_default_download_format_jpeg">JPEG only</string>
-    <string name="wifi_remote_default_download_format_original">Original (JPG + RAW)</string>
+    <string name="wifi_remote_default_download_format_jpeg">JPG only</string>
+    <string name="wifi_remote_default_download_format_original">Original</string>
     <string name="wifi_remote_jpeg_copy">JPEG copy (from HEIF)</string>
     <string name="wifi_remote_jpeg_copy_hint">Downloads the HEIF and saves a full-resolution JPEG copy on this phone. HDR and some metadata may not be preserved.</string>
     <string name="wifi_remote_converting_jpeg">Converting to JPEG…</string>
@@ -457,5 +457,21 @@
     <string name="wifi_remote_ios_settings">App permissions</string>
     <string name="wifi_remote_ios_permission">Allow Local Network access in the app’s Settings, then reconnect.</string>
     <string name="wifi_remote_ios_opening">Connecting to camera… If iOS asks, allow Local Network access.</string>
+    <string name="wifi_remote_default_download_format_jpeg_desc">RAW is hidden in the list, details and batches, and tapping Download saves the JPG. Photos that only have a RAW are the exception.</string>
+    <string name="wifi_remote_default_download_format_original_desc">Shows all formats. You choose before downloading.</string>
+    <string name="wifi_remote_download_format_size">Download %1$s (%2$s)</string>
+    <string name="wifi_remote_photo_no_jpg">This photo has no JPG.</string>
+    <string name="wifi_remote_batch_download_jpg">Download %1$d JPG (%2$s)</string>
+    <string name="wifi_remote_batch_download_jpg_none">No JPG to download</string>
+    <string name="wifi_remote_format_raw_only">RAW only</string>
+    <string name="wifi_remote_skip_no_jpg">%1$d without JPG</string>
+    <string name="wifi_remote_skip_saved">%1$d already saved</string>
+    <string name="wifi_remote_skip_too_large">%1$d over the size limit</string>
+    <string name="wifi_remote_batch_summary">Downloaded %1$d, skipped %2$d (%3$s)</string>
+    <string name="wifi_remote_batch_summary_no_skip">Downloaded %1$d</string>
+    <string name="wifi_remote_batch_skip_hint">%1$d will be skipped (%2$s)</string>
+    <string name="wifi_remote_preview_photo">Preview</string>
+    <string name="wifi_remote_viewer_select">Select this photo</string>
+    <string name="wifi_remote_viewer_deselect">Deselect this photo</string>
 
 </resources>

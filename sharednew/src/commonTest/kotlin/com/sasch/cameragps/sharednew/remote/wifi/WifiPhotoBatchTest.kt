@@ -89,51 +89,25 @@ class WifiPhotoBatchTest {
         assertEquals(
             setOf(WifiPhotoBatchFormat.Jpeg, WifiPhotoBatchFormat.Raw, WifiPhotoBatchFormat.Heif),
             defaultBatchFormats(
-                setOf(WifiPhotoBatchFormat.Jpeg, WifiPhotoBatchFormat.Raw, WifiPhotoBatchFormat.Heif),
-                defaultJpegOnly = false
+                setOf(WifiPhotoBatchFormat.Jpeg, WifiPhotoBatchFormat.Raw, WifiPhotoBatchFormat.Heif)
             )
         )
         // The HEIF→JPEG conversion is opt-in even when it is the only JPEG-ish option.
         assertEquals(
             setOf(WifiPhotoBatchFormat.Heif),
-            defaultBatchFormats(setOf(WifiPhotoBatchFormat.Heif, WifiPhotoBatchFormat.JpegCopy), defaultJpegOnly = false)
+            defaultBatchFormats(setOf(WifiPhotoBatchFormat.Heif, WifiPhotoBatchFormat.JpegCopy))
         )
+        assertEquals(emptySet(), defaultBatchFormats(emptySet()))
     }
 
     @Test
-    fun jpegOnlyDefaultChecksJpegAndNeverFallsBackToRaw() {
-        assertEquals(
-            setOf(WifiPhotoBatchFormat.Jpeg),
-            defaultBatchFormats(setOf(WifiPhotoBatchFormat.Jpeg, WifiPhotoBatchFormat.Raw), defaultJpegOnly = true)
-        )
-        // No downloadable JPEG → stay empty so the user chooses explicitly.
-        assertEquals(
-            emptySet(),
-            defaultBatchFormats(setOf(WifiPhotoBatchFormat.Raw, WifiPhotoBatchFormat.Heif), defaultJpegOnly = true)
-        )
-        assertEquals(emptySet(), defaultBatchFormats(emptySet(), defaultJpegOnly = true))
-    }
-
-    @Test
-    fun singlePhotoDefaultPreselectsJpegOrFirstDownloadable() {
-        val pair = captures[1].files // ARW + JPG
-        assertEquals(4L, defaultSelectedPhotoHandle(pair, defaultJpegOnly = true))
-        // Original default: a concrete preselection, not a disabled download button.
-        assertEquals(3L, defaultSelectedPhotoHandle(pair, defaultJpegOnly = false))
-        // Single file keeps working either way, downloadable or not.
-        assertEquals(1L, defaultSelectedPhotoHandle(listOf(captures[0].files[0]), defaultJpegOnly = false))
-        assertEquals(5L, defaultSelectedPhotoHandle(listOf(captures[2].files[0]), defaultJpegOnly = true))
-        // JPEG-only with only non-JPEG files: no silent RAW preselection when the choice
-        // is ambiguous; a lone file stays preselected because there is nothing to swap.
-        assertEquals(
-            1L,
-            defaultSelectedPhotoHandle(listOf(captures[0].files[0]), defaultJpegOnly = true)
-        )
-        assertEquals(
-            null,
-            defaultSelectedPhotoHandle(captures[0].files, defaultJpegOnly = true),
-            "A JPEG-less pair must not silently preselect the RAW"
-        )
-        assertEquals(null, defaultSelectedPhotoHandle(emptyList(), defaultJpegOnly = false))
+    fun singlePhotoDefaultPreselectsFirstDownloadableFile() {
+        // Original: a concrete preselection (the first downloadable file), not a disabled button.
+        assertEquals(3L, defaultSelectedPhotoHandle(captures[1].files)) // ARW + JPG
+        assertEquals(1L, defaultSelectedPhotoHandle(captures[0].files)) // ARW + HIF
+        // A lone file stays preselected even when it is not downloadable, so the page can
+        // explain why (too large).
+        assertEquals(5L, defaultSelectedPhotoHandle(listOf(captures[2].files[0])))
+        assertEquals(null, defaultSelectedPhotoHandle(emptyList()))
     }
 }

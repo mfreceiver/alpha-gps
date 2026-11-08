@@ -23,38 +23,19 @@ internal fun photoBatchDownloads(
 }.distinct().filterNot { it in saved }
 
 /**
- * Initial checked-format set for the batch download sheet, derived from the user's
- * default download format:
- * - Original (the default): every available original format is checked (JPEG *and* RAW).
- *   [WifiPhotoBatchFormat.JpegCopy] stays unchecked — it is a HEIF→JPEG conversion, not
- *   an "original".
- * - JPEG-only: JPEG is checked when available. If no JPEG is downloadable (already saved
- *   or never shot), the set is deliberately **empty** — never silently falling back to
- *   RAW — so the user explicitly picks what to download.
+ * Initial checked-format set for the Original-mode batch sheet: every available original
+ * format is checked (JPEG *and* RAW). [WifiPhotoBatchFormat.JpegCopy] stays unchecked — it
+ * is a HEIF→JPEG conversion, not an "original". JPG-only mode bypasses the sheet entirely
+ * (see [jpegOnlyBatchPlan]).
  */
-internal fun defaultBatchFormats(
-    available: Set<WifiPhotoBatchFormat>,
-    defaultJpegOnly: Boolean,
-): Set<WifiPhotoBatchFormat> = when {
-    defaultJpegOnly ->
-        if (WifiPhotoBatchFormat.Jpeg in available) setOf(WifiPhotoBatchFormat.Jpeg) else emptySet()
-    else -> available - WifiPhotoBatchFormat.JpegCopy
-}
+internal fun defaultBatchFormats(available: Set<WifiPhotoBatchFormat>): Set<WifiPhotoBatchFormat> =
+    available - WifiPhotoBatchFormat.JpegCopy
 
 /**
- * Initial selected file handle for the single-photo sheet. JPEG-only prefers the JPEG as
- * before; with the Original default the first downloadable file is preselected so a
- * JPG+RAW pair yields a concrete selection (and an enabled download button) instead of
- * nothing — the sheet is single-select, so "all formats" there means the user confirms
- * per file, and the first file (camera list order) is the least surprising default.
+ * Initial selected file handle for the Original-mode single-photo details: the first
+ * downloadable file, so a JPG+RAW pair yields a concrete selection (and an enabled download
+ * button) instead of nothing. Falls back to a lone file even when it is not downloadable
+ * so the details can explain why.
  */
-internal fun defaultSelectedPhotoHandle(
-    files: List<WifiCameraPhoto>,
-    defaultJpegOnly: Boolean,
-): Long? {
-    if (defaultJpegOnly) {
-        return files.firstOrNull { it.mimeType == "image/jpeg" && it.downloadable }?.handle
-            ?: files.singleOrNull()?.handle
-    }
-    return files.firstOrNull { it.downloadable }?.handle ?: files.singleOrNull()?.handle
-}
+internal fun defaultSelectedPhotoHandle(files: List<WifiCameraPhoto>): Long? =
+    files.firstOrNull { it.downloadable }?.handle ?: files.singleOrNull()?.handle
