@@ -368,7 +368,7 @@
     <string name="wifi_remote_location_required">此 Android 版本要求开启手机定位服务，才能自动连接 Wi-Fi。</string>
     <string name="wifi_remote_browse">浏览相机照片</string>
     <string name="wifi_remote_browser_title">相机照片</string>
-    <string name="wifi_remote_browser_tap_hint">点击照片查看，左右滑动切换。长按照片可选择多张。</string>
+    <string name="wifi_remote_browser_tap_hint">点击查看，长按多选</string>
     <string name="wifi_remote_viewer_back">返回相机照片</string>
     <string name="wifi_remote_viewer_position">%1$d / %2$d</string>
     <string name="wifi_remote_viewer_details">详情与下载</string>
@@ -379,7 +379,7 @@
     <string name="wifi_remote_selection_clear">取消选择</string>
     <string name="wifi_remote_selection_all">全选本页</string>
     <string name="wifi_remote_batch_formats">选择下载格式</string>
-    <string name="wifi_remote_batch_formats_hint">下载所选照片中符合格式的文件。可同时选择多种格式。本次会话中已保存或超过下载大小限制的文件会被跳过。</string>
+    <string name="wifi_remote_batch_formats_hint">选择要下载的格式。已保存或超过大小限制的照片会被跳过。</string>
     <string name="wifi_remote_batch_file_count">%1$d 个文件</string>
     <string name="wifi_remote_batch_download">下载 %1$d 个文件</string>
     <string name="wifi_remote_batch_progress">已保存 %1$d / %2$d 个文件</string>
@@ -388,7 +388,7 @@
     <string name="wifi_remote_photo_captured">已拍摄：%1$s</string>
     <string name="wifi_remote_photo_format">选择下载格式</string>
     <string name="wifi_remote_download_format">下载 %1$s</string>
-    <string name="wifi_remote_photo_download_hint">原始文件将保存到手机相册，相机上的文件会保留。请在下载完成前保持此页面打开。</string>
+    <string name="wifi_remote_photo_download_hint">文件保存到手机相册，相机上的文件会保留。下载完成前请保持此页面打开。</string>
     <string name="wifi_remote_photo_close">关闭</string>
     <string name="wifi_remote_browser_hint">将原始 JPEG、RAW 和 HEIF 文件下载到手机相册。较新的相机仅浏览卡槽 1。相机上的文件会保留。请在下载完成前保持此页面打开。</string>
     <string name="wifi_remote_browser_loading">正在读取相机照片…</string>
@@ -411,8 +411,8 @@
     <string name="wifi_remote_storage_permission">请允许访问存储空间以便将照片保存到手机。</string>
     <string name="wifi_remote_browse_unsupported">此相机未声明支持照片浏览功能。</string>
     <string name="wifi_remote_default_download_format">默认下载格式</string>
-    <string name="wifi_remote_default_download_format_jpeg">仅 JPEG</string>
-    <string name="wifi_remote_default_download_format_original">原片（JPG + RAW）</string>
+    <string name="wifi_remote_default_download_format_jpeg">仅 JPG</string>
+    <string name="wifi_remote_default_download_format_original">原片</string>
     <string name="wifi_remote_jpeg_copy">JPEG 副本（由 HEIF 转换）</string>
     <string name="wifi_remote_jpeg_copy_hint">下载 HEIF 文件，并在此手机上保存一份全分辨率 JPEG 副本。HDR 信息及部分元数据可能无法保留。</string>
     <string name="wifi_remote_converting_jpeg">正在转换为 JPEG…</string>
@@ -426,4 +426,21 @@
     <string name="wifi_connection_help">连接帮助</string>
     <string name="wifi_connection_help_title">检查连接设置</string>
     <string name="wifi_connection_help_message">请确保相机已准备好进行照片传输，且本手机已连接至相机的 Wi-Fi。\n\n部分 Android 版本可能会限制应用的网络访问权限。请前往“应用设置”，查找“移动数据和 Wi-Fi”、“网络访问”或“限制联网/数据用量”等选项，并允许 Alpha GPS 使用 Wi-Fi。在“权限”设置中，根据提示允许访问“附近设备”或“精确位置”；如果列表中有“本地网络”，也请一并允许。\n\n完成后返回此处重新尝试连接。具体的设置名称因手机品牌而异。</string>
+    <string name="wifi_remote_default_download_format_jpeg_desc">列表、详情和批量里不再显示 RAW，点击即下载 JPG；仅 RAW 的照片除外。</string>
+    <string name="wifi_remote_default_download_format_original_desc">显示全部格式，下载前可选择。</string>
+    <string name="wifi_remote_download_format_size">下载 %1$s（%2$s）</string>
+    <string name="wifi_remote_photo_no_jpg">此照片没有 JPG。</string>
+    <string name="wifi_remote_batch_download_jpg">下载 %1$d 张 JPG（%2$s）</string>
+    <string name="wifi_remote_batch_download_jpg_none">没有可下载的 JPG</string>
+    <string name="wifi_remote_format_raw_only">仅 RAW</string>
+    <string name="wifi_remote_skip_no_jpg">%1$d 张无 JPG</string>
+    <string name="wifi_remote_skip_saved">%1$d 张已保存</string>
+    <string name="wifi_remote_skip_too_large">%1$d 张超出大小限制</string>
+    <string name="wifi_remote_batch_summary">已下载 %1$d 张，跳过 %2$d 张（%3$s）</string>
+    <string name="wifi_remote_batch_summary_no_skip">已下载 %1$d 张</string>
+    <string name="wifi_remote_batch_skip_hint">将跳过 %1$d 张（%2$s）</string>
+    <string name="wifi_remote_preview_photo">预览</string>
+    <string name="wifi_remote_viewer_select">选中此照片</string>
+    <string name="wifi_remote_viewer_deselect">取消选中此照片</string>
+
 </resources>

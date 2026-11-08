@@ -368,7 +368,7 @@
     <string name="wifi_remote_location_required">Versi Android ini mengharuskan Lokasi ponsel diaktifkan agar ponsel dapat terhubung ke Wi-Fi secara otomatis.</string>
     <string name="wifi_remote_browse">Jelajahi foto kamera</string>
     <string name="wifi_remote_browser_title">Foto kamera</string>
-    <string name="wifi_remote_browser_tap_hint">Ketuk foto untuk melihatnya dan geser untuk menelusuri foto. Sentuh dan tahan untuk memilih beberapa foto.</string>
+    <string name="wifi_remote_browser_tap_hint">Ketuk untuk melihat, tahan untuk memilih</string>
     <string name="wifi_remote_viewer_back">Kembali ke foto kamera</string>
     <string name="wifi_remote_viewer_position">%1$d / %2$d</string>
     <string name="wifi_remote_viewer_details">Detail &amp; unduh</string>
@@ -379,7 +379,7 @@
     <string name="wifi_remote_selection_clear">Batalkan pilihan</string>
     <string name="wifi_remote_selection_all">Pilih semua di halaman</string>
     <string name="wifi_remote_batch_formats">Pilih format untuk diunduh</string>
-    <string name="wifi_remote_batch_formats_hint">Mengunduh file dengan format yang sesuai dari foto yang dipilih. Anda dapat memilih lebih dari satu format. File yang sudah disimpan dalam sesi ini atau melebihi batas unduhan akan dilewati.</string>
+    <string name="wifi_remote_batch_formats_hint">Pilih format yang akan diunduh. Foto yang sudah disimpan atau melebihi batas ukuran akan dilewati.</string>
     <string name="wifi_remote_batch_file_count">%1$d file</string>
     <string name="wifi_remote_batch_download">Unduh %1$d file</string>
     <string name="wifi_remote_batch_progress">%1$d dari %2$d file disimpan</string>
@@ -388,7 +388,7 @@
     <string name="wifi_remote_photo_captured">Diambil: %1$s</string>
     <string name="wifi_remote_photo_format">Pilih format untuk diunduh</string>
     <string name="wifi_remote_download_format">Unduh %1$s</string>
-    <string name="wifi_remote_photo_download_hint">File asli disimpan ke pustaka foto Anda dan tetap ada di kamera. Biarkan layar ini terbuka hingga unduhan selesai.</string>
+    <string name="wifi_remote_photo_download_hint">Disimpan ke pustaka foto Anda; file di kamera tetap ada. Biarkan layar ini terbuka hingga unduhan selesai.</string>
     <string name="wifi_remote_photo_close">Tutup</string>
     <string name="wifi_remote_browser_hint">Unduh file JPEG, RAW, dan HEIF asli ke pustaka foto Anda. Pada kamera yang lebih baru, foto ditelusuri dari slot kartu 1. File tetap ada di kamera. Biarkan layar ini terbuka hingga unduhan selesai.</string>
     <string name="wifi_remote_browser_loading">Membaca foto dari kamera…</string>
@@ -417,4 +417,24 @@
     <string name="wifi_remote_ios_settings">Izin aplikasi</string>
     <string name="wifi_remote_ios_permission">Izinkan akses Jaringan Lokal di Pengaturan aplikasi, lalu sambungkan kembali.</string>
     <string name="wifi_remote_ios_opening">Menghubungkan ke kamera… Jika iOS meminta izin, izinkan akses Jaringan Lokal.</string>
+    <string name="wifi_remote_default_download_format">Format unduhan default</string>
+    <string name="wifi_remote_default_download_format_jpeg">Hanya JPG</string>
+    <string name="wifi_remote_default_download_format_original">Asli</string>
+    <string name="wifi_remote_default_download_format_jpeg_desc">RAW disembunyikan di daftar, detail, dan unduhan massal; mengetuk Unduh menyimpan JPG. Pengecualian: foto yang hanya memiliki RAW.</string>
+    <string name="wifi_remote_default_download_format_original_desc">Menampilkan semua format. Anda memilih sebelum mengunduh.</string>
+    <string name="wifi_remote_download_format_size">Unduh %1$s (%2$s)</string>
+    <string name="wifi_remote_photo_no_jpg">Foto ini tidak memiliki JPG.</string>
+    <string name="wifi_remote_batch_download_jpg">Unduh %1$d JPG (%2$s)</string>
+    <string name="wifi_remote_batch_download_jpg_none">Tidak ada JPG untuk diunduh</string>
+    <string name="wifi_remote_format_raw_only">Hanya RAW</string>
+    <string name="wifi_remote_skip_no_jpg">%1$d tanpa JPG</string>
+    <string name="wifi_remote_skip_saved">%1$d sudah disimpan</string>
+    <string name="wifi_remote_skip_too_large">%1$d melebihi batas ukuran</string>
+    <string name="wifi_remote_batch_summary">%1$d diunduh, %2$d dilewati (%3$s)</string>
+    <string name="wifi_remote_batch_summary_no_skip">%1$d diunduh</string>
+    <string name="wifi_remote_batch_skip_hint">%1$d akan dilewati (%2$s)</string>
+    <string name="wifi_remote_preview_photo">Pratinjau</string>
+    <string name="wifi_remote_viewer_select">Pilih foto ini</string>
+    <string name="wifi_remote_viewer_deselect">Batalkan pilihan foto ini</string>
+
 </resources>

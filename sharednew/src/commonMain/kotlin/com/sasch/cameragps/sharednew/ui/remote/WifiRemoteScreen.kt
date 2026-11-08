@@ -75,6 +75,7 @@ import cameragps.sharednew.generated.resources.wifi_remote_title
 import cameragps.sharednew.generated.resources.wifi_remote_wifi_disabled
 import com.diamondedge.logging.logging
 import com.sasch.cameragps.sharednew.remote.wifi.SonyImageTransfer
+import com.sasch.cameragps.sharednew.remote.wifi.WifiBatchSummary
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteController
@@ -99,11 +100,27 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     var viewedPhotoIndex by mutableStateOf<Int?>(null)
         private set
 
+    /**
+     * Tap-to-view entry. Ignored while a selection exists: in selection mode a tap toggles
+     * the tile, and previewing goes through [previewPhoto] instead.
+     */
     fun openPhoto(captureId: String) {
+        if (selectedPhotoIds.isNotEmpty()) return
+        previewPhoto(captureId)
+    }
+
+    /**
+     * Opens the full-screen viewer for a capture on the current page without touching the
+     * selection (magnifier button in selection mode). Neither the selected set nor the
+     * selection mode changes, and [closePhoto] leaves them alone too.
+     */
+    fun previewPhoto(captureId: String) {
         val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return
-        if (!state.photoBrowser.open || selectedPhotoIds.isNotEmpty()) return
+        if (!state.photoBrowser.open) return
         val index = groupCameraPhotos(state.photoBrowser.photos).indexOfFirst { it.id == captureId }
         if (index >= 0) {
+            // A batch result line must not be mistaken for the viewer's own download result.
+            batchSummary = null
             controller.clearPhotoTransferResult(identifier)
             viewedPhotoIndex = state.photoBrowser.offset + index
             viewPhotoAt(viewedPhotoIndex!!)
@@ -150,6 +167,7 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         // itself survives paging and is only cleared explicitly or on catalog changes.
         val capture = groupCameraPhotos(state.photoBrowser.photos).firstOrNull { it.id == captureId }
             ?: return
+        batchSummary = null
         selectedPhotos = if (captureId in selectedPhotos) selectedPhotos - captureId
         else selectedPhotos + (captureId to capture)
     }
@@ -158,12 +176,25 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return
         if (!state.photoBrowser.open || state.photoBrowser.loading || state.imageTransfer.busy) return
         // "Select all on this page" unions with selections kept from other pages.
+        batchSummary = null
         selectedPhotos = selectedPhotos +
                 groupCameraPhotos(state.photoBrowser.photos).associateBy { it.id }
     }
 
     fun clearPhotoSelection() {
         selectedPhotos = emptyMap()
+        batchSummary = null
+    }
+
+    /**
+     * Skip counts of the JPG-only batch the user just started; shown as "Downloaded N,
+     * skipped M" once the transfer completes. Cleared whenever the selection changes.
+     */
+    internal var batchSummary by mutableStateOf<WifiBatchSummary?>(null)
+        private set
+
+    internal fun recordBatchSummary(summary: WifiBatchSummary?) {
+        batchSummary = summary
     }
 
     fun reconcilePhotoSelection() {
@@ -316,8 +347,10 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
         })
     }) { padding ->
         Column(
-            Modifier.fillMaxSize().padding(padding).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            // The photo grid gets a tighter frame so the photos use the screen.
+            Modifier.fillMaxSize().padding(padding)
+                .padding(if (state.photoBrowser.open) 8.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(if (state.photoBrowser.open) 8.dp else 16.dp)
         ) {
             if (state.photoBrowser.open) {
                 browserStateHolder.SaveableStateProvider("photos") {

@@ -447,6 +447,31 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         controller.closeAndJoin()
     }
 
+    @Test
+    fun batchSummaryIsClearedWhenTheSelectionChanges() = runTest {
+        val registry = CameraSessionRegistry()
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> pagedConnection() }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        val summary = WifiBatchSummary(3, mapOf(WifiSkipReason.NoJpeg to 1))
+        model.togglePhotoSelection("photo:0")
+        model.recordBatchSummary(summary)
+        assertEquals(summary, model.batchSummary)
+        model.togglePhotoSelection("photo:1")
+        assertNull(model.batchSummary)
+        model.recordBatchSummary(summary)
+        model.selectAllPhotos()
+        assertNull(model.batchSummary)
+        model.recordBatchSummary(summary)
+        model.clearPhotoSelection()
+        assertNull(model.batchSummary)
+        controller.closeAndJoin()
+    }
+
     private class ManualSetup(private val connection: Connection) : WifiManualSetupConnector {
         val credentials = CameraWifiCredentials("DIRECT-camera", "secret-pass", null)
         var preparations = 0

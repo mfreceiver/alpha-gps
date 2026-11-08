@@ -35,7 +35,9 @@ import cameragps.sharednew.generated.resources.haptic_feedback_description
 import cameragps.sharednew.generated.resources.reset_welcome
 import cameragps.sharednew.generated.resources.wifi_remote_default_download_format
 import cameragps.sharednew.generated.resources.wifi_remote_default_download_format_jpeg
+import cameragps.sharednew.generated.resources.wifi_remote_default_download_format_jpeg_desc
 import cameragps.sharednew.generated.resources.wifi_remote_default_download_format_original
+import cameragps.sharednew.generated.resources.wifi_remote_default_download_format_original_desc
 import cameragps.sharednew.generated.resources.will_show_welcome
 import com.saschl.cameragps.service.LocationSenderService
 import com.saschl.cameragps.utils.PreferencesManager
@@ -175,9 +177,15 @@ internal fun AppControlsCard(
                 mutableStateOf(PreferencesManager.isWifiDefaultDownloadFormatJpeg(context))
             }
             listOf(
-                false to Res.string.wifi_remote_default_download_format_original,
-                true to Res.string.wifi_remote_default_download_format_jpeg
-            ).forEach { (jpegOnly, label) ->
+                Triple(
+                    false, Res.string.wifi_remote_default_download_format_original,
+                    Res.string.wifi_remote_default_download_format_original_desc
+                ),
+                Triple(
+                    true, Res.string.wifi_remote_default_download_format_jpeg,
+                    Res.string.wifi_remote_default_download_format_jpeg_desc
+                )
+            ).forEach { (jpegOnly, label, description) ->
                 Row(
                     Modifier.fillMaxWidth().selectable(
                         selected = jpegOnlyDefault == jpegOnly,
@@ -192,11 +200,17 @@ internal fun AppControlsCard(
                         selected = jpegOnlyDefault == jpegOnly,
                         onClick = null
                     )
-                    Text(
-                        text = stringResource(label),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
+                    Column(Modifier.padding(start = 8.dp)) {
+                        Text(
+                            text = stringResource(label),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = stringResource(description),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }

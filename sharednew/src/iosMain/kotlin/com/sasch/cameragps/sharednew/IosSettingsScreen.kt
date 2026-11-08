@@ -64,7 +64,9 @@ import cameragps.sharednew.generated.resources.tip_jar_thank_you
 import cameragps.sharednew.generated.resources.tip_jar_unavailable
 import cameragps.sharednew.generated.resources.wifi_remote_default_download_format
 import cameragps.sharednew.generated.resources.wifi_remote_default_download_format_jpeg
+import cameragps.sharednew.generated.resources.wifi_remote_default_download_format_jpeg_desc
 import cameragps.sharednew.generated.resources.wifi_remote_default_download_format_original
+import cameragps.sharednew.generated.resources.wifi_remote_default_download_format_original_desc
 import com.diamondedge.logging.LogLevel
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController
 import com.sasch.cameragps.sharednew.ui.settings.SharedLanguageSettingsCard
@@ -186,9 +188,15 @@ internal fun IosSettingsScreen(
                     modifier = Modifier.padding(top = 8.dp),
                 )
                 listOf(
-                    false to Res.string.wifi_remote_default_download_format_original,
-                    true to Res.string.wifi_remote_default_download_format_jpeg
-                ).forEach { (jpegOnly, label) ->
+                    Triple(
+                        false, Res.string.wifi_remote_default_download_format_original,
+                        Res.string.wifi_remote_default_download_format_original_desc
+                    ),
+                    Triple(
+                        true, Res.string.wifi_remote_default_download_format_jpeg,
+                        Res.string.wifi_remote_default_download_format_jpeg_desc
+                    )
+                ).forEach { (jpegOnly, label, description) ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -200,11 +208,17 @@ internal fun IosSettingsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         RadioButton(selected = jpegOnlyDefault == jpegOnly, onClick = null)
-                        Text(
-                            text = stringResource(label),
-                            modifier = Modifier.padding(start = 8.dp),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
+                        Column(modifier = Modifier.padding(start = 8.dp)) {
+                            Text(
+                                text = stringResource(label),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = stringResource(description),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

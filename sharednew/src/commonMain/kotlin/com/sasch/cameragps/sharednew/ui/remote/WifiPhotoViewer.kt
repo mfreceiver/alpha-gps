@@ -38,6 +38,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
@@ -53,10 +56,14 @@ import cameragps.sharednew.generated.resources.wifi_remote_transfer_cancel
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_back
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_details
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_position
+import cameragps.sharednew.generated.resources.wifi_remote_viewer_deselect
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_retry
+import cameragps.sharednew.generated.resources.wifi_remote_viewer_select
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_transfer_wait
+import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
+import com.sasch.cameragps.sharednew.remote.wifi.detailPlan
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
@@ -70,6 +77,7 @@ internal fun WifiPhotoViewer(
     defaultDownloadFormatJpeg: Boolean = false,
 ) {
     val browser = state.photoBrowser
+    val policy = WifiFormatPolicy.of(defaultDownloadFormatJpeg)
     val captures = remember(browser.photos) { groupCameraPhotos(browser.photos) }
     val thumbnails by viewModel.controller.thumbnails.collectAsState()
     val preview by viewModel.controller.photoPreview.collectAsState()
@@ -189,6 +197,15 @@ internal fun WifiPhotoViewer(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    if (current != null && policy == WifiFormatPolicy.JpegOnly) {
+                        // JPG-only: the download is right here — one tap, no confirmation.
+                        PhotoJpegOnlyActions(
+                            current.detailPlan(policy, state.canConvertHeif), state,
+                            onDownload = { handle, format ->
+                                onDownload(listOf(WifiPhotoDownload(handle, format)))
+                            },
+                        )
+                    }
                     PhotoTransferStatus(state.imageTransfer)
                     if (state.imageTransfer.busy || browser.loading) {
                         TextButton(onClick = { viewModel.controller.cancelPhotoOperation(viewModel.identifier) }) {
@@ -244,7 +261,7 @@ internal fun WifiPhotoViewer(
                     )
                 },
                 onCancel = { viewModel.controller.cancelPhotoOperation(viewModel.identifier) },
-                defaultJpegOnly = defaultDownloadFormatJpeg)
+                policy = policy)
         }
     }
 }
