@@ -141,6 +141,25 @@ internal fun WifiPhotoViewer(
                             index + 1, browser.totalObjects
                         ), style = MaterialTheme.typography.labelLarge
                     )
+                    if (current != null) {
+                        // Select/deselect without leaving the viewer; the grid sees the same
+                        // selection set when the viewer closes. Same gating as the grid tiles.
+                        val isSelected = current.id in viewModel.selectedPhotoIds
+                        val toggleLabel = stringResource(
+                            if (isSelected) Res.string.wifi_remote_viewer_deselect
+                            else Res.string.wifi_remote_viewer_select
+                        )
+                        IconButton(
+                            onClick = { viewModel.togglePhotoSelection(current.id) },
+                            enabled = !browser.loading && !state.imageTransfer.busy,
+                            modifier = Modifier.semantics {
+                                contentDescription = toggleLabel
+                                selected = isSelected
+                            },
+                        ) {
+                            SelectionCheck(isSelected)
+                        }
+                    }
                 }
                 if (captures.isEmpty()) {
                     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {

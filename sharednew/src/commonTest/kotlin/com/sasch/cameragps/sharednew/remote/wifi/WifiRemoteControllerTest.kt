@@ -448,6 +448,68 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     }
 
     @Test
+    fun previewKeepsSelectionAndModeAcrossPagesAndViewerCanToggleThePhoto() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = pagedConnection()
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        // Cross-page selection: one capture on page 1, one on page 2.
+        model.togglePhotoSelection("photo:0")
+        controller.browsePhotos("camera", pageSize)
+        runCurrent()
+        model.reconcilePhotoSelection()
+        model.togglePhotoSelection("photo:$pageSize")
+        val selection = model.selectedPhotoIds.toList()
+        assertEquals(listOf("photo:0", "photo:$pageSize"), selection)
+
+        // Tap-to-open stays guarded by selection mode; the magnifier entry is not.
+        model.openPhoto("photo:${pageSize + 1}")
+        assertNull(model.viewedPhotoIndex)
+        model.previewPhoto("photo:${pageSize + 1}")
+        assertEquals(pageSize + 1, model.viewedPhotoIndex)
+        assertEquals(selection, model.selectedPhotoIds.toList(), "Opening a preview must not touch the selection")
+
+        // The viewer toggles the photo it shows; the selection mode survives either way.
+        model.togglePhotoSelection("photo:${pageSize + 1}")
+        assertEquals(selection + "photo:${pageSize + 1}", model.selectedPhotoIds.toList())
+        model.togglePhotoSelection("photo:${pageSize + 1}")
+        assertEquals(selection, model.selectedPhotoIds.toList())
+        model.togglePhotoSelection("photo:$pageSize") // deselect the first page-2 capture
+        assertEquals(listOf("photo:0"), model.selectedPhotoIds.toList())
+        // Swiping to a neighbour on the same page is unchanged and keeps the selection.
+        model.viewPhotoAt(pageSize)
+        assertEquals(pageSize, model.viewedPhotoIndex)
+        assertEquals(listOf("photo:0"), model.selectedPhotoIds.toList())
+
+        // Closing returns to the grid with selection (and thereby selection mode) intact.
+        model.closePhoto()
+        assertNull(model.viewedPhotoIndex)
+        model.reconcilePhotoSelection()
+        assertEquals(listOf("photo:0"), model.selectedPhotoIds.toList())
+        assertTrue(model.selectedPhotoIds.isNotEmpty())
+
+        // Unknown captures (not on this page) cannot be previewed.
+        model.previewPhoto("photo:0")
+        assertNull(model.viewedPhotoIndex, "photo:0 is on page 1, not the current page")
+        model.previewPhoto("missing")
+        assertNull(model.viewedPhotoIndex)
+
+        // A refresh still invalidates the selection even if a preview happened in between.
+        model.previewPhoto("photo:$pageSize")
+        model.closePhoto()
+        controller.browsePhotos("camera")
+        runCurrent()
+        model.reconcilePhotoSelection()
+        assertTrue(model.selectedPhotoIds.isEmpty())
+        controller.closeAndJoin()
+    }
+
+    @Test
     fun batchSummaryIsClearedWhenTheSelectionChanges() = runTest {
         val registry = CameraSessionRegistry()
         val controller =
