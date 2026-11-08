@@ -117,6 +117,10 @@ class WifiRemoteController internal constructor(
     private var activeConnection: WifiRemoteConnection? = null
     private var previewJob: Job? = null
     private var photoJob: Job? = null
+    /** Monotonic catalog generation: every (re)open or refresh starts a new one. */
+    private var browserGeneration = 0L
+    /** Full handle index of pages that loaded successfully within the current generation. */
+    private var photoCatalog = emptyMap<Long, WifiCameraPhoto>()
     private var captureRequests: Channel<Unit>? = null
     private var manualJoin: CompletableDeferred<Unit>? = null
 
@@ -219,11 +223,17 @@ class WifiRemoteController internal constructor(
     }
 
     fun browsePhotos(identifier: String, offset: Int? = null, preferredPhotoIndex: Int? = null) {
+        // A refresh (offset == null) opens a new catalog generation: previously loaded pages,
+        // saved-download markers, and pending cross-page selections all become stale.
+        val generation = if (offset == null) ++browserGeneration else 0L
         photoWork(identifier, { state ->
             state.copy(
                 photoBrowser = state.photoBrowser.copy(
                     open = true, loading = true, failed = false,
-                    photos = if (offset == null) emptyList() else state.photoBrowser.photos
+                    browserGeneration = if (offset == null) generation
+                    else state.photoBrowser.browserGeneration,
+                    photos = if (offset == null) emptyList() else state.photoBrowser.photos,
+                    savedDownloads = if (offset == null) emptySet() else state.photoBrowser.savedDownloads
                 )
             )
         }) { id, connection ->
@@ -231,11 +241,15 @@ class WifiRemoteController internal constructor(
             previewJob?.cancelAndJoin()
             previewJob = null
             _image.value = null
-            if (offset == null) _thumbnails.value = emptyMap()
+            if (offset == null) {
+                photoCatalog = emptyMap()
+                _thumbnails.value = emptyMap()
+            }
             updateReady(id) { it.copy(hasLiveView = false) }
             val page =
                 if (offset == null) connection.openPhotoBrowser() else connection.photoPage(offset)
             _thumbnails.value = emptyMap()
+            photoCatalog += page.photos.associateBy { it.handle }
             updateReady(id) {
                 it.copy(
                     photoBrowser = it.photoBrowser.copy(
@@ -307,7 +321,10 @@ class WifiRemoteController internal constructor(
     fun downloadPhotos(identifier: String, downloads: List<WifiPhotoDownload>) {
         val state = registry.get(identifier)?.wifiRemote ?: return
         if (!state.photoBrowser.open) return
-        val photos = state.photoBrowser.photos.associateBy { it.handle }
+        // Freeze the request against the current catalog generation so a batch that was
+        // assembled earlier (e.g. behind a permission prompt) cannot download stale handles.
+        val generation = state.photoBrowser.browserGeneration
+        val photos = photoCatalog
         val pending = downloads.distinct().filter { download ->
             val photo = photos[download.handle]
             photo != null && photo.downloadable && download !in state.photoBrowser.savedDownloads &&
@@ -325,6 +342,17 @@ class WifiRemoteController internal constructor(
                     )
                 )
             }) { id, connection ->
+            val current = registry.get(id)?.wifiRemote
+            if (current?.photoBrowser?.open != true ||
+                current.photoBrowser.browserGeneration != generation
+            ) {
+                // The catalog was refreshed or closed after the batch was accepted.
+                log.w { "Wi-Fi remote download batch expired: generation changed" }
+                updateReady(id) {
+                    it.copy(imageTransfer = WifiImageTransferState(WifiImageTransferStatus.Failed))
+                }
+                return@photoWork
+            }
             for ((index, download) in pending.withIndex()) {
                 currentCoroutineContext().ensureActive()
                 updateReady(id) {
@@ -380,6 +408,7 @@ class WifiRemoteController internal constructor(
             previewJob?.cancelAndJoin()
             previewJob = null
             connection.closePhotoBrowser()
+            photoCatalog = emptyMap()
             _thumbnails.value = emptyMap()
             updateReady(id) {
                 it.copy(
@@ -567,6 +596,7 @@ class WifiRemoteController internal constructor(
             previewJob = null
             photoJob = null
             photoPreviewJob = null
+            photoCatalog = emptyMap()
             _photoPreview.value = null
             _thumbnails.value = emptyMap()
             captureRequests?.close()

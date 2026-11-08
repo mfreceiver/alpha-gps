@@ -84,6 +84,7 @@ import cameragps.sharednew.generated.resources.wifi_remote_uncertain
 import cameragps.sharednew.generated.resources.wifi_remote_wifi_disabled
 import com.diamondedge.logging.logging
 import com.sasch.cameragps.sharednew.remote.wifi.SonyImageTransfer
+import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCaptureStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteController
@@ -99,8 +100,13 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     var fullScreenPreview by mutableStateOf(false)
         private set
 
-    var selectedPhotoIds by mutableStateOf(emptySet<String>())
+    /** Cross-page selection snapshot: capture id -> metadata, in selection (insertion) order. */
+    internal var selectedPhotos by mutableStateOf<Map<String, WifiCameraCapture>>(emptyMap())
         private set
+    val selectedPhotoIds: Set<String> get() = selectedPhotos.keys
+
+    /** Catalog generation the selection belongs to; mismatch means the catalog changed. */
+    private var selectedGeneration: Long? = null
 
     var viewedPhotoIndex by mutableStateOf<Int?>(null)
         private set
@@ -152,29 +158,39 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     fun togglePhotoSelection(captureId: String) {
         val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return
         if (!state.photoBrowser.open || state.photoBrowser.loading || state.imageTransfer.busy) return
-        if (groupCameraPhotos(state.photoBrowser.photos).none { it.id == captureId }) return
-        selectedPhotoIds = if (captureId in selectedPhotoIds) selectedPhotoIds - captureId
-        else selectedPhotoIds + captureId
+        // Only captures visible on the current page can be (de)selected, but the selection
+        // itself survives paging and is only cleared explicitly or on catalog changes.
+        val capture = groupCameraPhotos(state.photoBrowser.photos).firstOrNull { it.id == captureId }
+            ?: return
+        selectedPhotos = if (captureId in selectedPhotos) selectedPhotos - captureId
+        else selectedPhotos + (captureId to capture)
     }
 
     fun selectAllPhotos() {
         val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return
         if (!state.photoBrowser.open || state.photoBrowser.loading || state.imageTransfer.busy) return
-        selectedPhotoIds = groupCameraPhotos(state.photoBrowser.photos).map { it.id }.toSet()
+        // "Select all on this page" unions with selections kept from other pages.
+        selectedPhotos = selectedPhotos +
+                groupCameraPhotos(state.photoBrowser.photos).associateBy { it.id }
     }
 
     fun clearPhotoSelection() {
-        selectedPhotoIds = emptySet()
+        selectedPhotos = emptyMap()
     }
 
     fun reconcilePhotoSelection() {
         val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote
         if (state?.phase != WifiRemotePhase.Ready || !state.photoBrowser.open) {
             clearPhotoSelection()
+            selectedGeneration = null
             closePhoto()
-        } else if (!state.photoBrowser.loading) {
-            val visibleIds = groupCameraPhotos(state.photoBrowser.photos).map { it.id }.toSet()
-            selectedPhotoIds = selectedPhotoIds.intersect(visibleIds)
+        } else {
+            val generation = state.photoBrowser.browserGeneration
+            if (selectedGeneration != null && selectedGeneration != generation) {
+                // The catalog was refreshed or reopened: previous selections are stale.
+                clearPhotoSelection()
+            }
+            selectedGeneration = generation
         }
     }
 
@@ -217,6 +233,7 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
                      openingSessionMessage: String = stringResource(Res.string.wifi_remote_opening),
                      onAppSettings: (() -> Unit)? = null,
                      browseOnly: Boolean = false,
+                     defaultDownloadFormatJpeg: Boolean = false,
                      onDownloadPhotos: (List<WifiPhotoDownload>) -> Unit = { downloads ->
                          viewModel.controller.downloadPhotos(viewModel.identifier, downloads)
                      }
@@ -262,7 +279,8 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
         ready,
         state.photoBrowser.open,
         state.photoBrowser.photos,
-        state.photoBrowser.loading
+        state.photoBrowser.loading,
+        state.photoBrowser.browserGeneration
     ) {
         viewModel.reconcilePhotoSelection()
     }
@@ -272,7 +290,7 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
         return
     }
     if (viewModel.viewedPhotoIndex != null && ready && state.photoBrowser.open) {
-        WifiPhotoViewer(state, viewModel, onDownloadPhotos)
+        WifiPhotoViewer(state, viewModel, onDownloadPhotos, defaultDownloadFormatJpeg)
         return
     }
     Scaffold(topBar = {
@@ -292,7 +310,7 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
         BoxWithConstraints(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
             if (state.photoBrowser.open) {
                 browserStateHolder.SaveableStateProvider("photos") {
-                    WifiPhotoBrowser(state, viewModel, onDownloadPhotos)
+                    WifiPhotoBrowser(state, viewModel, onDownloadPhotos, defaultDownloadFormatJpeg)
                 }
                 return@BoxWithConstraints
             }

@@ -225,7 +225,10 @@ internal class SonyImageTransfer(
         format: WifiPhotoDownloadFormat = WifiPhotoDownloadFormat.Original,
         onProgress: (WifiImageTransferState) -> Unit
     ): WifiImageTransferState {
-        val photo = pagePhotos.singleOrNull { it.handle == handle && it.downloadable }
+        // Downloads may target any file from the opened catalog, not only the current page.
+        val photo = (catalog?.file(handle)
+            ?: captures.asSequence().flatMap { it.files }.singleOrNull { it.handle == handle })
+            ?.takeIf { it.downloadable }
             ?: return WifiImageTransferState(WifiImageTransferStatus.Failed)
         val convert = format == WifiPhotoDownloadFormat.Jpeg
         if (convert && (photo.mimeType != "image/heif" || !store.canConvertHeif)) {

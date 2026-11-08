@@ -86,6 +86,7 @@ import cameragps.sharednew.generated.resources.wifi_remote_photo_format
 import cameragps.sharednew.generated.resources.wifi_remote_photo_size
 import cameragps.sharednew.generated.resources.wifi_remote_preview_unavailable
 import cameragps.sharednew.generated.resources.wifi_remote_selection_all
+import cameragps.sharednew.generated.resources.wifi_remote_selection_clear
 import cameragps.sharednew.generated.resources.wifi_remote_selection_count
 import cameragps.sharednew.generated.resources.wifi_remote_selection_start
 import cameragps.sharednew.generated.resources.wifi_remote_storage_permission
@@ -110,7 +111,8 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun WifiPhotoBrowser(
     state: WifiRemoteState, viewModel: WifiRemoteViewModel,
-    onDownload: (List<WifiPhotoDownload>) -> Unit
+    onDownload: (List<WifiPhotoDownload>) -> Unit,
+    defaultDownloadFormatJpeg: Boolean = false,
 ) {
     val controller = viewModel.controller
     val identifier = viewModel.identifier
@@ -140,14 +142,17 @@ internal fun WifiPhotoBrowser(
                 style = MaterialTheme.typography.titleLarge
             )
             Row(
-                Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(
                     onClick = viewModel::selectAllPhotos,
-                    enabled = !busy && selectedIds.size < captures.size
+                    enabled = !busy && captures.any { it.id !in selectedIds }
                 ) {
                     Text(stringResource(Res.string.wifi_remote_selection_all))
+                }
+                TextButton(onClick = viewModel::clearPhotoSelection, enabled = !busy) {
+                    Text(stringResource(Res.string.wifi_remote_selection_clear))
                 }
                 Button(onClick = { showBatchOptions = true }, enabled = !busy) {
                     Text(stringResource(Res.string.wifi_remote_download))
@@ -268,7 +273,7 @@ internal fun WifiPhotoBrowser(
                                 maxOf(0, browser.offset - SonyImageTransfer.PAGE_SIZE)
                             )
                         },
-                        enabled = !busy && !selecting && browser.offset > 0
+                        enabled = !busy && browser.offset > 0
                     ) { Text(stringResource(Res.string.wifi_remote_browser_previous)) }
                     if (browser.totalObjects > 0) Text(
                         stringResource(
@@ -283,7 +288,7 @@ internal fun WifiPhotoBrowser(
                                 browser.offset + SonyImageTransfer.PAGE_SIZE
                             )
                         },
-                        enabled = !busy && !selecting && browser.hasMore
+                        enabled = !busy && browser.hasMore
                     ) { Text(stringResource(Res.string.wifi_remote_browser_next)) }
                 }
             }
@@ -291,7 +296,9 @@ internal fun WifiPhotoBrowser(
     }
     if (showBatchOptions && selecting) {
         PhotoBatchDownloadSheet(
-            captures.filter { it.id in selectedIds }, state,
+            // The batch receives the whole cross-page selection snapshot, in selection order.
+            viewModel.selectedPhotos.values.toList(), state,
+            defaultJpegOnly = defaultDownloadFormatJpeg,
             onDismiss = { showBatchOptions = false },
             onDownload = { downloads -> showBatchOptions = false; onDownload(downloads) },
         )
@@ -323,11 +330,17 @@ internal fun PhotoDetailsSheet(
     capture: WifiCameraCapture, image: ImageBitmap?, state: WifiRemoteState,
     previewLoading: Boolean,
     onDismiss: () -> Unit, onDownload: (Long, WifiPhotoDownloadFormat) -> Unit, onCancel: () -> Unit,
+    defaultJpegOnly: Boolean = false,
 ) {
     val browser = state.photoBrowser
     val transfer = state.imageTransfer
     var selectedHandle by rememberSaveable(capture.id) {
-        mutableStateOf(capture.files.singleOrNull()?.handle)
+        mutableStateOf(
+            // "JPEG only" default: preselect the capture's JPEG file when there is one.
+            if (defaultJpegOnly) capture.files.firstOrNull { it.mimeType == "image/jpeg" }?.handle
+                ?: capture.files.singleOrNull()?.handle
+            else capture.files.singleOrNull()?.handle
+        )
     }
     var selectedFormat by rememberSaveable(capture.id) { mutableStateOf(WifiPhotoDownloadFormat.Original) }
     val selected = capture.files.firstOrNull { it.handle == selectedHandle }

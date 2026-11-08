@@ -181,8 +181,33 @@ class SonyImageTransferTest : WifiLoggingTest() {
         )
         assertEquals(listOf(0L, 1L), transport.operations.first { it.first == 0x9209 }.second)
         assertEquals(600_000L, progress.last().bytesReceived)
+        // Off-page handles resolve against the whole browsed catalog, not just the visible page.
+        assertEquals(WifiImageTransferStatus.Saved, transfer.download(45L) {}.status)
+        assertTrue(
+            outputs.last().let { it.committed && !it.aborted && it.received == transport.size })
         transfer.closeBrowser()
         assertEquals(0x9212 to listOf(2L, 0L, 0L), transport.operations.last())
+        // With the browser closed there is no catalog left to resolve handles against.
+        assertEquals(WifiImageTransferStatus.Failed, transfer.download(4L) {}.status)
+        assertEquals(0x9212 to listOf(2L, 0L, 0L), transport.operations.last())
+        queue.close()
+    }
+
+    @Test
+    fun offPageDownloadRefusesChangedMetadata() = runTest {
+        val transport = Transport().apply {
+            objectCount = SonyImageTransfer.PAGE_SIZE + 5
+            readyAfterPolls = 2
+            metadata = mapOf(45L to info(600_000L, "DSC45.JPG"))
+        }
+        val queue = PtpIpCommandQueue(transport, backgroundScope)
+        val transfer = SonyImageTransfer(queue, ready()) { Destination() }
+        transfer.openBrowser()
+        transfer.page(SonyImageTransfer.PAGE_SIZE)
+        // The camera rewrote the file between browsing and downloading.
+        transport.metadata = mapOf(45L to info(600_001L, "DSC45.JPG"))
+        assertEquals(WifiImageTransferStatus.Failed, transfer.download(45L) {}.status)
+        assertFalse(transport.operations.any { it.first == 0x9211 })
         queue.close()
     }
 

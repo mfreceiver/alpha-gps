@@ -54,6 +54,7 @@ internal fun PhotoBatchDownloadSheet(
     state: WifiRemoteState,
     onDismiss: () -> Unit,
     onDownload: (List<WifiPhotoDownload>) -> Unit,
+    defaultJpegOnly: Boolean = false,
 ) {
     val options = WifiPhotoBatchFormat.entries.associateWith { format ->
         photoBatchDownloads(
@@ -64,7 +65,12 @@ internal fun PhotoBatchDownloadSheet(
         )
     }.filterValues { it.isNotEmpty() }
     var formats by remember {
-        mutableStateOf(options.keys.singleOrNull()?.let { setOf(it) }.orEmpty())
+        // "JPEG only" default preselects JPEG; otherwise keep the single-option-or-empty default.
+        mutableStateOf(
+            (if (defaultJpegOnly && WifiPhotoBatchFormat.Jpeg in options) setOf(WifiPhotoBatchFormat.Jpeg)
+            else null)
+                ?: options.keys.singleOrNull()?.let { setOf(it) }.orEmpty()
+        )
     }
     val downloads = photoBatchDownloads(
         captures,

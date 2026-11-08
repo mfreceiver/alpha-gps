@@ -234,6 +234,9 @@ class SonyContentCatalogTest : WifiLoggingTest() {
         assertTrue(aborted)
         cardIdentity = 2
         assertEquals(WifiImageTransferStatus.Failed, transfer.download(handle) {}.status)
+        // Restore the card before exercising the paginated catalog.
+        cardIdentity = 1
+        returnedTimestamp = 3000L
         paginated = true
         val initialPage = transfer.openBrowser()
         assertEquals(101, initialPage.totalObjects)
@@ -251,6 +254,9 @@ class SonyContentCatalogTest : WifiLoggingTest() {
         assertEquals(1L, lastPage.photos.first().handle and 0xffffffffL)
         assertEquals(false, lastPage.hasMore)
         assertEquals(catalogRequests, requests.count { it.first == 0x923c })
+        // Off-page download: a handle from the first page is resolvable while the last page shows.
+        val firstPageHandle = initialPage.photos.first().handle
+        assertEquals(WifiImageTransferStatus.Saved, transfer.download(firstPageHandle) {}.status)
         transfer.closeBrowser()
         assertEquals(0x9207, requests.last().first)
         queue.close()

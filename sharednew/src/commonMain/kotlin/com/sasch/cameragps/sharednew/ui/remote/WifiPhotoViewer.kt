@@ -67,6 +67,7 @@ internal fun WifiPhotoViewer(
     state: WifiRemoteState,
     viewModel: WifiRemoteViewModel,
     onDownload: (List<WifiPhotoDownload>) -> Unit,
+    defaultDownloadFormatJpeg: Boolean = false,
 ) {
     val browser = state.photoBrowser
     val captures = remember(browser.photos) { groupCameraPhotos(browser.photos) }
@@ -242,7 +243,8 @@ internal fun WifiPhotoViewer(
                         )
                     )
                 },
-                onCancel = { viewModel.controller.cancelPhotoOperation(viewModel.identifier) })
+                onCancel = { viewModel.controller.cancelPhotoOperation(viewModel.identifier) },
+                defaultJpegOnly = defaultDownloadFormatJpeg)
         }
     }
 }

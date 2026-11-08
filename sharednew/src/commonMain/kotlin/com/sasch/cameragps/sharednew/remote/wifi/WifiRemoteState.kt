@@ -65,6 +65,8 @@ data class WifiCameraPhoto(
 
 data class WifiPhotoBrowserState(
     val open: Boolean = false,
+    /** Monotonic catalog generation: bumps on every (re)open or refresh, resets when closed. */
+    val browserGeneration: Long = 0,
     val loading: Boolean = false,
     val failed: Boolean = false,
     val photos: List<WifiCameraPhoto> = emptyList(),

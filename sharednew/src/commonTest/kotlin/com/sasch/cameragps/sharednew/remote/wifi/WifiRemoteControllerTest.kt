@@ -1410,6 +1410,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         )
         model.togglePhotoSelection("one")
         assertEquals(setOf("two"), model.selectedPhotoIds)
+        // Selections survive paging or partial page changes within one catalog generation.
         val current = registry.get("camera")!!.wifiRemote
         registry.updateWifiRemote(
             "camera", current.copy(
@@ -1418,8 +1419,13 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             )
         )
         model.reconcilePhotoSelection()
-        assertTrue(model.selectedPhotoIds.isEmpty(), "Removed photos must not stay selected")
+        assertEquals(setOf("two"), model.selectedPhotoIds, "Paging away must keep selection")
         registry.updateWifiRemote("camera", current)
+        // A catalog refresh bumps the browser generation and invalidates the selection.
+        controller.browsePhotos("camera")
+        runCurrent()
+        model.reconcilePhotoSelection()
+        assertTrue(model.selectedPhotoIds.isEmpty(), "Refreshed catalog invalidates selection")
         model.selectAllPhotos()
         assertEquals(setOf("one", "two", "file:45"), model.selectedPhotoIds)
         controller.downloadPhoto("camera", 42)
@@ -1437,6 +1443,77 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         model.navigateBack { error("Gallery must return to live view") }
         runCurrent()
         assertFalse(registry.get("camera")!!.wifiRemote.photoBrowser.open)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun crossPageSelectionDownloadsOneUnifiedBatch() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = pagedConnection().apply {
+            downloadResults = Channel(Channel.UNLIMITED)
+            repeat(8) {
+                downloadResults?.trySend(WifiImageTransferState(WifiImageTransferStatus.Saved))
+            }
+        }
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        // Select on page 1…
+        model.togglePhotoSelection("photo:0")
+        assertEquals(setOf("photo:0"), model.selectedPhotoIds)
+        // …page to page 2, the selection survives…
+        controller.browsePhotos("camera", SonyImageTransfer.PAGE_SIZE)
+        runCurrent()
+        model.reconcilePhotoSelection()
+        assertEquals(setOf("photo:0"), model.selectedPhotoIds, "Paging must keep selections")
+        // …select on page 2, union with the other page…
+        model.togglePhotoSelection("photo:40")
+        model.selectAllPhotos()
+        assertEquals(
+            setOf("photo:0", "photo:40", "photo:41"),
+            model.selectedPhotoIds,
+            "Select-all unions the current page with selections on other pages"
+        )
+        // …deselecting on the current page keeps other pages selected.
+        model.togglePhotoSelection("photo:40")
+        assertFalse("photo:40" in model.selectedPhotoIds)
+        assertTrue("photo:0" in model.selectedPhotoIds)
+        model.togglePhotoSelection("photo:40")
+        // Return to page 1 and download the mixed JPG+ARW batch from both pages at once.
+        controller.browsePhotos("camera", 0)
+        runCurrent()
+        model.reconcilePhotoSelection()
+        assertTrue("photo:0" in model.selectedPhotoIds && "photo:40" in model.selectedPhotoIds)
+        controller.downloadPhotos(
+            "camera",
+            listOf(
+                WifiPhotoDownload(0L), WifiPhotoDownload(1L),
+                WifiPhotoDownload(80L), WifiPhotoDownload(81L)
+            )
+        )
+        runCurrent()
+        assertEquals(
+            listOf(0L, 1L, 80L, 81L),
+            connection.downloadedHandles,
+            "Batch downloads files from every selected page, not just the visible one"
+        )
+        assertEquals(
+            setOf(
+                WifiPhotoDownload(0L), WifiPhotoDownload(1L),
+                WifiPhotoDownload(80L), WifiPhotoDownload(81L)
+            ),
+            registry.get("camera")!!.wifiRemote.photoBrowser.savedDownloads
+        )
+        // A refresh starts a new generation: saved markers and selections are invalidated.
+        controller.browsePhotos("camera")
+        runCurrent()
+        model.reconcilePhotoSelection()
+        assertTrue(model.selectedPhotoIds.isEmpty(), "Refreshed catalog invalidates selection")
+        assertTrue(registry.get("camera")!!.wifiRemote.photoBrowser.savedDownloads.isEmpty())
         controller.closeAndJoin()
     }
 

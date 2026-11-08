@@ -146,6 +146,9 @@ internal class SonyContentCatalog(
         return cameraPhotoPage(captures, offset)
     }
 
+    /** Full-catalog lookup so downloads are not limited to the currently displayed page. */
+    fun file(handle: Long): WifiCameraPhoto? = files[handle]?.photo
+
     suspend fun revalidate(handle: Long): SonyImageInfo {
         val file = checkNotNull(files[handle])
         val batch = fetch(file.created)
