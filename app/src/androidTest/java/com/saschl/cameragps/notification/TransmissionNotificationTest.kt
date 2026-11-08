@@ -98,6 +98,45 @@ class TransmissionNotificationTest {
     }
 
     @Test
+    fun singleCameraShowsCameraNameWithGenericFallback() = runBlocking {
+        val updates = mutableListOf<Notification>()
+        val publisher = AndroidTransmissionNotificationPublisher(
+            context,
+            isChannelEnabled = { it != NotificationsHelper.DISCONNECT_NOTIFICATION_CHANNEL },
+        ) { _, notification -> updates += notification }
+
+        publisher.showSingleCamera(1, "Alpha 7 IV")
+        publisher.showSingleCamera(1, null)
+        publisher.showSingleCamera(1, "  ") // Blank names fall back to the generic label.
+        publisher.showSingleCamera(2, "ignored") // Contract: only called for one camera.
+
+        assertEquals(
+            listOf(
+                NotificationsHelper.TRANSMISSION_NOTIFICATION_CHANNEL,
+                NotificationsHelper.TRANSMISSION_NOTIFICATION_CHANNEL,
+                NotificationsHelper.TRANSMISSION_NOTIFICATION_CHANNEL,
+                NotificationsHelper.TRANSMISSION_NOTIFICATION_CHANNEL,
+            ),
+            updates.map { it.channelId },
+        )
+        assertEquals(
+            listOf(
+                "Alpha 7 IV",
+                context.getString(R.string.foreground_service_notification_single_camera_name),
+                context.getString(R.string.foreground_service_notification_single_camera_name),
+                context.getString(R.string.foreground_service_notification, 2),
+            ),
+            updates.map { it.extras.getString(Notification.EXTRA_TEXT) },
+        )
+        for (notification in updates.take(3)) {
+            assertEquals(
+                context.getString(R.string.foreground_service_notification_single_title),
+                notification.extras.getString(Notification.EXTRA_TITLE),
+            )
+        }
+    }
+
+    @Test
     fun transmissionUsesAnAlertingChannelWhileInitialStandbyRemainsQuiet() {
         NotificationsHelper.createNotificationChannel(context)
         val manager = context.getSystemService(NotificationManager::class.java)

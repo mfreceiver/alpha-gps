@@ -116,6 +116,35 @@ internal object NotificationsHelper {
             .build()
     }
 
+    /** Single ready camera: "Connected to camera" title with the camera's display name. */
+    fun buildSingleCameraNotification(
+        context: Context,
+        cameraName: String?,
+        channelId: String = TRANSMISSION_NOTIFICATION_CHANNEL,
+        silent: Boolean = false,
+    ): Notification {
+        val name = cameraName?.takeIf { it.isNotBlank() }
+        return NotificationCompat.Builder(context, channelId)
+            .setOngoing(true)
+            .setSilent(silent)
+            .setContentTitle(
+                context.getString(R.string.foreground_service_notification_single_title)
+            )
+            .setContentText(
+                name ?: context.getString(R.string.foreground_service_notification_single_camera_name)
+            )
+            .setSmallIcon(R.drawable.ic_gps_fixed)
+            .setContentIntent(Intent(context, MainActivity::class.java).let { notificationIntent ->
+                PendingIntent.getActivity(
+                    context,
+                    0,
+                    notificationIntent,
+                    PendingIntent.FLAG_IMMUTABLE
+                )
+            })
+            .build()
+    }
+
     fun buildNotification(
         context: Context,
         title: String,

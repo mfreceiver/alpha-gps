@@ -21,10 +21,14 @@ internal class AndroidTransmissionNotificationPublisher(
 
     override suspend fun show(cameraCount: Int) = publish(cameraCount)
 
+    // A single ready camera gets a "Connected to camera" title with the camera's name.
+    override suspend fun showSingleCamera(cameraCount: Int, cameraName: String?) =
+        publish(cameraCount, cameraName)
+
     // A foreground service must retain its notification even with no transmitting cameras.
     override fun showIdle() = publish(0)
 
-    private fun publish(cameraCount: Int) {
+    private fun publish(cameraCount: Int, singleCameraName: String? = null) {
         // A disabled disconnect-alert channel must not block foreground status updates.
         val decreasing = cameraCount < previousCameraCount
         val disconnectAlert = decreasing &&
@@ -34,10 +38,15 @@ internal class AndroidTransmissionNotificationPublisher(
             cameraCount > 0 -> NotificationsHelper.TRANSMISSION_NOTIFICATION_CHANNEL
             else -> NotificationsHelper.NOTIFICATION_CHANNEL_ID
         }
-        val notification = if (cameraCount == 0) {
-            NotificationsHelper.buildWaitingNotification(context, channelId)
-        } else {
-            NotificationsHelper.buildNotification(
+        val notification = when {
+            cameraCount == 0 -> NotificationsHelper.buildWaitingNotification(context, channelId)
+            cameraCount == 1 -> NotificationsHelper.buildSingleCameraNotification(
+                context,
+                singleCameraName,
+                channelId,
+                silent = decreasing && !disconnectAlert,
+            )
+            else -> NotificationsHelper.buildNotification(
                 context,
                 cameraCount,
                 channelId,

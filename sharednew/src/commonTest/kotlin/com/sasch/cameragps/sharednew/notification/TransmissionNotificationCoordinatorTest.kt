@@ -142,11 +142,81 @@ class TransmissionNotificationCoordinatorTest {
         assertEquals(listOf(0, 1), f.publisher.updates)
     }
 
+    @Test
+    fun singleCameraRendersNameAndRenameRefreshesNotification() = runTest {
+        val f = NamedFixture(backgroundScope)
+        runCurrent()
+        f.transmitting.value = true
+        f.sessions.value = mapOf("AA:BB" to ready("AA:BB"))
+        runCurrent()
+        // Name appears once known — no count change in between.
+        f.names.value = mapOf("AA:BB" to "Alpha 7 IV")
+        runCurrent()
+        // A rename of the single camera re-publishes.
+        f.names.value = mapOf("AA:BB" to "Holiday Cam")
+        runCurrent()
+        // Unrelated name-table updates (other cameras) must not re-publish.
+        f.names.value = mapOf("AA:BB" to "Holiday Cam", "CC:DD" to "Other")
+        runCurrent()
+        assertEquals(
+            listOf(null, "Alpha 7 IV", "Holiday Cam"),
+            f.publisher.singleUpdates,
+        )
+        assertEquals(listOf(0), f.publisher.multiUpdates)
+    }
+
+    @Test
+    fun multiCameraKeepsCountStyleAndBlankSingleNameFallsBack() = runTest {
+        val f = NamedFixture(backgroundScope)
+        runCurrent()
+        f.transmitting.value = true
+        // Two ready cameras: count style regardless of names.
+        f.names.value = mapOf("AA:BB" to "Alpha 7 IV", "CC:DD" to "Other")
+        f.sessions.value = mapOf("AA:BB" to ready("AA:BB"), "CC:DD" to ready("CC:DD"))
+        runCurrent()
+        f.names.value = mapOf("AA:BB" to "Renamed")
+        runCurrent()
+        assertEquals(listOf(0, 2), f.publisher.multiUpdates)
+        assertEquals(emptyList<String?>(), f.publisher.singleUpdates)
+        // Back to a single camera without a name entry: null → generic fallback.
+        f.names.value = emptyMap()
+        f.sessions.value = mapOf("AA:BB" to ready("AA:BB"))
+        runCurrent()
+        assertEquals(listOf<String?>(null), f.publisher.singleUpdates)
+    }
+
+    private class NamedFixture(scope: CoroutineScope) {
+        val sessions = MutableStateFlow<Map<String, CameraSession>>(emptyMap())
+        val transmitting = MutableStateFlow(false)
+        val names = MutableStateFlow<Map<String, String>>(emptyMap())
+        val publisher = NamedPublisher()
+        val coordinator = TransmissionNotificationCoordinator(
+            scope, sessions, transmitting, publisher = publisher, deviceNames = names,
+        ).also { it.start() }
+    }
+
+    private class NamedPublisher : TransmissionNotificationCoordinator.Publisher {
+        val singleUpdates = mutableListOf<String?>()
+        val multiUpdates = mutableListOf<Int>()
+        override suspend fun show(cameraCount: Int) {
+            multiUpdates += cameraCount
+        }
+
+        override suspend fun showSingleCamera(cameraCount: Int, cameraName: String?) {
+            singleUpdates += cameraName
+        }
+
+        override fun showIdle() {
+            multiUpdates += 0
+        }
+    }
+
     private class Fixture(scope: CoroutineScope) {
         val sessions = MutableStateFlow<Map<String, CameraSession>>(emptyMap())
         val transmitting = MutableStateFlow(false)
         val enabled = MutableStateFlow(true)
         val authorized = MutableStateFlow(true)
+        val names = MutableStateFlow<Map<String, String>>(emptyMap())
         val publisher = FakePublisher()
         val coordinator = TransmissionNotificationCoordinator(
             scope,
@@ -154,7 +224,8 @@ class TransmissionNotificationCoordinatorTest {
             transmitting,
             enabled,
             authorized,
-            publisher
+            publisher,
+            deviceNames = names,
         )
             .also { it.start() }
     }

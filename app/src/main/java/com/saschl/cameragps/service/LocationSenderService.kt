@@ -8,6 +8,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.companion.CompanionDeviceManager
+import android.os.Build
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -16,6 +18,7 @@ import androidx.lifecycle.lifecycleScope
 import com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants.locationTransmissionNotificationId
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionOrchestrator
 import com.sasch.cameragps.sharednew.bluetooth.session.OrchestratorEvent
+import com.sasch.cameragps.sharednew.database.devices.CameraDevice
 import com.sasch.cameragps.sharednew.notification.TransmissionNotificationCoordinator
 import com.saschl.cameragps.AppServices
 import com.saschl.cameragps.notification.AndroidTransmissionNotificationPublisher
@@ -24,6 +27,7 @@ import com.saschl.cameragps.service.coordinator.ServicePresenceCoordinator
 import com.saschl.cameragps.service.coordinator.ServiceShutdownCoordinator
 import com.saschl.cameragps.service.transport.AndroidBleTransport
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -114,6 +118,11 @@ class LocationSenderService : LifecycleService() {
             sessions = orchestrator.sessions,
             transmitting = orchestrator.locationManager.isTransmitting,
             publisher = AndroidTransmissionNotificationPublisher(this),
+            deviceNames = services.deviceDao.observeAllDevices().map { devices ->
+                devices.mapNotNull { device ->
+                    resolveCameraDisplayName(device)?.let { device.mac.uppercase() to it }
+                }.toMap()
+            },
         ).start()
         return true
     }
@@ -245,29 +254,11 @@ class LocationSenderService : LifecycleService() {
                 presenceCoordinator.onDeviceDisappeared(command.address)
             }
 
-            is ServiceCommand.TriggerRemoteShutter -> {
-                val success = orchestrator.triggerRemoteShutter(command.address)
-                if (!success) {
-                    Timber.w("Remote shutter request failed for ${command.address.uppercase()}")
-                }
-            }
-
             is ServiceCommand.SendRemoteCommand -> {
                 val success = orchestrator.sendRemoteCommand(command.address, command.command)
                 if (!success) {
                     Timber.w("Remote command ${command.command} failed for ${command.address.uppercase()}")
                 }
-            }
-
-            is ServiceCommand.TriggerShutterSequence -> {
-                val success = orchestrator.triggerShutterSequence(command.address)
-                if (!success) {
-                    Timber.w("Shutter sequence failed to start for ${command.address.uppercase()}")
-                }
-            }
-
-            is ServiceCommand.SetRemoteControlMonitoring -> {
-                orchestrator.setRemoteMonitoring(command.address, command.enabled)
             }
 
             is ServiceCommand.Connect -> {
@@ -322,6 +313,40 @@ class LocationSenderService : LifecycleService() {
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    /**
+     * Best display name for the single-camera notification. Priority: a custom Room
+     * name, the companion-device association name, the Bluetooth stack's name, then a
+     * derived Room name; null makes the notification fall back to a generic "Camera".
+     */
+    @SuppressLint("MissingPermission")
+    private fun resolveCameraDisplayName(device: CameraDevice): String? {
+        fun String?.usable() = takeIf { !it.isNullOrBlank() && it != "N/A" }
+
+        device.deviceName.takeIf { device.deviceNameIsCustom }?.usable()?.let { return it }
+
+        val upperMac = device.mac.uppercase()
+        val associatedName = runCatching {
+            val cdm = getSystemService(CompanionDeviceManager::class.java) ?: return@runCatching null
+            cdm.getAssociatedDevices(bluetoothManager.adapter)
+                .firstOrNull { it.address.equals(upperMac, ignoreCase = true) }
+                ?.name?.usable()
+        }.getOrNull()
+        if (associatedName != null) return associatedName
+
+        val bluetoothName = runCatching {
+            // BLUETOOTH_CONNECT gates BluetoothDevice.name only from Android 12 on.
+            val canConnect = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                    checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
+                    PackageManager.PERMISSION_GRANTED
+            if (canConnect) bluetoothManager.adapter.getRemoteDevice(upperMac).name.usable() else null
+        }.getOrNull()
+        if (bluetoothName != null) return bluetoothName
+
+        // Derived (non-custom) Room name: captured from the hardware earlier; better
+        // than the generic label when the Bluetooth stack is unavailable right now.
+        return device.deviceName.usable()
+    }
+
     private fun requestShutdown(startId: Int? = null) {
         if (startId != null) stopSelf(startId) else stopSelf()
     }
