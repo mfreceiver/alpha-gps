@@ -146,6 +146,8 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         }
     }
 
+    private val pageSize = SonyImageTransfer.PAGE_SIZE
+
     private fun pagedConnection() = Connection().apply {
         photos = (0 until SonyImageTransfer.PAGE_SIZE + 2).flatMap { index ->
             listOf(
@@ -210,11 +212,11 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         runCurrent()
         assertTrue(connection.screenPreviewRequests.isEmpty())
         val thumbnails = controller.thumbnails.value
-        assertEquals(160, thumbnails.getValue(77L).width)
+        assertEquals(160, thumbnails.getValue((pageSize - 2) * 2L + 1).width)
         connection.screenPreviewGate = CompletableDeferred()
-        model.openPhoto("photo:38")
+        model.openPhoto("photo:${pageSize - 2}")
         runCurrent()
-        assertEquals(listOf(76L), connection.screenPreviewRequests)
+        assertEquals(listOf((pageSize - 2) * 2L), connection.screenPreviewRequests)
         assertTrue(controller.photoPreview.value!!.loading)
         assertNull(controller.photoPreview.value!!.image)
         connection.screenPreviewGate!!.complete(Unit)
@@ -222,9 +224,9 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         assertEquals(1600, controller.photoPreview.value!!.image!!.width)
         assertFalse(controller.photoPreview.value!!.loading)
         assertEquals(thumbnails, controller.thumbnails.value)
-        model.viewPhotoAt(38)
+        model.viewPhotoAt(pageSize - 2)
         runCurrent()
-        assertEquals(listOf(76L), connection.screenPreviewRequests)
+        assertEquals(listOf((pageSize - 2) * 2L), connection.screenPreviewRequests)
         model.closePhoto()
         assertNull(controller.photoPreview.value)
         controller.closeAndJoin()
@@ -296,12 +298,12 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         model.viewPhotoAt(1)
         runCurrent()
         assertEquals(2L, controller.photoPreview.value!!.handle)
-        model.viewPhotoAt(40)
+        model.viewPhotoAt(pageSize)
         runCurrent()
         assertNull(controller.photoPreview.value)
-        model.viewPhotoAt(40)
+        model.viewPhotoAt(pageSize)
         runCurrent()
-        assertEquals(80L, controller.photoPreview.value!!.handle)
+        assertEquals(pageSize * 2L, controller.photoPreview.value!!.handle)
         controller.closeAndJoin()
     }
 
@@ -316,43 +318,43 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         runCurrent()
         controller.browsePhotos("camera")
         runCurrent()
-        model.openPhoto("photo:38")
-        assertEquals(38, model.viewedPhotoIndex)
-        model.viewPhotoAt(39)
-        assertEquals(39, model.viewedPhotoIndex)
+        model.openPhoto("photo:${pageSize - 2}")
+        assertEquals(pageSize - 2, model.viewedPhotoIndex)
+        model.viewPhotoAt(pageSize - 1)
+        assertEquals(pageSize - 1, model.viewedPhotoIndex)
         assertTrue(connection.pageRequests.isEmpty())
         connection.pageGate = CompletableDeferred()
-        model.viewPhotoAt(40)
+        model.viewPhotoAt(pageSize)
         runCurrent()
-        assertEquals(40, model.viewedPhotoIndex)
-        assertEquals(listOf(40), connection.pageRequests)
+        assertEquals(pageSize, model.viewedPhotoIndex)
+        assertEquals(listOf(pageSize), connection.pageRequests)
         assertEquals(0, registry.get("camera")!!.wifiRemote.photoBrowser.offset)
         assertEquals(
-            40, groupCameraPhotos(registry.get("camera")!!.wifiRemote.photoBrowser.photos).size,
+            pageSize, groupCameraPhotos(registry.get("camera")!!.wifiRemote.photoBrowser.photos).size,
             "Keep the current page until its replacement arrives"
         )
-        model.viewPhotoAt(40)
-        assertEquals(listOf(40), connection.pageRequests)
+        model.viewPhotoAt(pageSize)
+        assertEquals(listOf(pageSize), connection.pageRequests)
         connection.pageGate!!.complete(Unit)
         runCurrent()
-        assertEquals(40, registry.get("camera")!!.wifiRemote.photoBrowser.offset)
+        assertEquals(pageSize, registry.get("camera")!!.wifiRemote.photoBrowser.offset)
         assertEquals(
-            listOf("photo:40", "photo:41"),
+            listOf("photo:$pageSize", "photo:${pageSize + 1}"),
             groupCameraPhotos(registry.get("camera")!!.wifiRemote.photoBrowser.photos).map { it.id })
-        model.viewPhotoAt(41)
-        model.viewPhotoAt(42)
-        assertEquals(41, model.viewedPhotoIndex, "Stop at the end of the catalog")
-        assertEquals(listOf(40), connection.pageRequests)
-        model.viewPhotoAt(40)
-        model.viewPhotoAt(39)
+        model.viewPhotoAt(pageSize + 1)
+        model.viewPhotoAt(pageSize + 2)
+        assertEquals(pageSize + 1, model.viewedPhotoIndex, "Stop at the end of the catalog")
+        assertEquals(listOf(pageSize), connection.pageRequests)
+        model.viewPhotoAt(pageSize)
+        model.viewPhotoAt(pageSize - 1)
         runCurrent()
-        assertEquals(listOf(40, 0), connection.pageRequests)
+        assertEquals(listOf(pageSize, 0), connection.pageRequests)
         assertEquals(
-            79L, connection.thumbnailRequests.takeLast(40).first(),
+            (pageSize - 1) * 2L + 1, connection.thumbnailRequests.takeLast(pageSize).first(),
             "Load the displayed photo first when entering the previous page at its end"
         )
         assertEquals(
-            39,
+            pageSize - 1,
             model.viewedPhotoIndex,
             "Returning to the previous page selects its last capture"
         )
@@ -380,21 +382,21 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         controller.browsePhotos("camera")
         runCurrent()
         val originalPage = registry.get("camera")!!.wifiRemote.photoBrowser.photos
-        model.openPhoto("photo:39")
+        model.openPhoto("photo:${pageSize - 1}")
         connection.failPage = true
-        model.viewPhotoAt(40)
+        model.viewPhotoAt(pageSize)
         runCurrent()
         val failed = registry.get("camera")!!.wifiRemote.photoBrowser
         assertTrue(failed.failed)
         assertFalse(failed.loading)
         assertEquals(originalPage, failed.photos)
         assertEquals(0, failed.offset)
-        assertEquals(40, model.viewedPhotoIndex)
+        assertEquals(pageSize, model.viewedPhotoIndex)
         connection.failPage = false
-        model.viewPhotoAt(40)
+        model.viewPhotoAt(pageSize)
         runCurrent()
-        assertEquals(listOf(40, 40), connection.pageRequests)
-        assertEquals(40, registry.get("camera")!!.wifiRemote.photoBrowser.offset)
+        assertEquals(listOf(pageSize, pageSize), connection.pageRequests)
+        assertEquals(pageSize, registry.get("camera")!!.wifiRemote.photoBrowser.offset)
         assertFalse(registry.get("camera")!!.wifiRemote.photoBrowser.failed)
         controller.closeAndJoin()
         model.reconcilePhotoSelection()
@@ -421,19 +423,19 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         assertEquals(0, model.viewedPhotoIndex)
         controller.downloadPhoto("camera", 0)
         runCurrent()
-        model.viewPhotoAt(39)
+        model.viewPhotoAt(pageSize - 1)
         assertEquals(
-            39,
+            pageSize - 1,
             model.viewedPhotoIndex,
             "Viewing loaded photos remains available during download"
         )
-        model.viewPhotoAt(40)
-        assertEquals(39, model.viewedPhotoIndex)
+        model.viewPhotoAt(pageSize)
+        assertEquals(pageSize - 1, model.viewedPhotoIndex)
         assertTrue(connection.pageRequests.isEmpty())
         controller.cancelPhotoOperation("camera")
         runCurrent()
         connection.pageGate = CompletableDeferred()
-        model.viewPhotoAt(40)
+        model.viewPhotoAt(pageSize)
         runCurrent()
         model.navigateBack { error("Viewer must return to grid while a page loads") }
         assertNull(model.viewedPhotoIndex)
@@ -441,7 +443,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         runCurrent()
         model.reconcilePhotoSelection()
         assertNull(model.viewedPhotoIndex, "Completing a page load must not reopen the viewer")
-        assertEquals(40, registry.get("camera")!!.wifiRemote.photoBrowser.offset)
+        assertEquals(pageSize, registry.get("camera")!!.wifiRemote.photoBrowser.offset)
         controller.closeAndJoin()
     }
 
@@ -1435,6 +1437,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val controller =
             WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         val model = WifiRemoteViewModel("camera", controller)
+        val page2 = pageSize * 2L // first JPG handle on the second page
         // The download request must be derived from the selection, never hand-picked.
         fun selectedBatch() = model.selectedPhotos.values
             .flatMap { capture -> capture.files.map { WifiPhotoDownload(it.handle) } }
@@ -1451,43 +1454,43 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         model.reconcilePhotoSelection()
         assertEquals(setOf("photo:0"), model.selectedPhotoIds, "Paging must keep selections")
         // …select on page 2, union with the other page…
-        model.togglePhotoSelection("photo:40")
+        model.togglePhotoSelection("photo:$pageSize")
         model.selectAllPhotos()
         assertEquals(
-            setOf("photo:0", "photo:40", "photo:41"),
+            setOf("photo:0", "photo:$pageSize", "photo:${pageSize + 1}"),
             model.selectedPhotoIds,
             "Select-all unions the current page with selections on other pages"
         )
         // …deselecting on the current page keeps other pages selected.
-        model.togglePhotoSelection("photo:40")
-        assertFalse("photo:40" in model.selectedPhotoIds)
+        model.togglePhotoSelection("photo:$pageSize")
+        assertFalse("photo:$pageSize" in model.selectedPhotoIds)
         assertTrue("photo:0" in model.selectedPhotoIds)
-        model.togglePhotoSelection("photo:40")
+        model.togglePhotoSelection("photo:$pageSize")
         // Return to page 1 and download the mixed JPG+ARW batch from both pages at once.
         controller.browsePhotos("camera", 0)
         runCurrent()
         model.reconcilePhotoSelection()
-        assertTrue("photo:0" in model.selectedPhotoIds && "photo:40" in model.selectedPhotoIds)
+        assertTrue("photo:0" in model.selectedPhotoIds && "photo:$pageSize" in model.selectedPhotoIds)
         val batch = selectedBatch()
-        // Insertion order: photo:0, then photo:41 (added by select-all), then photo:40
+        // Insertion order: photo:0, then photo:pageSize + 1 (added by select-all), then photo:pageSize
         // (toggled off/on re-appends at the end).
         assertEquals(
-            listOf(0L, 1L, 82L, 83L, 80L, 81L),
+            listOf(0L, 1L, page2 + 2, page2 + 3, page2, page2 + 1),
             batch.map { it.handle },
             "The download batch mirrors the selection's insertion order across pages"
         )
         controller.downloadPhotos("camera", batch)
         runCurrent()
         assertEquals(
-            listOf(0L, 1L, 82L, 83L, 80L, 81L),
+            listOf(0L, 1L, page2 + 2, page2 + 3, page2, page2 + 1),
             connection.downloadedHandles,
             "Batch downloads files from every selected page, not just the visible one"
         )
         assertEquals(
             setOf(
                 WifiPhotoDownload(0L), WifiPhotoDownload(1L),
-                WifiPhotoDownload(80L), WifiPhotoDownload(81L),
-                WifiPhotoDownload(82L), WifiPhotoDownload(83L)
+                WifiPhotoDownload(page2), WifiPhotoDownload(page2 + 1),
+                WifiPhotoDownload(page2 + 2), WifiPhotoDownload(page2 + 3)
             ),
             registry.get("camera")!!.wifiRemote.photoBrowser.savedDownloads
         )
@@ -1504,10 +1507,10 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         )
         // …and stale page-2 handles that fell out of the refreshed catalog cannot be
         // submitted: the request is dropped instead of downloading.
-        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(82L), WifiPhotoDownload(83L)))
+        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(page2 + 2), WifiPhotoDownload(page2 + 3)))
         runCurrent()
         assertEquals(
-            listOf(0L, 1L, 82L, 83L, 80L, 81L),
+            listOf(0L, 1L, page2 + 2, page2 + 3, page2, page2 + 1),
             connection.downloadedHandles,
             "Stale handles from an older catalog generation must not download"
         )
@@ -1521,13 +1524,13 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         runCurrent()
         model.reconcilePhotoSelection()
         model.clearPhotoSelection()
-        model.togglePhotoSelection("photo:40")
+        model.togglePhotoSelection("photo:$pageSize")
         val retryBatch = selectedBatch()
-        assertEquals(listOf(80L, 81L), retryBatch.map { it.handle })
+        assertEquals(listOf(page2, page2 + 1), retryBatch.map { it.handle })
         controller.downloadPhotos("camera", retryBatch)
         runCurrent()
         assertEquals(
-            listOf(0L, 1L, 82L, 83L, 80L, 81L, 80L, 81L),
+            listOf(0L, 1L, page2 + 2, page2 + 3, page2, page2 + 1, page2, page2 + 1),
             connection.downloadedHandles,
             "A failing download is attempted but not recorded as saved"
         )
@@ -1536,7 +1539,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             registry.get("camera")!!.wifiRemote.imageTransfer.status
         )
         assertEquals(
-            setOf(WifiPhotoDownload(80L)),
+            setOf(WifiPhotoDownload(page2)),
             registry.get("camera")!!.wifiRemote.photoBrowser.savedDownloads,
             "Only the item that finished before the failure is marked saved"
         )
@@ -1544,12 +1547,12 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         controller.downloadPhotos("camera", retryBatch)
         runCurrent()
         assertEquals(
-            listOf(0L, 1L, 82L, 83L, 80L, 81L, 80L, 81L, 81L),
+            listOf(0L, 1L, page2 + 2, page2 + 3, page2, page2 + 1, page2, page2 + 1, page2 + 1),
             connection.downloadedHandles,
             "Retrying the batch re-downloads only the failed item"
         )
         assertEquals(
-            setOf(WifiPhotoDownload(80L), WifiPhotoDownload(81L)),
+            setOf(WifiPhotoDownload(page2), WifiPhotoDownload(page2 + 1)),
             registry.get("camera")!!.wifiRemote.photoBrowser.savedDownloads
         )
         controller.closeAndJoin()
