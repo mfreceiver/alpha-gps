@@ -127,6 +127,23 @@ except Exception as e:
     sys.exit(1)
 PY
   }
+  # 兼容不回传资产 sha256 的 Primary forge：size 弱校验 + 全量下载重算 sha256 强校验（~20MB 可接受）
+  verify_asset_by_download() {
+    local vname="$1" vsize="$2" vdurl="$3" vlsha="$4"
+    local dl="$WORK_DIR/asset_verify.bin" dsha lsize HTTP_CODE RC
+    lsize="$(wc -c < "$RELEASE_DIR/$APK_NAME" | tr -d ' ')"
+    [[ -n "$vdurl" ]] || fail "资产强校验：$vname 远端 sha256 缺失且无下载 URL（fail-closed）"
+    [[ "$vsize" != "-1" && "$vsize" == "$lsize" ]] \
+      || fail "资产强校验：$vname 远端 size($vsize) ≠ 本地字节数($lsize)（fail-closed）"
+    log "远端未回传 sha256，改用 size + 全量下载重算哈希: $vname"
+    RC=0
+    HTTP_CODE="$(curl_config | curl -K - -sS -m 300 -o "$dl" -w '%{http_code}' "$vdurl")" || RC=$?
+    [[ "$RC" -eq 0 && "$HTTP_CODE" == "200" ]] \
+      || { rm -f "$dl"; fail "资产强校验：$vname 下载失败 HTTP ${HTTP_CODE:-n/a}（fail-closed）"; }
+    dsha="$(sha256sum "$dl" | awk '{print $1}')"
+    rm -f "$dl"
+    [[ "$dsha" == "$vlsha" ]] || fail "资产强校验：$vname 下载重算 sha256 不一致（$dsha ≠ 本地 $vlsha）"
+  }
   local WORK_DIR; WORK_DIR=$(mktemp -d)
   # 注：不用 trap RETURN——它会在本函数内每个嵌套函数（curl_config 等）返回时误触发；
   # 正常路径结尾显式清理，失败路径泄漏一个 /tmp 临时目录（可接受，fail-closed 优先）。
@@ -199,9 +216,15 @@ print(json.dumps({'tag_name': '$TAG_NAME', 'name': '$TAG_NAME', 'body': 'alpha-g
   name="$APK_NAME"
   rsha="$(awk -F'\t' -v n="$name" '$1==n{print $3}' <<<"$ASSET_LIST")"
   if [[ -n "$rsha" ]]; then
-    [[ "$rsha" != "-" ]] || fail "资产对账：$name 远端 sha256 缺失（fail-closed）"
-    [[ "$rsha" == "$lsha" ]] || fail "远端资产同名但内容不一致: $name（远端 $rsha ≠ 本地 $lsha）"
-    pass "资产已存在且 sha256 一致: $name → 跳过上传"
+    if [[ "$rsha" != "-" ]]; then
+      [[ "$rsha" == "$lsha" ]] || fail "远端资产同名但内容不一致: $name（远端 $rsha ≠ 本地 $lsha）"
+      pass "资产已存在且 sha256 一致: $name → 跳过上传"
+    else
+      verify_asset_by_download "$name" \
+        "$(awk -F'\t' -v n="$name" '$1==n{print $2}' <<<"$ASSET_LIST")" \
+        "$(awk -F'\t' -v n="$name" '$1==n{print $4}' <<<"$ASSET_LIST")" "$lsha"
+      pass "资产已存在（远端 sha256 缺失，已下载强校验一致）: $name → 跳过上传"
+    fi
   else
     RC=0
     HTTP_CODE="$(curl_config | curl -K - -sS -m 300 -o "$WORK_DIR/asset_resp" -w '%{http_code}' \
@@ -218,9 +241,16 @@ print(json.dumps({'tag_name': '$TAG_NAME', 'name': '$TAG_NAME', 'body': 'alpha-g
   [[ "$RC" -eq 0 && "$HTTP" == "200" ]] || fail "发布后资产核验：release 查询失败: HTTP ${HTTP:-n/a}"
   ASSET_FINAL="$(parse_assets "$VF")" || fail "发布后资产核验：资产表解析失败（fail-closed）"
   rsha="$(awk -F'\t' -v n="$name" '$1==n{print $3}' <<<"$ASSET_FINAL")"
-  [[ -n "$rsha" && "$rsha" != "-" ]] || fail "发布后资产核验：$name 不在远端资产表中（fail-closed）"
-  [[ "$rsha" == "$lsha" ]] || fail "发布后资产核验：$name 哈希不一致（远端 $rsha ≠ 本地 $lsha）"
-  pass "资产对账通过: $name sha256 一致"
+  [[ -n "$rsha" ]] || fail "发布后资产核验：$name 不在远端资产表中（fail-closed）"
+  if [[ "$rsha" != "-" ]]; then
+    [[ "$rsha" == "$lsha" ]] || fail "发布后资产核验：$name 哈希不一致（远端 $rsha ≠ 本地 $lsha）"
+    pass "资产对账通过: $name sha256 一致"
+  else
+    verify_asset_by_download "$name" \
+      "$(awk -F'\t' -v n="$name" '$1==n{print $2}' <<<"$ASSET_FINAL")" \
+      "$(awk -F'\t' -v n="$name" '$1==n{print $4}' <<<"$ASSET_FINAL")" "$lsha"
+    pass "资产对账通过: $name（远端 sha256 缺失，已下载重算一致）"
+  fi
   rm -rf -- "$WORK_DIR"
   log "Primary forge release: https://$PRIMARY_HOST/$PRIMARY_REPO/releases/tag/$TAG_NAME"
 }
