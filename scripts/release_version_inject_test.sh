@@ -130,7 +130,7 @@ setup_sandbox() { # $1=gradlew-body
   local SB=$TMP/sandbox
   rm -rf -- "$SB"
   mkdir -p "$SB/scripts" "$SB/app" "$SB/home/jdk/bin" "$SB/home/.gradle" "$SB/home/.config/dshdroid/signing"
-  cp -- "$HERE/release_build.sh" "$HERE/release_version_inject.sh" "$SB/scripts/"
+  cp -- "$HERE/release_build.sh" "$HERE/release_version_inject.sh" "$HERE/release_lib.sh" "$SB/scripts/"
   cp -- "$BUILD" "$SB/app/build.gradle.kts"
   printf '#!/usr/bin/env bash\n%s\n' "$1" > "$SB/gradlew"; chmod +x "$SB/gradlew"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$SB/home/jdk/bin/java"; chmod +x "$SB/home/jdk/bin/java"

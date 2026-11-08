@@ -29,11 +29,6 @@
 - 验收：断言在 `closeAndJoin` 之前；删掉 `downloadOriginalBatch` 里的 `recordBatchSummary(null)` 时该测试必须失败（mutation 自验）。
 - 依据：sol 对 910aa05 的复核（测试覆盖真实性缺口，非生产 bug）。
 
-### 4. 发版脚本：versionCode 断言需独立预期来源
-- 做什么：`scripts/release_build.sh`（约 :388-397 与 publish-only :325-333）目前从 APK 读出 versionCode 再当“预期值”传给 `release_assert_apk.sh`，等于自比。改为从受控源码（`app/build.gradle.kts`）注入前独立解析 EXPECT_CODE，publish-only 同理；并检查本次 versionCode 相对上一个 tag 已递增。
-- 验收：人为改 APK 的 code 或忘记 bump 时脚本 fail-closed；`scripts/release_version_inject_test.sh` 补对应用例。
-- 依据：sol 终审（脚本既有缺口）；versionCode 目前需手动 bump，易漏。
-
 ## P3
 
 ### 5. browse-only 下 busy 时 Back 无反馈

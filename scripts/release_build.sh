@@ -25,6 +25,8 @@ SCRIPT_REAL=$(readlink -f -- "${BASH_SOURCE[0]}")
 REPO_ROOT=$(cd "$(dirname "$SCRIPT_REAL")/.." && pwd)
 cd "$REPO_ROOT"
 
+source "$REPO_ROOT/scripts/release_lib.sh"   # parse_version_code / assert_code_monotonic（纯函数）
+
 RELEASE_DIR="$REPO_ROOT/release"
 OUT_APK_DIR="$REPO_ROOT/app/build/outputs/apk/foss/release"
 BUILD_GRADLE="$REPO_ROOT/app/build.gradle.kts"
@@ -322,6 +324,13 @@ if (( PUBLISH_ONLY )); then
     || fail "--publish-only：SHA256SUMS 缺当前版本条目: release/$APK_NAME"
   sha256sum -c "$RELEASE_DIR/SHA256SUMS" > /dev/null \
     || fail "--publish-only：SHA256SUMS 校验失败（归档损坏）"
+  # 预期 versionCode 独立来源：被发布 tag 提交的源码（上方门禁已确认 tag 在 HEAD 上），
+  # 不信任归档 APK 自读值（否则等于自比，APK code 错也会 PASS）。
+  TAG_SRC=$(git show "$TAG_NAME:app/build.gradle.kts" 2>/dev/null) \
+    || fail "--publish-only：无法读取 tag 提交源码 $TAG_NAME:app/build.gradle.kts（fail-closed）"
+  EXPECT_CODE=$(parse_version_code - <<<"$TAG_SRC") \
+    || fail "--publish-only：tag 提交源码 versionCode 解析失败（fail-closed）: $TAG_NAME"
+  assert_code_monotonic "$EXPECT_CODE" "$VERSION_NAME" || fail "--publish-only：versionCode 单调性门禁失败"
   find_aapt
   EMBEDDED_NAME=$(apk_version_name "$RELEASE_DIR/$APK_NAME")
   VERSION_CODE=$(apk_version_code "$RELEASE_DIR/$APK_NAME")
@@ -329,14 +338,21 @@ if (( PUBLISH_ONLY )); then
     || fail "--publish-only：归档 APK 内嵌版本解析失败（fail-closed）: $APK_NAME"
   [[ "$EMBEDDED_NAME" == "$EMBED_NAME" ]] \
     || fail "--publish-only：归档 APK 内嵌 versionName($EMBEDDED_NAME)与请求版本($EMBED_NAME)不一致"
-  "$REPO_ROOT/scripts/release_assert_apk.sh" "$RELEASE_DIR/$APK_NAME" "$EMBED_NAME" "$VERSION_CODE" "$PINNED_CERT_SHA256" \
-    || fail "--publish-only：归档 APK 断言失败"
+  "$REPO_ROOT/scripts/release_assert_apk.sh" "$RELEASE_DIR/$APK_NAME" "$EMBED_NAME" "$EXPECT_CODE" "$PINNED_CERT_SHA256" \
+    || fail "--publish-only：归档 APK 断言失败（含 versionCode 与 tag 提交源码期望值比对）"
   pass "归档完整（APK+SHA256SUMS+断言）"
   publish_release
   echo
   echo "--publish-only 完成: $VERSION_NAME (versionCode $VERSION_CODE)  tag: $TAG_NAME"
   exit 0
 fi
+
+# ─── versionCode 独立预期（受控源码解析，先于版本注入；与 APK 读值无关）────
+log "versionCode 期望值: 从源码独立解析（注入前）"
+EXPECT_CODE=$(parse_version_code "$BUILD_GRADLE") \
+  || fail "app/build.gradle.kts versionCode 解析失败（必须恰好一处 'versionCode = N'，fail-closed）"
+assert_code_monotonic "$EXPECT_CODE" "$VERSION_NAME" || fail "versionCode 单调性门禁失败"
+pass "源码 versionCode=$EXPECT_CODE（独立预期来源 + 单调性检查）"
 
 # ─── 版本注入（sed 改写 + 构建后还原）────────────────────────────────────
 # app/build.gradle.kts 硬编码 versionName = "X.Y.Z"（无 v 前缀，无 env 注入），构建前改写、
@@ -372,6 +388,11 @@ export SIGNING_STORE_PASSWORD=$DSH_KEYSTORE_PASSWORD
 ./gradlew --no-daemon :app:assembleFossRelease --console=plain || fail "构建失败"
 restore_gradle || fail "构建成功但版本注入还原失败（备份保留在 $GRADLE_BAK，请人工恢复）"
 trap - EXIT
+# 注入 helper 只注入 versionName、不改 code；还原后源码 code 必须与注入前一致，否则 fail-closed
+EXPECT_CODE_AFTER=$(parse_version_code "$BUILD_GRADLE") \
+  || fail "注入还原后源码 versionCode 再解析失败（fail-closed）"
+[[ "$EXPECT_CODE_AFTER" == "$EXPECT_CODE" ]] \
+  || fail "注入前后源码 versionCode 不一致（$EXPECT_CODE → $EXPECT_CODE_AFTER），fail-closed"
 
 OUT_APK=""
 for cand in "$OUT_APK_DIR/app-foss-release.apk" "$OUT_APK_DIR/app-foss-release-unsigned.apk"; do
@@ -392,10 +413,10 @@ VERSION_CODE=$(apk_version_code "$OUT_APK")
   || fail "构建产物内嵌 versionName($EMBEDDED_NAME)与请求版本($EMBED_NAME)不一致"
 pass "versionName=$EMBEDDED_NAME versionCode=$VERSION_CODE"
 
-# ─── 断言 ────────────────────────────────────────────────────────────────
+# ─── 断言（期望 versionCode = 源码独立解析的 EXPECT_CODE，非 APK 自读值）──
 log "断言产物"
-"$REPO_ROOT/scripts/release_assert_apk.sh" "$OUT_APK" "$EMBED_NAME" "$VERSION_CODE" "$PINNED_CERT_SHA256" \
-  || fail "产物断言失败"
+"$REPO_ROOT/scripts/release_assert_apk.sh" "$OUT_APK" "$EMBED_NAME" "$EXPECT_CODE" "$PINNED_CERT_SHA256" \
+  || fail "产物断言失败（含 versionCode 与源码期望值比对）"
 
 # ─── --allow-dirty 到此为止（不归档/不打 tag/不发布）──────────────────────
 if (( ALLOW_DIRTY )); then
