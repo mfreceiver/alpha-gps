@@ -1,119 +1,14 @@
 #!/usr/bin/env bash
 # release_lib.sh —— 发版脚本共用纯函数（release_build.sh source；自测脚本直接 source）。
 # 全部函数遵循 fail-closed：解析/门禁失败 → stderr 带关键字 + 非零返回。
-# 依赖 python3 做注释剥离；python3 缺失/执行失败/输入含不支持构造
-#   → 显式 FAIL 提示依赖/原因并以非零返回，fail-closed。
+# versionCode 的单一来源是仓库根 gradle.properties 的平面 key=value 行
+#   （`alphagps.versionCode=<N>`，N 为 1..2147483647 的 canonical 十进制）。
+# 设计决策：不再解析/词法扫描 Kotlin 源码（app/build.gradle.kts）——那是一个
+#   不可穷尽的问题（转义/注释/raw string/模板/编码都有旁路）；平面文件 + 严格
+#   整行匹配把可出错的输入空间收缩到几乎为零。
 
 rl_fail() { echo "FAIL $1" >&2; }   # 注意：调用方必须紧跟 `return 1`（在 `||` 里不会替调用方退出函数）
 rl_warn() { echo "WARN $1" >&2; }
-
-# rl_strip_kotlin_comments_file <文件|/dev/stdin>: 窄白名单词法扫描——只支持：
-#   - `//` 行注释（删除注释文本，保留换行）；
-#   - 普通单行字符串 "..."（`\"`、`\\` 等反斜杠转义；字符串内的 //、/*、*/ 是普通内容）；
-#   - 字符字面量 'x' / '\n' / '\uXXXX'（完整 4 位十六进制，按 6 字符消费）。
-# 以下构造在 CODE 状态遇到即整体 fail-closed（设计决策：不再尝试完整 Kotlin 词法，
-# 实测全部 89 个 v* tag 的 app/build.gradle.kts 与当前文件均不含这些构造）：
-#   - 块注释起始 `/*`（字符串内的 `/*` 是普通内容，不算）；
-#   - 三引号 `"""`（任何位置，含四引号结尾等 raw string 变体）；
-#   - 字符串内 `${` 模板、普通字符串内裸换行（未闭合）；
-#   - 未闭合的字符串/字符字面量、非法/截断的 \uXXXX、NUL 字节、非 UTF-8 输入。
-# BOM：显式剥离首个 U+FEFF 后扫描（中段 BOM 按 NUL 之外的普通字符处理，不特殊接受）。
-# CRLF：不归一化，逐字节原样保留（\r 属 [[:space:]]，下游整行匹配兼容）。
-# 说明：NUL 必须在此层拒绝——bash 变量无法承载 NUL，`read -d ''` 会截断出错误结果。
-# 脚本经 -c 传入（而非 heredoc），python 的 fd0 保持不动，`/dev/stdin` 模式可直接读数据。
-RL_PY=$(cat <<'RL_PY'
-import sys
-def die(m):
-    sys.stderr.write("FAIL 注释剥离: %s\n" % m)
-    sys.exit(1)
-try:
-    with open(sys.argv[1], "rb") as f:
-        raw = f.read()
-except OSError as e:
-    die("文件不可读: %s" % e)
-if raw.startswith(b"\xef\xbb\xbf"):
-    raw = raw[3:]
-try:
-    d = raw.decode("utf-8", "surrogateescape")
-except UnicodeDecodeError as e:
-    die("非 UTF-8 输入: %s" % e)
-if "\0" in d:
-    die("输入包含 NUL 字节（bash 变量无法安全承载 NUL），fail-closed")
-HEX = "0123456789abcdefABCDEF"
-out = []
-i, n = 0, len(d)
-while i < n:
-    c = d[i]
-    if c == "/" and d[i + 1:i + 2] == "/":            # 行注释：删到行尾，保留 \n
-        j = d.find("\n", i)
-        i = n if j < 0 else j
-    elif c == "/" and d[i + 1:i + 2] == "*":
-        die("不支持构造: 块注释 /*（窄白名单设计：仅支持行注释，其余 fail-closed）")
-    elif d[i:i + 3] == '"""':
-        die("不支持构造: 三引号 \"\"\"（raw string，窄白名单设计，fail-closed）")
-    elif c == '"':                                     # 普通单行字符串
-        j = i + 1
-        while True:
-            if j >= n:
-                die("字符串未闭合")
-            ch = d[j]
-            if ch == "\n":
-                die("字符串未闭合（普通字符串内出现裸换行）")
-            if ch == "\\":
-                if j + 1 >= n or d[j + 1] == "\n":
-                    die("字符串未闭合（结尾悬挂反斜杠）")
-                j += 2
-            elif ch == '"':
-                j += 1
-                break
-            elif ch == "$" and d[j + 1:j + 2] == "{":
-                die("不支持构造: 字符串模板 ${（窄白名单设计，fail-closed）")
-            else:
-                j += 1
-        out.append(d[i:j]); i = j
-    elif c == "'":                                     # 字符字面量（\uXXXX 按 6 字符消费）
-        j = i + 1
-        if d[j:j + 1] != "\\":
-            if d[j:j + 1] in ("", "\n"):
-                die("字符字面量未闭合")
-            j += 1
-        elif d[j + 1:j + 2] == "u":
-            k = j + 2
-            if len(d[k:k + 4]) != 4 or any(x not in HEX for x in d[k:k + 4]):
-                die("字符字面量 \\uXXXX 转义非法/截断（须完整 4 位十六进制）")
-            j = k + 4
-        else:
-            if d[j + 1:j + 2] in ("", "\n"):
-                die("字符字面量未闭合")
-            j += 2
-        if d[j:j + 1] != "'":
-            die("字符字面量未闭合")
-        j += 1
-        out.append(d[i:j]); i = j
-    else:
-        out.append(c); i += 1
-sys.stdout.buffer.write("".join(out).encode("utf-8", "surrogateescape"))
-RL_PY
-)
-rl_strip_kotlin_comments_file() {
-  command -v python3 >/dev/null 2>&1 \
-    || { rl_fail "注释剥离: 缺少依赖 python3（词法扫描工具不可用），fail-closed"; return 1; }
-  python3 -c "$RL_PY" "${1:?}" \
-    || { rl_fail "注释剥离: 词法扫描失败，fail-closed"; return 1; }
-}
-
-# rl_strip_kotlin_comments: stdin → stdout。python 直接读 /dev/stdin（不经 bash 变量，
-#   无临时文件；fd0 是否可用/是否终端由调用方先行检查）。
-rl_strip_kotlin_comments() {
-  rl_strip_kotlin_comments_file /dev/stdin
-}
-
-# rl_stdin_usable: fd0 可读性探测（fd0 已关闭 → 非零）。
-#   实测选取 `[ -e /dev/fd/0 ]`：fd0 关闭时 /dev/fd/0 不存在 → 拒绝；终端/管道/here-string/
-#   文件重定向（含 /dev/null）下均存在 → 放行。`{ : <&0; }` 的 dup 与 `cat <&0` 在 fd0
-#   关闭时仍 rc=0（不可靠）；`read -t 0` 在无就绪数据的终端上会误报不可用（不可靠）。
-#   必须在进入命令替换（cat 读自己的捕获 pipe）之前调用。
-rl_stdin_usable() { [[ -e /dev/fd/0 ]]; }
 
 # rl_check_code <值>: canonical 十进制正整数（^[1-9][0-9]{0,9}$）且 ≤ 2147483647
 #   （Android Int 上限；10 位时用等长字符串字典序比较，不进算术，避免 2^31/2^63 回绕）。
@@ -124,103 +19,149 @@ rl_check_code() {
   [[ ! "$v" > 2147483647 ]]
 }
 
-# rl_stdin_guard <名字>: stdin 模式公共前置——终端拒绝（防挂起等交互输入）、
-#   fd0 关闭拒绝（防命令替换子 shell 里 cat 读自己的捕获 pipe 导致永久挂起）。
-rl_stdin_guard() {
-  [[ -t 0 ]] && { rl_fail "$1 解析: stdin 是终端（会挂起等待输入），fail-closed"; return 1; }
-  if ! rl_stdin_usable; then
-    rl_fail "$1 解析: stdin 不可用（fd0 已关闭），fail-closed"
-    return 1
-  fi
-  return 0
+# ── 历史兼容表（不可变的已发布事实）────────────────────────────────────────
+# 这三个 tag 发布时 versionCode 尚写在 app/build.gradle.kts，其 gradle.properties
+# 没有本 key——已发布产物的 code 不能改写，只能以表内事实参与单调性比较：
+#   v0.1.0 → 1, v0.1.1 → 2, v0.1.2 → 3
+legacy_code_for_tag() { # <tag> → stdout=code / rc≠0 非历史 tag
+  case "${1:-}" in
+    v0.1.0) echo 1 ;;
+    v0.1.1) echo 2 ;;
+    v0.1.2) echo 3 ;;
+    *) return 1 ;;
+  esac
 }
 
-# parse_version_code <文件路径|->
-#   严格解析 `versionCode = N`（整行；先窄白名单剥行注释；等号两侧空白容忍；canonical 十进制
-#   正整数且 ≤ 2147483647），必须恰好匹配 1 处，否则 fail-closed（0 处或多处都拒绝——
-#   防止 pick 错误行或构建文件被意外改出第二处；仅存在于注释中的伪赋值不算；
-#   词法层不支持 raw string/多行字符串，字符串内容不跨行，行匹配不会命中字符串内部）。
-#   "-" 从 stdin 读（配合 `git show <tag>:app/build.gradle.kts` 用）。
+# parse_version_code_props <文件路径>
+#   严格解析平面 key=value 文件中的 versionCode：
+#     - 只接受文件路径参数（无 stdin 模式，无 fd0 问题）；
+#     - 含 NUL 字节 → 拒绝（bash 变量无法安全承载 NUL）；
+#     - 含任何 CR（\r）→ 拒绝（平面文件要求 LF 行尾，简单严格）；
+#     - 包含子串 `alphagps.versionCode` 的行必须恰好 1 行（注释里写出该 key 名
+#       也会被计入——gradle.properties 的注释因此被要求不得写出该 key 名）；
+#     - 该行必须整行严格匹配 `^alphagps\.versionCode=[1-9][0-9]{0,9}$`
+#       （无空格、无注释、无尾随空白、无前导零）；
+#     - 值 ≤ 2147483647（长度/字典序比较，不进算术）。
+#   stdout 输出解析到的 N；任何不满足 → stderr FAIL + 非零。
+parse_version_code_props() {
+  local path=${1:-} line n
+  [[ -n "$path" && -f "$path" ]] \
+    || { rl_fail "versionCode 解析: 文件不存在: '${path:-}'"; return 1; }
+  LC_ALL=C grep -qaP '\x00' "$path" 2>/dev/null
+  local zrc=$?
+  if (( zrc == 0 )); then
+    rl_fail "versionCode 解析: 文件含 NUL 字节（bash 变量无法安全承载 NUL），fail-closed"
+    return 1
+  fi
+  if (( zrc > 1 )); then
+    rl_fail "versionCode 解析: NUL 探测 grep 异常（rc=$zrc），fail-closed"
+    return 1
+  fi
+  LC_ALL=C grep -qa $'\r' "$path" 2>/dev/null
+  local crc=$?
+  if (( crc == 0 )); then
+    rl_fail "versionCode 解析: 文件含 CR（平面文件要求纯 LF 行尾），fail-closed"
+    return 1
+  fi
+  if (( crc > 1 )); then
+    rl_fail "versionCode 解析: CR 探测 grep 异常（rc=$crc），fail-closed"
+    return 1
+  fi
+  local n grc=0
+  n=$(LC_ALL=C grep -caF 'alphagps.versionCode' "$path" 2>/dev/null) || grc=$?
+  if (( grc > 1 )); then
+    rl_fail "versionCode 解析: key 计数 grep 异常（rc=$grc），fail-closed"
+    return 1
+  fi
+  if [[ "$n" != "1" ]]; then
+    rl_fail "versionCode 解析: 包含该 key 子串的行必须恰好 1 行，实际 ${n:-0} 行——fail-closed"
+    return 1
+  fi
+  line=$(LC_ALL=C grep -aF 'alphagps.versionCode' "$path" 2>/dev/null || true)
+  if [[ ! "$line" =~ ^alphagps\.versionCode=[1-9][0-9]{0,9}$ ]]; then
+    rl_fail "versionCode 解析: 该 key 所在行必须整行严格匹配 'key=canonical十进制正整数'（无空格/注释/尾随空白/前导零），实际: '$line'"
+    return 1
+  fi
+  local v=${line#alphagps.versionCode=}
+  rl_check_code "$v" \
+    || { rl_fail "versionCode 解析: 非法值 '$v'（须为 canonical 十进制正整数且 ≤ 2147483647）"; return 1; }
+  printf '%s\n' "$v"
+}
+
+# parse_version_code_from_git <tag> [仓库内路径=gradle.properties]
+#   `git show <tag>:<path>` 的原始字节写入 mktemp 临时文件（不经 bash 变量——
+#   变量会丢弃 NUL 仅留 warning，导致脏数据伪装成功），再走文件路径 parser。
+#   在 ( ... ) subshell 内 `trap 'rm -f "$tmp"' EXIT` 并在 subshell 内完成 git rc
+#   检查与 parser 调用：errexit/信号/正常返回均清理，且不覆盖调用方的 trap。
 #   stdout 输出解析到的 N。
-parse_version_code() {
-  local stripped
-  if [[ "${1:-}" == "-" ]]; then
-    rl_stdin_guard versionCode || return 1
-    stripped=$(rl_strip_kotlin_comments) || return 1
-  else
-    [[ -n "${1:-}" && -f "$1" ]] || { rl_fail "versionCode 解析: 文件不存在: '${1:-}'"; return 1; }
-    stripped=$(rl_strip_kotlin_comments_file "$1") || return 1
-  fi
-  local -a hits
-  mapfile -t hits < <(sed -nE 's/^[[:space:]]*versionCode[[:space:]]*=[[:space:]]*([0-9]+)[[:space:]]*$/\1/p' <<<"$stripped")
-  if (( ${#hits[@]} != 1 )); then
-    rl_fail "versionCode 解析: 'versionCode = N'（整行）必须恰好匹配 1 处，实际 ${#hits[@]} 处——fail-closed"
-    return 1
-  fi
-  rl_check_code "${hits[0]}" \
-    || { rl_fail "versionCode 解析: 非法值 '${hits[0]}'（须为 canonical 十进制正整数且 ≤ 2147483647，拒绝前导零/超 Int 上限）"; return 1; }
-  printf '%s\n' "${hits[0]}"
-}
-
-# parse_version_code_from_git <tag> <仓库内路径>
-#   `git show <tag>:<path>` 的原始字节直写临时文件（不经 bash 变量——变量会丢弃 NUL
-#   仅留 warning，导致脏数据伪装成功），git rc 独立检查，再走文件路径 parser。
-#   临时文件任何退出路径均清理；stdout 输出解析到的 N。
 parse_version_code_from_git() {
-  local tag=${1:?} path=${2:?} tmp rc
-  tmp=$(mktemp "${TMPDIR:-/tmp}/rlgit.XXXXXX") \
-    || { rl_fail "versionCode 解析: 无法创建临时文件，fail-closed"; return 1; }
-  if ! git show "$tag:$path" > "$tmp" 2>/dev/null; then
-    rm -f -- "$tmp"
-    rl_fail "versionCode 解析: git show $tag:$path 失败（tag 不存在/路径缺失/git 异常），fail-closed"
-    return 1
-  fi
-  parse_version_code "$tmp"
-  rc=$?
-  rm -f -- "$tmp"
-  return "$rc"
+  local tag=${1:?} path=${2:-gradle.properties}
+  (
+    tmp=$(mktemp "${TMPDIR:-/tmp}/rlgit.XXXXXX") \
+      || { rl_fail "versionCode 解析: 无法创建临时文件，fail-closed"; exit 1; }
+    trap 'rm -f -- "$tmp"' EXIT
+    if ! git show "$tag:$path" > "$tmp" 2>/dev/null; then
+      rl_fail "versionCode 解析: git show $tag:$path 失败（tag 不存在/路径缺失/git 异常），fail-closed"
+      exit 1
+    fi
+    parse_version_code_props "$tmp"
+  )
 }
 
-# parse_application_id <文件路径|->
-#   注释感知地解析 `applicationId = "..."`（先剥行注释再匹配
-#   ^\s*applicationId\s*=\s*"([^"]+)"\s*$），必须恰好 1 处。
-#   stdout 输出解析到的包名（rc=0）；0 处/多处/文件不可读/含不支持构造 → rc≠0 + FAIL 关键字
-#   （调用方据此区分“身份无法确定”并 fail-closed，绝不静默当上游）。
-parse_application_id() {
-  local stripped
-  if [[ "${1:-}" == "-" ]]; then
-    rl_stdin_guard applicationId || return 1
-    stripped=$(rl_strip_kotlin_comments) || return 1
-  else
-    [[ -n "${1:-}" && -f "$1" ]] || { rl_fail "applicationId 解析: 文件不存在: '${1:-}'"; return 1; }
-    stripped=$(rl_strip_kotlin_comments_file "$1") || return 1
+# expected_code_for_tag <tag>
+#   取某 tag 的预期 versionCode 的统一入口：
+#     - LEGACY 表中的历史 tag → 表值（其 gradle.properties 没有本 key）；
+#     - 否则 → 该 tag 提交的 gradle.properties 严格解析（解析失败 fail-closed）。
+#   stdout 输出 code。
+expected_code_for_tag() {
+  local tag=${1:?} v
+  if v=$(legacy_code_for_tag "$tag"); then
+    printf '%s\n' "$v"
+    return 0
   fi
-  local -a ids
-  mapfile -t ids < <(sed -nE 's/^[[:space:]]*applicationId[[:space:]]*=[[:space:]]*"([^"]+)"[[:space:]]*$/\1/p' <<<"$stripped")
-  if (( ${#ids[@]} != 1 )); then
-    rl_fail "applicationId 解析: 'applicationId = \"...\"'（整行）必须恰好匹配 1 处，实际 ${#ids[@]} 处——身份无法确定，fail-closed"
-    return 1
-  fi
-  printf '%s\n' "${ids[0]}"
+  parse_version_code_from_git "$tag"
+}
+
+# tag_code_or_skip <tag>
+#   assert_code_monotonic 用的单 tag 判定（不入 LEGACY 表的 tag）：
+#     rc=0 → 本定制版 tag，stdout=其 versionCode；
+#     rc=3 → 上游 tag，跳过（tag 提交缺 gradle.properties，或其中无本 key 子串）；
+#     rc=1 → fail-closed（含 key 但解析失败 / git 异常 / grep 异常）。
+#   git show 原始字节经 subshell 内 mktemp 临时文件中转（trap EXIT 清理，含信号路径）。
+tag_code_or_skip() {
+  local tag=${1:?}
+  (
+    tmp=$(mktemp "${TMPDIR:-/tmp}/rlmono.XXXXXX") \
+      || { rl_fail "versionCode 单调性: 无法创建临时文件，fail-closed"; exit 1; }
+    trap 'rm -f -- "$tmp"' EXIT
+    if ! git show "$tag:gradle.properties" > "$tmp" 2>/dev/null; then
+      exit 3   # 文件缺失：上游 tag（上游没有本定制版的 key），跳过
+    fi
+    LC_ALL=C grep -qaF 'alphagps.versionCode' "$tmp" 2>/dev/null
+    local grc=$?
+    if (( grc == 1 )); then exit 3; fi   # 无该 key：上游 tag，跳过
+    if (( grc != 0 )); then
+      rl_fail "versionCode 单调性: tag $tag 的 gradle.properties key 探测 grep 异常（rc=$grc），fail-closed"
+      exit 1
+    fi
+    parse_version_code_props "$tmp" || {
+      rl_fail "versionCode 单调性: 本定制版 tag $tag 的 gradle.properties versionCode 解析失败（fail-closed）"
+      exit 1
+    }
+  )
 }
 
 # assert_code_monotonic <expect_code> <当前版本 X.Y.Z>
-#   单调递增门禁：在版本排序中小于当前版本的所有 v? tag 里，取“最大且属本定制版”的 tag，
-#   其 tag 提交的 app/build.gradle.kts 中 versionCode 为 PREV_CODE，要求
-#   expect_code > PREV_CODE（比较用 10# 前缀防八进制）。
-#
-#   身份判定（实测依据：对本仓库全部非 v0.* 上游 tag 逐个 `git show <tag>:app/build.gradle.kts`
-#   检查，v1.0.1～v1.7.1 均恰好 1 处 `applicationId = "com.saschl.cameragps"`，无缺失/其它写法）：
-#     - 注释感知解析出恰好 1 处 applicationId：
-#         = cn.vectory.alphagps        → 本定制版，参与比较；
-#         = 其它明确值（com.saschl.cameragps 等）→ 上游 tag（versionCode 体系不同，为 172 级别），跳过；
-#     - 0 处 / 多处 / 注释干扰 / tag 源码不可读 → 身份无法确定 → fail-closed（不静默当上游）。
-#   为什么不用 `v0.*` 前缀过滤：将来定制版版本号超过 1.x（如 v2.0.0）时会漏进/漏掉错误的 tag。
-#
-#   tag 源码经临时文件中转（`git show` 原始字节直写文件，不经 bash 变量——NUL 会被
-#   bash 静默丢弃仅留 warning，导致脏数据放行）；git rc 独立检查；临时文件任何路径清理。
-#   tag 枚举失败（git tag / sort 失败）→ fail-closed；只有“枚举成功但确实没有前一个定制版 tag”
-#   才 WARN 放行。命中本定制版 tag 但其 versionCode 解析失败 → fail-closed。
+#   单调递增门禁：在版本排序（sort -V）中小于当前版本的所有 v? tag 里，取最大且
+#   属本定制版的 tag，其 versionCode 为 PREV_CODE，要求 expect_code > PREV_CODE
+#   （比较用 10# 前缀防八进制）。
+#   本定制版判定（不再读 app/build.gradle.kts / 解析 Kotlin）：
+#     - tag 在 LEGACY 表（v0.1.0/1/2）→ 本定制版，code 取表值；
+#     - 否则 tag 提交的 gradle.properties 含本 key 子串 → 严格解析
+#       （解析失败 fail-closed，绝不静默当上游）；解析成功即本定制版；
+#     - 否则（无该 key / 文件缺失）→ 上游 tag（versionCode 体系不同，172 级别），跳过。
+#   tag 枚举失败（git tag / grep 异常 rc / sort 失败）→ fail-closed；只有
+#   “枚举成功但确实没有前一个定制版 tag”才 WARN 放行。
 #   使用当前目录的 git 仓库（调用方负责 cwd 在仓库根）。
 assert_code_monotonic() {
   local expect=$1 cur=$2
@@ -244,42 +185,36 @@ assert_code_monotonic() {
   sorted=$( { printf '%s\n' "$prev_tags"; printf 'v%s\n' "$cur"; } | sort -Vu ) \
     || { rl_fail "versionCode 单调性: tag 排序失败（sort -Vu），fail-closed"; return 1; }
   local -a tags=()
-  local tag tmp aid prev_code
-  local i   # 防止污染调用方同名变量（j 等其它循环变量目前不存在；新增时同样 local）
+  local tag prev_code
+  local i   # 防止污染调用方同名变量（新增循环变量时同样 local）
   # 版本排序（sort -V）中严格排在 v$cur 之前的 tag；无该 tag 时用 v$cur 自身做分区点同样正确
   while IFS= read -r tag; do
     [[ "$tag" == "v$cur" ]] && break
     [[ -n "$tag" ]] || continue   # 空行（无匹配/空枚举时 printf 产生的空行）不入列
     tags+=("$tag")
   done <<<"$sorted"
-  tmp=$(mktemp "${TMPDIR:-/tmp}/rlmono.XXXXXX") \
-    || { rl_fail "versionCode 单调性: 无法创建临时文件，fail-closed"; return 1; }
   for (( i=${#tags[@]}-1; i>=0; i-- )); do
     tag=${tags[i]}
-    if ! git show "$tag:app/build.gradle.kts" > "$tmp" 2>/dev/null; then
-      rm -f -- "$tmp"
-      rl_fail "versionCode 单调性: git show $tag:app/build.gradle.kts 失败（不可读: tag 不存在/路径缺失/git 异常），fail-closed"
-      return 1
+    if prev_code=$(legacy_code_for_tag "$tag"); then
+      :   # LEGACY 表命中的本定制版 tag，code 已取表值
+    else
+      prev_code=$(tag_code_or_skip "$tag")
+      local trc=$?
+      if (( trc == 3 )); then
+        continue   # 上游 tag：不同 versionCode 体系，跳过
+      fi
+      if (( trc != 0 )); then
+        rl_fail "versionCode 单调性: tag $tag 判定失败（trc=$trc），fail-closed"
+        return 1
+      fi
     fi
-    aid=$(parse_application_id "$tmp") \
-      || { rm -f -- "$tmp"; rl_fail "versionCode 单调性: tag $tag 的 applicationId 身份无法确定（0 处/多处/注释干扰），fail-closed"; return 1; }
-    if [[ "$aid" != "cn.vectory.alphagps" ]]; then
-      continue   # 上游 tag：不同 versionCode 体系，跳过
-    fi
-    prev_code=$(parse_version_code "$tmp") || {
-      rm -f -- "$tmp"
-      rl_fail "versionCode 单调性: 本定制版 tag $tag 的 app/build.gradle.kts versionCode 解析失败（fail-closed）"
-      return 1
-    }
-    rm -f -- "$tmp"
     if (( 10#$expect <= 10#$prev_code )); then
-      rl_fail "versionCode 单调性: expect($expect) 未相对上一发布 tag $tag 递增（其 versionCode=$prev_code）——请先 bump app/build.gradle.kts 的 versionCode"
+      rl_fail "versionCode 单调性: expect($expect) 未相对上一发布 tag $tag 递增（其 versionCode=$prev_code）——请先 bump 仓库根 gradle.properties 中的 versionCode key"
       return 1
     fi
     echo "OK   versionCode 单调性: $expect > $tag(versionCode=$prev_code)"
     return 0
   done
-  rm -f -- "$tmp"
   rl_warn "当前版本 $cur 之前找不到本定制版 tag——跳过 versionCode 单调性比较（仅警告）"
   return 0
 }

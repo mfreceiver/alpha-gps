@@ -2,7 +2,8 @@
 # alpha-gps 发版脚本（精简移植自 dshdroid/scripts/release_build.sh，保留 fail-closed 精神）：
 #   - 版本注入：app/build.gradle.kts 的 versionName 硬编码（无 v 前缀，如 "0.1.0"），构建前
 #     sed 改写、构建后（含失败）自动还原；versionCode 实际值来自产物 manifest，
-#     预期值来自受控源码（app/build.gradle.kts 独立解析）
+#     预期值来自仓库根 gradle.properties 的 alphagps.versionCode（平面文件严格解析，
+#     不再解析 Kotlin 源码）
 #   - 产物 app/build/outputs/apk/foss/release/app-foss-release.apk（签名可用时）归档为
 #     release/alpha-gps-<版本>.apk；release/ 只留最新版，SHA256SUMS 每次全量重生成
 #   - 断言：构建后必须调用 scripts/release_assert_apk.sh（签名者/证书钉定/包名/版本/权限）
@@ -26,9 +27,10 @@ SCRIPT_REAL=$(readlink -f -- "${BASH_SOURCE[0]}")
 REPO_ROOT=$(cd "$(dirname "$SCRIPT_REAL")/.." && pwd)
 cd "$REPO_ROOT"
 
-source "$REPO_ROOT/scripts/release_lib.sh"   # parse_version_code / assert_code_monotonic（纯函数）
+source "$REPO_ROOT/scripts/release_lib.sh"   # parse_version_code_props / expected_code_for_tag / assert_code_monotonic（纯函数）
 
 RELEASE_DIR="$REPO_ROOT/release"
+REPO_PROPS="$REPO_ROOT/gradle.properties"
 OUT_APK_DIR="$REPO_ROOT/app/build/outputs/apk/foss/release"
 BUILD_GRADLE="$REPO_ROOT/app/build.gradle.kts"
 GRADLE_PROPS=$HOME/.gradle/gradle.properties
@@ -325,11 +327,12 @@ if (( PUBLISH_ONLY )); then
     || fail "--publish-only：SHA256SUMS 缺当前版本条目: release/$APK_NAME"
   sha256sum -c "$RELEASE_DIR/SHA256SUMS" > /dev/null \
     || fail "--publish-only：SHA256SUMS 校验失败（归档损坏）"
-  # 预期 versionCode 独立来源：被发布 tag 提交的源码（上方门禁已确认 tag 在 HEAD 上），
+  # 预期 versionCode 独立来源：被发布 tag 提交的 gradle.properties（上方门禁已确认
+  # tag 在 HEAD 上；LEGACY 表中的历史 tag 用表值——其提交的 gradle.properties 尚无该 key），
   # 不信任归档 APK 自读值（否则等于自比，APK code 错也会 PASS）。
   # git show 原始字节经临时文件直入 parser（不经 bash 变量——NUL 会被丢弃仅留 warning）。
-  EXPECT_CODE=$(parse_version_code_from_git "$TAG_NAME" app/build.gradle.kts) \
-    || fail "--publish-only：无法读取/解析 tag 提交源码 $TAG_NAME:app/build.gradle.kts 的 versionCode（fail-closed）"
+  EXPECT_CODE=$(expected_code_for_tag "$TAG_NAME") \
+    || fail "--publish-only：无法读取/解析 tag 提交的 gradle.properties 的 versionCode（fail-closed）: $TAG_NAME"
   assert_code_monotonic "$EXPECT_CODE" "$VERSION_NAME" || fail "--publish-only：versionCode 单调性门禁失败"
   find_aapt
   EMBEDDED_NAME=$(apk_version_name "$RELEASE_DIR/$APK_NAME")
@@ -339,7 +342,7 @@ if (( PUBLISH_ONLY )); then
   [[ "$EMBEDDED_NAME" == "$EMBED_NAME" ]] \
     || fail "--publish-only：归档 APK 内嵌 versionName($EMBEDDED_NAME)与请求版本($EMBED_NAME)不一致"
   "$REPO_ROOT/scripts/release_assert_apk.sh" "$RELEASE_DIR/$APK_NAME" "$EMBED_NAME" "$EXPECT_CODE" "$PINNED_CERT_SHA256" \
-    || fail "--publish-only：归档 APK 断言失败（含 versionCode 与 tag 提交源码期望值比对）"
+    || fail "--publish-only：归档 APK 断言失败（含 versionCode 与 tag 提交 gradle.properties 期望值比对）"
   pass "归档完整（APK+SHA256SUMS+断言）"
   publish_release
   echo
@@ -347,12 +350,12 @@ if (( PUBLISH_ONLY )); then
   exit 0
 fi
 
-# ─── versionCode 独立预期（受控源码解析，先于版本注入；与 APK 读值无关）────
-log "versionCode 期望值: 从源码独立解析（注入前）"
-EXPECT_CODE=$(parse_version_code "$BUILD_GRADLE") \
-  || fail "app/build.gradle.kts versionCode 解析失败（必须恰好一处 'versionCode = N'，fail-closed）"
+# ─── versionCode 独立预期（仓库根 gradle.properties 严格解析，先于版本注入）────
+log "versionCode 期望值: 从 gradle.properties 严格解析（注入前）"
+EXPECT_CODE=$(parse_version_code_props "$REPO_PROPS") \
+  || fail "gradle.properties versionCode 解析失败（key 必须恰好一处且整行严格 key=canonical十进制），fail-closed"
 assert_code_monotonic "$EXPECT_CODE" "$VERSION_NAME" || fail "versionCode 单调性门禁失败"
-pass "源码 versionCode=$EXPECT_CODE（独立预期来源 + 单调性检查）"
+pass "gradle.properties versionCode=$EXPECT_CODE（独立预期来源 + 单调性检查）"
 
 # ─── 版本注入（sed 改写 + 构建后还原）────────────────────────────────────
 # app/build.gradle.kts 硬编码 versionName = "X.Y.Z"（无 v 前缀，无 env 注入），构建前改写、
@@ -388,11 +391,12 @@ export SIGNING_STORE_PASSWORD=$DSH_KEYSTORE_PASSWORD
 ./gradlew --no-daemon :app:assembleFossRelease --console=plain || fail "构建失败"
 restore_gradle || fail "构建成功但版本注入还原失败（备份保留在 $GRADLE_BAK，请人工恢复）"
 trap - EXIT
-# 注入 helper 只注入 versionName、不改 code；还原后源码 code 必须与注入前一致，否则 fail-closed
-EXPECT_CODE_AFTER=$(parse_version_code "$BUILD_GRADLE") \
-  || fail "注入还原后源码 versionCode 再解析失败（fail-closed）"
+# 注入 helper 只注入 versionName；还原后 gradle.properties 的 code 必须与注入前一致
+# （构建不改该文件，断言纯防意外改动），否则 fail-closed
+EXPECT_CODE_AFTER=$(parse_version_code_props "$REPO_PROPS") \
+  || fail "构建后 gradle.properties versionCode 再解析失败（fail-closed）"
 [[ "$EXPECT_CODE_AFTER" == "$EXPECT_CODE" ]] \
-  || fail "注入前后源码 versionCode 不一致（$EXPECT_CODE → $EXPECT_CODE_AFTER），fail-closed"
+  || fail "构建前后 gradle.properties versionCode 不一致（$EXPECT_CODE → $EXPECT_CODE_AFTER），fail-closed"
 
 OUT_APK=""
 for cand in "$OUT_APK_DIR/app-foss-release.apk" "$OUT_APK_DIR/app-foss-release-unsigned.apk"; do
@@ -413,10 +417,10 @@ VERSION_CODE=$(apk_version_code "$OUT_APK")
   || fail "构建产物内嵌 versionName($EMBEDDED_NAME)与请求版本($EMBED_NAME)不一致"
 pass "versionName=$EMBEDDED_NAME versionCode=$VERSION_CODE"
 
-# ─── 断言（期望 versionCode = 源码独立解析的 EXPECT_CODE，非 APK 自读值）──
+# ─── 断言（期望 versionCode = gradle.properties 严格解析的 EXPECT_CODE，非 APK 自读值）──
 log "断言产物"
 "$REPO_ROOT/scripts/release_assert_apk.sh" "$OUT_APK" "$EMBED_NAME" "$EXPECT_CODE" "$PINNED_CERT_SHA256" \
-  || fail "产物断言失败（含 versionCode 与源码期望值比对）"
+  || fail "产物断言失败（含 versionCode 与 gradle.properties 期望值比对）"
 
 # ─── --allow-dirty 到此为止（不归档/不打 tag/不发布）──────────────────────
 if (( ALLOW_DIRTY )); then

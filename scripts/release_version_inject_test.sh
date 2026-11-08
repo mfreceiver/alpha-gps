@@ -132,6 +132,9 @@ setup_sandbox() { # $1=gradlew-body
   mkdir -p "$SB/scripts" "$SB/app" "$SB/home/jdk/bin" "$SB/home/.gradle" "$SB/home/.config/dshdroid/signing"
   cp -- "$HERE/release_build.sh" "$HERE/release_version_inject.sh" "$HERE/release_lib.sh" "$SB/scripts/"
   cp -- "$BUILD" "$SB/app/build.gradle.kts"
+  # 沙箱 gradle.properties：versionCode key 必须存在（release_build.sh 严格解析它取
+  # EXPECT_CODE；值与真实仓库解耦，仅要求合法）
+  printf 'alphagps.versionCode=99\n' > "$SB/gradle.properties"
   printf '#!/usr/bin/env bash\n%s\n' "$1" > "$SB/gradlew"; chmod +x "$SB/gradlew"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$SB/home/jdk/bin/java"; chmod +x "$SB/home/jdk/bin/java"
   # 沙箱 HOME：伪造 gradle.properties 与 keystore 占位（keytool 已被 shim，只需文件存在）
