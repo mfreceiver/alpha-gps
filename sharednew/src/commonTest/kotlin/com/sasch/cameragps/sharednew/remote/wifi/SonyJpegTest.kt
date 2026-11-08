@@ -45,7 +45,21 @@ class SonyJpegTest {
         assertEquals(1, SonyJpeg.inspect(jpegWithExifOrientation(0, littleEndian = false)).orientation)
     }
 
-    private fun jpegWithExifOrientation(orientation: Int, littleEndian: Boolean): ByteArray {
+    @Test
+    fun rejectsHostileIfdOffsetsInBothEndianNesses() {
+        // An IFD offset near Int.MAX_VALUE used to overflow the additive bounds check
+        // (`tiff + ifd + 2 > end`) into a negative value and crash with a negative index;
+        // it must instead degrade to the default orientation.
+        assertEquals(1, SonyJpeg.inspect(jpegWithExifOrientation(6, littleEndian = true, ifdOffset = 0x7fffffff)).orientation)
+        assertEquals(1, SonyJpeg.inspect(jpegWithExifOrientation(6, littleEndian = false, ifdOffset = 0x7fffffff)).orientation)
+        assertEquals(1, SonyJpeg.inspect(jpegWithExifOrientation(6, littleEndian = true, ifdOffset = 0x7ffffff0)).orientation)
+    }
+
+    private fun jpegWithExifOrientation(
+        orientation: Int,
+        littleEndian: Boolean,
+        ifdOffset: Int = 8,
+    ): ByteArray {
         fun u16(value: Int) = if (littleEndian) bytes(value and 0xff, value shr 8)
         else bytes(value shr 8, value and 0xff)
 
@@ -53,7 +67,7 @@ class SonyJpegTest {
             bytes(value and 0xff, (value shr 8) and 0xff, (value shr 16) and 0xff, (value shr 24) and 0xff)
         else bytes((value shr 24) and 0xff, (value shr 16) and 0xff, (value shr 8) and 0xff, value and 0xff)
 
-        val tiff = (if (littleEndian) bytes(0x49, 0x49) else bytes(0x4d, 0x4d)) + u16(42) + u32(8) +
+        val tiff = (if (littleEndian) bytes(0x49, 0x49) else bytes(0x4d, 0x4d)) + u16(42) + u32(ifdOffset) +
             u16(1) + u16(0x0112) + u16(3) + u32(1) + u16(orientation) + bytes(0, 0) + u32(0)
         val payload = "Exif".encodeToByteArray() + bytes(0, 0) + tiff
         val base = testJpeg()

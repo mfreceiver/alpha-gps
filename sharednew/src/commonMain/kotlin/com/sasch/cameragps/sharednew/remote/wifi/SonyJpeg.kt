@@ -75,9 +75,13 @@ internal object SonyJpeg {
         }
         if ((if (little) uint16le(tiff + 2) else uint16(tiff + 2)) != 42) return 0
         val ifd = (if (little) uint32le(tiff + 4) else uint32be(tiff + 4)).toInt()
-        if (ifd < 8 || tiff + ifd + 2 > end) return 0
+        // Bounds are validated subtractively in Long space: additive Int math such as
+        // `tiff + ifd + 2` overflows to negative on hostile offsets (e.g. 0x7fffffff)
+        // and would slip past an upper-bound comparison into negative indexing.
+        val tiffLength = end.toLong() - tiff
+        if (ifd < 8 || tiffLength < ifd.toLong() + 2) return 0
         val entries = if (little) uint16le(tiff + ifd) else uint16(tiff + ifd)
-        if (entries > 512 || tiff + ifd + 2 + entries * 12 > end) return 0
+        if (entries > 512 || tiffLength < ifd.toLong() + 2 + entries.toLong() * 12) return 0
         repeat(entries) { index ->
             val entry = tiff + ifd + 2 + index * 12
             val tag = if (little) uint16le(entry) else uint16(entry)
@@ -93,25 +97,38 @@ internal object SonyJpeg {
 }
 
 /**
+ * Pure orientation→transform mapping behind [rotateByExifOrientation]: `true`
+ * [ExifOrientationTransform.swapDimensions] means the rotated result exchanges width and
+ * height, [ExifOrientationTransform.rotationDegrees] is the canvas rotation applied about
+ * the output center. Orientations 1/2/4/5/7 return `null` — no rotation (see
+ * [rotateByExifOrientation] for why mirrored variants are not handled).
+ */
+internal data class ExifOrientationTransform(
+    val swapDimensions: Boolean,
+    val rotationDegrees: Float,
+)
+
+internal fun exifOrientationTransform(orientation: Int): ExifOrientationTransform? = when (orientation) {
+    3 -> ExifOrientationTransform(swapDimensions = false, rotationDegrees = 180f)
+    6 -> ExifOrientationTransform(swapDimensions = true, rotationDegrees = 90f)
+    8 -> ExifOrientationTransform(swapDimensions = true, rotationDegrees = -90f)
+    else -> null
+}
+
+/**
  * Rotates a decoded JPEG bitmap upright per its EXIF orientation. Cameras only emit
  * 90-degree orientations (1/3/6/8); the mirrored variants 2/4/5/7 are practically
  * nonexistent from Sony bodies, so they fall back to the un-rotated pixels.
  */
 internal fun ImageBitmap.rotateByExifOrientation(orientation: Int): ImageBitmap {
-    if (orientation == 1) return this
-    if (orientation != 3 && orientation != 6 && orientation != 8) return this
-    val swap = orientation == 6 || orientation == 8
+    val transform = exifOrientationTransform(orientation) ?: return this
     val output = ImageBitmap(
-        if (swap) height else width,
-        if (swap) width else height
+        if (transform.swapDimensions) height else width,
+        if (transform.swapDimensions) width else height
     )
     val canvas = Canvas(output)
     canvas.translate(output.width / 2f, output.height / 2f)
-    when (orientation) {
-        3 -> canvas.rotate(180f)
-        6 -> canvas.rotate(90f)
-        8 -> canvas.rotate(-90f)
-    }
+    canvas.rotate(transform.rotationDegrees)
     canvas.drawImage(this, Offset(-width / 2f, -height / 2f), Paint())
     return output
 }
