@@ -193,7 +193,11 @@ internal class SonyPtpInitializer(private val commands: PtpIpCommandQueue) {
                 mediaServerSupported,
                 deviceInfo
             )
-            if (purpose == SonySessionPurpose.ImageTransfer && !separateTransfer) {
+            // v4 combined sessions (remoteWithTransfer, mode 2) already speak the image
+            // transfer operations, so a dedicated transfer session (mode 1) is only
+            // mandatory on v3-and-earlier separate-transfer devices. Browse-only v4
+            // connections reuse the combined session and simply never start live view.
+            if (purpose == SonySessionPurpose.ImageTransfer && !separateTransfer && !remoteWithTransfer) {
                 throw Failure("unsupported_transfer_session")
             }
             if (remoteWithTransfer || separateTransfer) {

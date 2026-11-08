@@ -203,13 +203,50 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
 
     fun collapsePreview() { fullScreenPreview = false }
 
+    /**
+     * Browse-only mode: this connection exists to download photos, not to remote-shoot.
+     * Set by the screen; drives both the auto-enter effect and back navigation.
+     */
+    var browseOnly: Boolean = false
+
+    /** Guards the browse-only auto-enter so it fires once per connection, not after every close. */
+    private var autoEnteredBrowser = false
+
+    /**
+     * Auto-opens the photo browser once per connection while in browse-only mode. Leaving
+     * the browser deliberately (back) must strand the user on a "no live view" Ready
+     * screen — so the effect never re-opens it; leaving Ready resets the flag and lets the
+     * next connection auto-enter again.
+     */
+    fun maybeAutoEnterBrowser() {
+        val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return
+        if (state.phase != WifiRemotePhase.Ready) {
+            autoEnteredBrowser = false
+            return
+        }
+        if (!browseOnly || autoEnteredBrowser || state.photoBrowser.open || !state.canTransferImages) return
+        autoEnteredBrowser = true
+        controller.browsePhotos(identifier)
+    }
+
     fun navigateBack(onClose: () -> Unit) {
         when {
             fullScreenPreview -> collapsePreview()
             viewedPhotoIndex != null -> closePhoto()
             selectedPhotoIds.isNotEmpty() -> clearPhotoSelection()
-            controller.sessions.value[identifier.uppercase()]?.wifiRemote?.photoBrowser?.open == true ->
-                controller.leavePhotoBrowser(identifier)
+            controller.sessions.value[identifier.uppercase()]?.wifiRemote?.photoBrowser?.open == true -> {
+                val state = controller.sessions.value[identifier.uppercase()]!!.wifiRemote
+                if (browseOnly) {
+                    // Browse-only has no remote-shooting screen to go "back" to: leaving
+                    // the browser means ending the session. While a transfer or catalog
+                    // load is in flight the controllers would ignore it anyway — wait.
+                    if (!state.photoBrowser.loading && !state.imageTransfer.busy) {
+                        controller.disconnect(identifier)
+                    }
+                } else {
+                    controller.leavePhotoBrowser(identifier)
+                }
+            }
             else -> onClose()
         }
     }
@@ -269,11 +306,11 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
         if (!ready || state.photoBrowser.open) viewModel.collapsePreview()
     }
     // Browse-only: as soon as the session is ready, walk straight into the photo
-    // browser — there is no live view or shutter to show first.
+    // browser — there is no live view or shutter to show first. The once-per-connection
+    // guard lives in the ViewModel: leaving the browser (back) must not re-open it.
+    viewModel.browseOnly = browseOnly
     LaunchedEffect(browseOnly, ready, state.photoBrowser.open, state.canTransferImages) {
-        if (browseOnly && ready && !state.photoBrowser.open && state.canTransferImages) {
-            controller.browsePhotos(id)
-        }
+        viewModel.maybeAutoEnterBrowser()
     }
     LaunchedEffect(
         ready,

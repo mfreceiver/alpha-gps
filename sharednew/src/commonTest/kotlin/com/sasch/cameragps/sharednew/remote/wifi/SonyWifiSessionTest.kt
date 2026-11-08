@@ -257,6 +257,46 @@ class SonyWifiSessionTest : WifiLoggingTest() {
     }
 
     @Test
+    fun versionFourBrowseOnlyUsesCombinedSessionWithoutLiveView() = runTest {
+        // v4 combined sessions (mode 2) speak the transfer operations themselves, so a
+        // browse-only v4 connection must open through them instead of being rejected
+        // for lacking a separate transfer session.
+        val camera = Camera().apply {
+            version = "4.00"; mediaServer = "Enable"; initialTransfer = true
+        }
+        val connection = camera.open(backgroundScope, browseOnly = true)
+        val liveView = backgroundScope.launch { connection.images.collect { } }
+        try {
+            liveView.join()
+            assertFalse(connection.canCapture)
+            assertTrue(connection.canTransferImages)
+            // One combined session, opened as mode 2 — no dedicated transfer session.
+            assertEquals(listOf(listOf(1L, 2L)), camera.openModes())
+            assertEquals(2, camera.channels.size, "No second session may be opened")
+            assertEquals("DSC0007.JPG", connection.openPhotoBrowser().photos.single().filename)
+            assertEquals(
+                listOf(listOf(1L, 2L)),
+                camera.openModes(),
+                "Opening the browser must not re-open the session"
+            )
+            assertEquals(
+                WifiImageTransferStatus.Saved,
+                connection.downloadPhoto(7, WifiPhotoDownloadFormat.Original) {}.status
+            )
+            connection.closePhotoBrowser()
+            assertEquals(
+                listOf(listOf(1L, 2L)),
+                camera.openModes(),
+                "Browse-only must not switch back to remote shooting"
+            )
+            assertEquals(0, camera.previewOpened, "Live view must never start in browse-only")
+        } finally {
+            liveView.cancel(); connection.close()
+        }
+        assertEquals(1, camera.releaseCount)
+    }
+
+    @Test
     fun versionFourKeepsCombinedSessionAndLegacyWithoutMediaServerKeepsStandardSession() = runTest {
         for ((version, media) in listOf(
             "4.00" to "Enable",
