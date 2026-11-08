@@ -53,6 +53,25 @@ git submodule update --init --recursive
 Run this again after pulling changes that update the dependencies. Native builds use these local
 sources without downloading dependencies. F-Droid build recipes must enable `submodules: true`.
 
+## iOS target is disabled in this custom fork
+
+This personal customization no longer ships iOS builds, so the Gradle build does not register any
+Apple targets (`iosArm64`/`iosSimulatorArm64`), their source sets, KSP configurations or the Sentry
+Cocoa linking plugin. Android builds are therefore not slowed down or otherwise affected by iOS.
+The switch lives in `gradle.properties` (`alphagps.enableIos=false`).
+
+All iOS sources are kept untouched (`sharednew/src/iosMain`, `sharednew/src/iosTest`, the
+`iosApp/` Xcode project, localization tooling), so merging upstream changes stays conflict-free.
+
+To build the iOS app again on a Mac with Xcode installed, pass the flag explicitly:
+
+```bash
+./gradlew -Palphagps.enableIos=true <tasks>
+```
+
+This restores the original behavior (Apple targets declared, `iosMain` Sentry dependency and the
+Sentry Cocoa linker plugin active).
+
 ## How can I contribute?
 As the project is open source, contributions are welcome! Just check out the repo, open Android Studio and create a Pull Request.
 
