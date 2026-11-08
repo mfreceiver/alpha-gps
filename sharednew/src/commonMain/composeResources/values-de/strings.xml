@@ -311,12 +311,12 @@
     <string name="camera_setting_retry">Kameraeinstellungen aktualisieren</string>
     <!-- In-app release notes. -->
     <string name="whats_new_title">Was ist neu?</string>
-    <string name="whats_new_171_zv1">Verbesserte WLAN-Kompatibilität für die Sony ZV-1 und andere ältere Sony-Kameras, einschließlich Live-View-Start und Fotoübertragung.</string>
+    <string name="whats_new_171_zv1">Verbesserte WLAN-Kompatibilität für die Sony ZV-1 und andere ältere Sony-Kameras, einschließlich Fotoübertragung.</string>
     <string name="whats_new_171_rx0">Wiederholte Bluetooth-Verbindungsabbrüche bei der Standortübertragung mit Kameras wie der Sony RX0 II wurden behoben, wenn Always On deaktiviert ist.</string>
     <string name="whats_new_version">Version %1$s</string>
     <string name="whats_new_close">Verstanden</string>
     <string name="whats_new_open">Versionshinweise anzeigen</string>
-    <string name="whats_new_170_wifi_remote">Neue experimentelle WLAN-Funktion mit Live-View, Fernauslöser sowie Ansehen und Herunterladen von Fotos. Bisher nur mit dem Sony α6700 getestet.\n\nZum Öffnen tippe im Geräten auf deine Kamera und dann auf „WLAN-Fotoübertragung“.</string>
+    <string name="whats_new_170_wifi_remote">Neue experimentelle WLAN-Funktion zum Ansehen und Herunterladen von Fotos. Bisher nur mit dem Sony α6700 getestet.\n\nZum Öffnen tippe im Geräten auf deine Kamera und dann auf „WLAN-Fotoübertragung“.</string>
     <string name="whats_new_162_time">Du kannst die automatische Zeitkorrektur jetzt in den Kameradetails ansehen und ändern. Diese Einstellung steuert, ob die Kamera Datum und Uhrzeit anhand deines Smartphones anpasst.</string>
     <string name="whats_new_162_notifications">Benachrichtigungen zur Standortübertragung werden jetzt zuverlässiger aktualisiert.</string>
     <string name="whats_new_162_pairing">Die Kamera-Kopplung unter iOS nutzt jetzt die Zubehörauswahl des Systems. Bereits gekoppelte Kameras müssen möglicherweise erneut autorisiert werden. Die App führt dich durch die Schritte.</string>
@@ -358,7 +358,7 @@
     <string name="wifi_connection_failed">Die WLAN-Verbindung zur Kamera konnte nicht geöffnet werden.</string>
     <string name="wifi_connection_help">Verbindungshilfe</string>
     <string name="wifi_connection_help_title">Verbindungseinstellungen prüfen</string>
-    <string name="wifi_connection_help_message">Stelle sicher, dass die Kamera für Fernaufnahmen bereit und dieses Smartphone mit ihrem WLAN verbunden ist.\n\nEinige Android-Versionen können den Netzwerkzugriff einer App blockieren. Suche in den App-Einstellungen nach „Mobile Daten &amp; WLAN“, „Netzwerkzugriff“ oder „Datennutzung einschränken“ und erlaube WLAN für Alpha GPS. Erlaube unter „Berechtigungen“ bei Bedarf „Geräte in der Nähe“ oder „Genauer Standort“ sowie „Lokales Netzwerk“, falls aufgeführt.\n\nKehre anschließend hierher zurück und versuche die Verbindung erneut. Die Bezeichnungen können je nach Smartphone abweichen.</string>
+    <string name="wifi_connection_help_message">Stelle sicher, dass die Kamera für die Fotoübertragung bereit (z. B. „An Smartphone senden“ aktiviert) und dieses Smartphone mit ihrem WLAN verbunden ist.\n\nEinige Android-Versionen können den Netzwerkzugriff einer App blockieren. Suche in den App-Einstellungen nach „Mobile Daten &amp; WLAN“, „Netzwerkzugriff“ oder „Datennutzung einschränken“ und erlaube WLAN für Alpha GPS. Erlaube unter „Berechtigungen“ bei Bedarf „Geräte in der Nähe“ oder „Genauer Standort“ sowie „Lokales Netzwerk“, falls aufgeführt.\n\nKehre anschließend hierher zurück und versuche die Verbindung erneut. Die Bezeichnungen können je nach Smartphone abweichen.</string>
     <string name="wifi_remote_failed">Die Verbindung konnte nicht hergestellt werden. Überprüfe die IP-Adresse der Kamera, halte ihre Smartphone-Verbindung aktiv und schließe andere Apps zur Kamerasteuerung.</string>
     <string name="wifi_remote_lost">Die Verbindung zur Kamera wurde unterbrochen. Verbinde dich erneut mit dem WLAN der Kamera und stelle die Verbindung in der App wieder her.</string>
     <string name="wifi_remote_other_camera">Es ist eine weitere WLAN-Fotoübertragungssitzung aktiv. Schließe diese, bevor du diese Kamera verbindest.</string>
