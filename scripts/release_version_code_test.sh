@@ -24,17 +24,28 @@
 #   场景 20 wiring：APK code == 源码 EXPECT_CODE → 真实 release_assert_apk.sh 断言通过
 #   场景 21 P2-A URL 字符串含 /* 后接真实赋值 → 解析到真实值（不被字符串内 /* 吞掉）
 #   场景 22 P2-A 成对标记字符串 "/*" 与 "*/" → 不构成注释，真实赋值正常解析
-#   场景 23 P2-A 嵌套块注释内含伪赋值 → 不计入，只取注释外真实赋值
-#   场景 24 P2-A 全部赋值都在嵌套注释内 → 0 处 → fail-closed
-#   场景 25 P2-A 真实 custom + 嵌套注释内 upstream 伪赋值 → 判定 custom 且 code 取真实值
+#   场景 23 P2-A 【设计决策变更】出现块注释 /* 即整体 fail-closed（不再支持嵌套块注释剥离）
+#   场景 24 P2-A 【设计决策变更】全部赋值都在块注释内 → fail-closed（原因同 23）
+#   场景 25 P2-A 真实 custom + 行注释内 upstream 伪赋值 → 判定 custom 且 code 取真实值
 #   场景 26 P2-A 行尾注释 applicationId = "..." // c → 字符串完整保留后剥注释
-#   场景 27 P2-A raw string 内含 // → 不当行注释，后续赋值正常解析
-#   场景 28 P2-A 字符串模板 ${...} 内嵌引号 → 不支持构造 → fail-closed
+#   场景 27 P2-A 【设计决策变更】raw string（"""）→ 不支持，fail-closed
+#   场景 28 P2-A 字符串模板 ${...}（任何形式）→ 不支持构造 → fail-closed
 #   场景 29 P2-A 未闭合块注释 / 未闭合字符串 / 未闭合 raw string → fail-closed
 #   场景 30 P2-A NUL 字节输入（文件与 stdin 两路）→ 明确拒绝 fail-closed
-#   场景 31 P2-A sol 复现：tag 源码含 URL+嵌套注释陷阱，assert 3 0.1.3 不得 rc0
+#   场景 31 P2-A sol 复现：tag 源码含 URL+嵌套注释陷阱 → 块注释 fail-closed，assert 3 0.1.3 不得 rc0
 #   场景 32 P2-B grep rc=2（函数覆盖）→ fail-closed
 #   场景 33 P2-B grep rc=127（函数覆盖）→ fail-closed；python3 缺失 → 明确提示依赖
+#   场景 34 sol-1 三引号开头（含四引号结尾变体）+ 注释伪赋值 → fail-closed
+#   场景 35 sol-2 raw string 内伪赋值 / 多行赋值 → fail-closed；纯多行赋值 → 0 处 fail-closed
+#   场景 36 sol-3 val s = """${foo""" → fail-closed
+#   场景 37 CRLF 行尾（逐字节保留，不归一化）→ 正常解析
+#   场景 38 首个 BOM 显式剥离 → 正常解析
+#   场景 39 '\u002f' 完整 6 字符消费；截断 '\u00' → fail-closed
+#   场景 40 普通字符串内裸换行 → fail-closed
+#   场景 41 fd0 关闭（0<&-）→ 立即非零（不得挂起；timeout 5，超时视为失败），两 parser 各一条
+#   场景 42 NUL 在 tag 调用层（git show 原始字节经临时文件，不经 bash 变量）→ fail-closed
+#   场景 43 publish-only 接线：tag 源码 versionCode 含 NUL → fail-closed（不经 bash 变量丢 NUL）
+#   场景 44 扫描失败路径不遗留临时文件（stdin 路径无 mktemp；git 路径任何退出均清理）
 # fixture 纪律：wiring 沙箱用测试内固定模板 gradle（FIXTURE_CODE/FIXTURE_NAME 常量），
 # 与仓库真实 versionCode/versionName 解耦——仓库 bump 后本测试依然通过。
 set -uo pipefail
@@ -197,16 +208,22 @@ check "非零退出" test "$RC" -ne 0
 check "错误含『不可读』" grep -q "不可读" "$TMP/err"
 
 echo "== 场景 14: P2-2 仅块注释中的伪 versionCode → fail-closed =="
+# 设计决策：窄白名单——CODE 状态出现 /* 即整体拒绝（不再解析块注释）
 printf '/*\n versionCode = 9\n*/\n' > "$TMP/blockonly.gradle"
 OUT=$(parse_version_code "$TMP/blockonly.gradle" 2>"$TMP/err"); RC=$?
-check "非零退出（旧实现会输出 9 放行）" test "$RC" -ne 0
+check "非零退出（块注释不在支持集合）" test "$RC" -ne 0
 check "未输出 9" test "$OUT" != "9"
-check "错误含『实际 0 处』" grep -q "实际 0 处" "$TMP/err"
+check "错误含『不支持构造: 块注释』" grep -q "不支持构造: 块注释" "$TMP/err"
 
-echo "== 场景 15: P2-2 有效赋值 + 注释伪赋值并存 → 只取有效的那处 =="
-printf '        // versionCode = 99\n        /* versionCode = 88 */\n        versionCode = 3\n' > "$TMP/mixed.gradle"
+echo "== 场景 15: P2-2 有效赋值 + 行注释伪赋值并存 → 只取有效的那处 =="
+printf '        // versionCode = 99\n        versionCode = 3\n' > "$TMP/mixed.gradle"
 OUT=$(parse_version_code "$TMP/mixed.gradle" 2>"$TMP/err"); RC=$?
 check "退出码 0 且解析为 3" test "$RC" -eq 0 -a "$OUT" == "3"
+# 设计决策变更：同一文件再加 /* ... */ 伪赋值 → 整体 fail-closed（块注释不支持）
+printf '        // versionCode = 99\n        /* versionCode = 88 */\n        versionCode = 3\n' > "$TMP/mixedblk.gradle"
+OUT=$(parse_version_code "$TMP/mixedblk.gradle" 2>"$TMP/err"); RC=$?
+check "含块注释伪赋值 → 非零（设计决策：块注释 fail-closed）" test "$RC" -ne 0
+check "错误含『不支持构造: 块注释』" grep -q "不支持构造: 块注释" "$TMP/err"
 
 echo "== 场景 16: P2-2 非法值全部 fail-closed；2147483647 边界放行 =="
 for bad in 2147483648 18446744073709551617 010 0; do
@@ -312,16 +329,25 @@ cat > "$TMP/url.gradle" <<'UG'
 val url = "https://example.test/*"
 applicationId = "cn.vectory.alphagps"
 versionCode = 9
+UG
+OUT=$(parse_application_id "$TMP/url.gradle" 2>"$TMP/err"); RC=$?
+check "applicationId 解析为真实 custom" test "$RC" -eq 0 -a "$OUT" == "cn.vectory.alphagps"
+OUT=$(parse_version_code "$TMP/url.gradle" 2>"$TMP/err"); RC=$?
+check "versionCode 解析为真实 9" test "$RC" -eq 0 -a "$OUT" == "9"
+# 设计决策变更：同一陷阱再加真实块注释（嵌套与否都一样）→ 整体 fail-closed
+cat > "$TMP/urlblk.gradle" <<'UG'
+val url = "https://example.test/*"
+applicationId = "cn.vectory.alphagps"
+versionCode = 9
 /* outer comment
     /* inner comment */
 applicationId = "com.saschl.cameragps"
 versionCode = 3
 */
 UG
-OUT=$(parse_application_id "$TMP/url.gradle" 2>"$TMP/err"); RC=$?
-check "applicationId 解析为真实 custom" test "$RC" -eq 0 -a "$OUT" == "cn.vectory.alphagps"
-OUT=$(parse_version_code "$TMP/url.gradle" 2>"$TMP/err"); RC=$?
-check "versionCode 解析为真实 9（非注释内伪 3）" test "$RC" -eq 0 -a "$OUT" == "9"
+OUT=$(parse_version_code "$TMP/urlblk.gradle" 2>"$TMP/err"); RC=$?
+check "URL 陷阱 + 真实块注释 → 非零（块注释 fail-closed）" test "$RC" -ne 0
+check "错误含『不支持构造: 块注释』" grep -q "不支持构造: 块注释" "$TMP/err"
 
 echo "== 场景 22: 成对标记字符串 \"/*\" 与 \"*/\" → 不构成注释 =="
 printf 'val a = "/*"\nval b = "*/"\napplicationId = "cn.vectory.alphagps"\nversionCode = 3\n' > "$TMP/pair.gradle"
@@ -330,28 +356,28 @@ check "退出码 0 且解析为 3" test "$RC" -eq 0 -a "$OUT" == "3"
 OUT=$(parse_application_id "$TMP/pair.gradle" 2>"$TMP/err"); RC=$?
 check "applicationId 正常解析" test "$RC" -eq 0 -a "$OUT" == "cn.vectory.alphagps"
 
-echo "== 场景 23: 嵌套块注释内含伪赋值 → 不计入 =="
+echo "== 场景 23: 【设计决策变更】出现块注释（嵌套）即整体 fail-closed =="
+# 旧断言（嵌套正确剥离、只取注释外 3）已按窄白名单设计改为拒绝整份文件
 printf 'versionCode = 3\n/* outer\n/* inner\nversionCode = 99\n*/\nversionCode = 88\n*/\n' > "$TMP/nest.gradle"
 OUT=$(parse_version_code "$TMP/nest.gradle" 2>"$TMP/err"); RC=$?
-check "退出码 0 且只取注释外的 3" test "$RC" -eq 0 -a "$OUT" == "3"
+check "非零退出（块注释不支持）" test "$RC" -ne 0
+check "未输出 3/88/99" test "$OUT" != "3" -a "$OUT" != "88" -a "$OUT" != "9"
+check "错误含『不支持构造: 块注释』" grep -q "不支持构造: 块注释" "$TMP/err"
 
-echo "== 场景 24: 全部赋值都在嵌套注释内 → 0 处 fail-closed =="
+echo "== 场景 24: 【设计决策变更】全部赋值都在块注释内 → 块注释 fail-closed =="
 printf '/*\n/*\nversionCode = 9\n*/\nversionCode = 8\n*/\n' > "$TMP/allcomment.gradle"
 OUT=$(parse_version_code "$TMP/allcomment.gradle" 2>"$TMP/err"); RC=$?
 check "非零退出" test "$RC" -ne 0
 check "未输出 8/9" test "$OUT" != "8" -a "$OUT" != "9"
-check "错误含『实际 0 处』" grep -q "实际 0 处" "$TMP/err"
+check "错误含『不支持构造: 块注释』" grep -q "不支持构造: 块注释" "$TMP/err"
 
-echo "== 场景 25: 真实 custom + 嵌套注释内 upstream 伪赋值 → 判定 custom 且取真实 code =="
+echo "== 场景 25: 真实 custom + 行注释内 upstream 伪赋值 → 判定 custom 且取真实 code =="
 R9=$TMP/decoy; make_git_repo "$R9"
 commit_file "$R9" app/build.gradle.kts 'val url = "https://example.test/*"
 applicationId = "cn.vectory.alphagps"
 versionCode = 9
-/* outer
-    /* inner */
-applicationId = "com.saschl.cameragps"
-versionCode = 3
-*/' "v0.1.2 decoy"
+// applicationId = "com.saschl.cameragps"
+// versionCode = 3' "v0.1.2 decoy"
 git -C "$R9" tag v0.1.2
 OUT=$(cd "$R9" && git show v0.1.2:app/build.gradle.kts | parse_application_id -); RC=$?
 check "tag 身份判定为真实 custom" test "$RC" -eq 0 -a "$OUT" == "cn.vectory.alphagps"
@@ -364,21 +390,22 @@ printf 'applicationId = "cn.vectory.alphagps" // custom build\nversionCode = 3\n
 OUT=$(parse_application_id "$TMP/tailc.gradle" 2>"$TMP/err"); RC=$?
 check "退出码 0 且包名完整" test "$RC" -eq 0 -a "$OUT" == "cn.vectory.alphagps"
 
-echo "== 场景 27: raw string 内含 // → 不当行注释 =="
+echo "== 场景 27: 【设计决策变更】raw string（\"\"\"）→ 不支持，fail-closed =="
 printf 'val s = """\nhttp://example.test/a//b\n"""\nversionCode = 3\n' > "$TMP/raw.gradle"
 OUT=$(parse_version_code "$TMP/raw.gradle" 2>"$TMP/err"); RC=$?
-check "退出码 0 且解析为 3" test "$RC" -eq 0 -a "$OUT" == "3"
+check "非零退出（三引号不在支持集合）" test "$RC" -ne 0
+check "错误含『不支持构造: 三引号』" grep -q "不支持构造: 三引号" "$TMP/err"
 
-echo "== 场景 28: 字符串模板 \${...} 内嵌引号 → 不支持构造 fail-closed =="
+echo "== 场景 28: 字符串模板 \${...} → 不支持构造 fail-closed =="
 printf 'val x = "a${na"me}b"\nversionCode = 3\n' | rl_strip_kotlin_comments > "$TMP/tpl.out" 2>"$TMP/err"; RC=$?
 check "非零退出" test "$RC" -ne 0
-check "错误含『内嵌引号』" grep -q "内嵌引号" "$TMP/err"
+check "错误含『字符串模板』" grep -q "字符串模板" "$TMP/err"
 
 echo "== 场景 29: 未闭合块注释 / 字符串 / raw string → fail-closed =="
 printf 'versionCode = 3\n/* never closed\n' > "$TMP/ub.gradle"
 OUT=$(parse_version_code "$TMP/ub.gradle" 2>"$TMP/err"); RC=$?
 check "未闭合块注释 → 非零" test "$RC" -ne 0
-check "错误含『块注释未闭合』" grep -q "块注释未闭合" "$TMP/err"
+check "错误含『不支持构造: 块注释』" test "$(grep -c '不支持构造: 块注释' "$TMP/err")" -eq 1
 printf 'val url = "https://x /*\nversionCode = 3\n' > "$TMP/us.gradle"
 OUT=$(parse_version_code "$TMP/us.gradle" 2>"$TMP/err"); RC=$?
 check "未闭合字符串（含 /* 陷阱）→ 非零" test "$RC" -ne 0
@@ -386,7 +413,7 @@ check "错误含『字符串未闭合』" grep -q "字符串未闭合" "$TMP/err
 printf 'val s = """\nabc\nversionCode = 3\n' > "$TMP/urs.gradle"
 OUT=$(parse_version_code "$TMP/urs.gradle" 2>"$TMP/err"); RC=$?
 check "未闭合 raw string → 非零" test "$RC" -ne 0
-check "错误含『raw string（三引号）未闭合』" grep -q "raw string（三引号）未闭合" "$TMP/err"
+check "错误含『不支持构造: 三引号』" grep -q "不支持构造: 三引号" "$TMP/err"
 
 echo "== 场景 30: NUL 字节输入（文件与 stdin）→ 明确拒绝 =="
 printf 'versionCode = 3\0\nversionCode = 4\n' > "$TMP/nul.gradle"
@@ -397,7 +424,7 @@ OUT=$(printf 'versionCode = 3\0\n' | parse_version_code - 2>"$TMP/err"); RC=$?
 check "stdin 含 NUL → 非零" test "$RC" -ne 0
 check "stdin 错误含『NUL』" grep -q "NUL" "$TMP/err"
 
-echo "== 场景 31: sol 复现——tag 源码含 URL+嵌套注释陷阱，assert 3 0.1.3 不得 rc0 =="
+echo "== 场景 31: sol 复现——tag 源码含 URL+嵌套注释陷阱 → 块注释 fail-closed，assert 3 0.1.3 不得 rc0 =="
 R10=$TMP/trap; make_git_repo "$R10"
 commit_file "$R10" app/build.gradle.kts 'val url = "https://example.test/*"
 applicationId = "cn.vectory.alphagps"
@@ -409,8 +436,8 @@ versionCode = 3
 */' "v0.1.2 trap"
 git -C "$R10" tag v0.1.2
 OUT=$(cd "$R10" && assert_code_monotonic 3 0.1.3 2>"$TMP/err"); RC=$?
-check "非零退出（真实 code 9，3 未递增；旧实现会 WARN 放行）" test "$RC" -ne 0
-check "错误点名 v0.1.2 及其真实 code=9" grep -q "tag v0.1.2 递增（其 versionCode=9）" "$TMP/err"
+check "非零退出（含块注释 → 身份无法确定，绝不 WARN 放行）" test "$RC" -ne 0
+check "错误含『身份无法确定』" grep -q "身份无法确定" "$TMP/err"
 
 echo "== 场景 32: P2-B grep rc=2（函数覆盖）→ fail-closed =="
 R11=$TMP/greprc2; make_git_repo "$R11"
@@ -429,6 +456,112 @@ check "非零退出" test "$RC" -ne 0
 check "错误含『tag 过滤 grep 异常（rc=127）』" grep -q "tag 过滤 grep 异常（rc=127）" "$TMP/err"
 OUT=$(PATH= rl_strip_kotlin_comments_file "$TMP/nest.gradle" 2>"$TMP/err" </dev/null); RC=$?
 check "python3 缺失 → 非零且提示『缺少依赖 python3』" test "$RC" -ne 0 -a "$(grep -c '缺少依赖 python3' "$TMP/err")" -eq 1
+
+echo "== 场景 34: sol-1 三引号开头（含四引号结尾变体）+ 注释伪赋值 → fail-closed =="
+cat > "$TMP/tq.gradle" <<'TQ'
+val a = """x"""" // open-quote variant
+// versionCode = 99
+val d = """"text"""
+versionCode = 3
+TQ
+OUT=$(parse_version_code "$TMP/tq.gradle" 2>"$TMP/err"); RC=$?
+check "非零退出（含 \"\"\" → fail-closed）" test "$RC" -ne 0
+check "错误含『不支持构造: 三引号』" grep -q "不支持构造: 三引号" "$TMP/err"
+
+echo "== 场景 35: sol-2 raw string 内伪赋值 / 多行赋值 → fail-closed；纯多行赋值 → 0 处 fail-closed =="
+printf 'val note = """\napplicationId = "com.saschl.cameragps"\nversionCode = 1\n"""\napplicationId =\n "cn.vectory.alphagps"\nversionCode = 2\n' > "$TMP/rawtrap.gradle"
+OUT=$(parse_version_code "$TMP/rawtrap.gradle" 2>"$TMP/err"); RC=$?
+check "raw string 伪赋值 → 非零（含 \"\"\"）" test "$RC" -ne 0
+check "错误含『不支持构造: 三引号』" grep -q "不支持构造: 三引号" "$TMP/err"
+OUT=$(parse_application_id "$TMP/rawtrap.gradle" 2>"$TMP/err"); RC=$?
+check "applicationId 同文件同样非零" test "$RC" -ne 0
+# 无 raw string 的纯多行赋值（applicationId 与值分行）→ 不构成整行匹配 → 0 处 fail-closed
+printf 'applicationId =\n "cn.vectory.alphagps"\nversionCode = 3\n' > "$TMP/ml.gradle"
+OUT=$(parse_application_id "$TMP/ml.gradle" 2>"$TMP/err"); RC=$?
+check "纯多行赋值 → 非零" test "$RC" -ne 0
+check "错误含『实际 0 处』" grep -q "实际 0 处" "$TMP/err"
+
+echo "== 场景 36: sol-3 val s = \"\"\"\${foo\"\"\" → fail-closed =="
+printf 'val s = """${foo"""\nversionCode = 3\n' > "$TMP/rawtpl.gradle"
+OUT=$(parse_version_code "$TMP/rawtpl.gradle" 2>"$TMP/err"); RC=$?
+check "非零退出（\"\"\" 先于模板被拒绝）" test "$RC" -ne 0
+check "错误含『不支持构造: 三引号』" grep -q "不支持构造: 三引号" "$TMP/err"
+
+echo "== 场景 37: CRLF 行尾（逐字节保留，不归一化）→ 正常解析 =="
+printf 'applicationId = "cn.vectory.alphagps"\r\nversionCode = 4\r\n// note\r\n' > "$TMP/crlf.gradle"
+OUT=$(parse_version_code "$TMP/crlf.gradle" 2>"$TMP/err"); RC=$?
+check "versionCode 解析为 4" test "$RC" -eq 0 -a "$OUT" == "4"
+OUT=$(parse_application_id "$TMP/crlf.gradle" 2>"$TMP/err"); RC=$?
+check "applicationId 正常解析" test "$RC" -eq 0 -a "$OUT" == "cn.vectory.alphagps"
+
+echo "== 场景 38: 首个 BOM 显式剥离 → 正常解析 =="
+printf '\xef\xbb\xbfapplicationId = "cn.vectory.alphagps"\nversionCode = 5\n' > "$TMP/bom.gradle"
+OUT=$(parse_version_code "$TMP/bom.gradle" 2>"$TMP/err"); RC=$?
+check "versionCode 解析为 5" test "$RC" -eq 0 -a "$OUT" == "5"
+OUT=$(parse_application_id "$TMP/bom.gradle" 2>"$TMP/err"); RC=$?
+check "applicationId 正常解析" test "$RC" -eq 0 -a "$OUT" == "cn.vectory.alphagps"
+
+echo "== 场景 39: '\\u002f' 完整 6 字符消费；截断 '\\u00' → fail-closed =="
+cat > "$TMP/uchar.gradle" <<'UC'
+val c = '\u002f'
+applicationId = "cn.vectory.alphagps"
+versionCode = 6
+UC
+OUT=$(parse_version_code "$TMP/uchar.gradle" 2>"$TMP/err"); RC=$?
+check "完整 \\uXXXX 字符字面量不破坏后续解析" test "$RC" -eq 0 -a "$OUT" == "6"
+cat > "$TMP/ubad.gradle" <<'UB'
+val c = '\u00'
+versionCode = 3
+UB
+OUT=$(parse_version_code "$TMP/ubad.gradle" 2>"$TMP/err"); RC=$?
+check "截断 \\uXXXX → 非零" test "$RC" -ne 0
+check "错误含『\\uXXXX 转义非法/截断』" grep -q "uXXXX 转义非法/截断" "$TMP/err"
+
+echo "== 场景 40: 普通字符串内裸换行 → fail-closed =="
+printf 'val s = "abc\ndef"\nversionCode = 3\n' > "$TMP/nlstr.gradle"
+OUT=$(parse_version_code "$TMP/nlstr.gradle" 2>"$TMP/err"); RC=$?
+check "非零退出" test "$RC" -ne 0
+check "错误含『裸换行』" grep -q "裸换行" "$TMP/err"
+
+echo "== 场景 41: fd0 关闭（0<&-）→ 立即非零，不得挂起（timeout 5，超时 rc=124 视为失败） =="
+timeout 5 bash -uc "source '$LIB'; parse_version_code -" 0<&- >/dev/null 2>"$TMP/err"; RC=$?
+check "parse_version_code 非零且非超时" test "$RC" -ne 0 -a "$RC" -ne 124
+check "错误含『stdin 不可用』" grep -q "stdin 不可用" "$TMP/err"
+timeout 5 bash -uc "source '$LIB'; parse_application_id -" 0<&- >/dev/null 2>"$TMP/err"; RC=$?
+check "parse_application_id 非零且非超时" test "$RC" -ne 0 -a "$RC" -ne 124
+check "错误含『stdin 不可用』" grep -q "stdin 不可用" "$TMP/err"
+
+echo "== 场景 42: NUL 在 tag 调用层（git show 原始字节经临时文件，不经 bash 变量）→ fail-closed =="
+R13=$TMP/tagnul; make_git_repo "$R13"
+mkdir -p "$R13/app"
+# 内容含 NUL：printf 格式串内 \0 直接落盘（不经 bash 变量），git 可正常存储
+printf 'applicationId = "cn.vectory.alphagps"\nversionCode = 3\0\n' > "$R13/app/build.gradle.kts"
+git -C "$R13" add app/build.gradle.kts
+git -C "$R13" -c user.email=t@t -c user.name=t commit -qm "nul gradle"
+git -C "$R13" tag v0.1.2
+OUT=$(cd "$R13" && assert_code_monotonic 4 0.1.3 2>"$TMP/err"); RC=$?
+check "非零退出（旧路径 bash 变量丢 NUL 后 rc0 放行）" test "$RC" -ne 0
+check "错误含『NUL』" grep -q "NUL" "$TMP/err"
+
+echo "== 场景 43: publish-only 接线——tag 源码 versionCode 含 NUL → fail-closed =="
+SB3=$TMP/wire3; setup_wiring_sandbox "$SB3"
+# 覆写模板 gradle 为含 NUL 版本（release/ 归档一并入同一 commit，保持树干净后打 tag 于 HEAD）
+printf 'applicationId = "cn.vectory.alphagps"\nversionCode = %s\0\nversionName = "%s"\n' \
+  "$FIXTURE_CODE" "$FIXTURE_NAME" > "$SB3/app/build.gradle.kts"
+mkdir -p "$SB3/release"; : > "$SB3/release/alpha-gps-0.1.3.apk"
+( cd "$SB3" && sha256sum release/alpha-gps-0.1.3.apk > release/SHA256SUMS )
+( cd "$SB3" && git add -A && git -c user.email=t@t -c user.name=t commit -qm nul \
+  && git tag v0.1.3 )
+( cd "$SB3" && PATH="$SB3/home/jdk/bin:$PATH" HOME="$SB3/home" JAVA_HOME="$SB3/home/jdk" \
+    DSH_KEYSTORE_PASSWORD=x DSH_KEY_PASSWORD=x \
+    AAPT_CODE="$FIXTURE_CODE" AAPT_VNAME=0.1.3 \
+    timeout 20 bash scripts/release_build.sh 0.1.3 --publish-only ) > "$TMP/wire3.log" 2>&1; RC=$?
+check "release_build.sh --publish-only 非零退出（NUL 不被 bash 变量丢弃）" test "$RC" -ne 0 -a "$RC" -ne 124
+check "日志含『NUL』" grep -q "NUL" "$TMP/wire3.log"
+
+echo "== 场景 44: 扫描失败路径不遗留临时文件（stdin 路径无 mktemp；git 路径任何退出均清理） =="
+LEFT=$(ls "${TMPDIR:-/tmp}"/rlstrip.* "${TMPDIR:-/tmp}"/rlgit.* "${TMPDIR:-/tmp}"/rlmono.* 2>/dev/null | wc -l)
+check "无 rlstrip/rlgit/rlmono 遗留（实际 $LEFT）" test "$LEFT" -eq 0
 
 echo
 SCENARIOS=$(grep -c '^echo "== 场景' -- "$0")

@@ -327,10 +327,9 @@ if (( PUBLISH_ONLY )); then
     || fail "--publish-only：SHA256SUMS 校验失败（归档损坏）"
   # 预期 versionCode 独立来源：被发布 tag 提交的源码（上方门禁已确认 tag 在 HEAD 上），
   # 不信任归档 APK 自读值（否则等于自比，APK code 错也会 PASS）。
-  TAG_SRC=$(git show "$TAG_NAME:app/build.gradle.kts" 2>/dev/null) \
-    || fail "--publish-only：无法读取 tag 提交源码 $TAG_NAME:app/build.gradle.kts（fail-closed）"
-  EXPECT_CODE=$(parse_version_code - <<<"$TAG_SRC") \
-    || fail "--publish-only：tag 提交源码 versionCode 解析失败（fail-closed）: $TAG_NAME"
+  # git show 原始字节经临时文件直入 parser（不经 bash 变量——NUL 会被丢弃仅留 warning）。
+  EXPECT_CODE=$(parse_version_code_from_git "$TAG_NAME" app/build.gradle.kts) \
+    || fail "--publish-only：无法读取/解析 tag 提交源码 $TAG_NAME:app/build.gradle.kts 的 versionCode（fail-closed）"
   assert_code_monotonic "$EXPECT_CODE" "$VERSION_NAME" || fail "--publish-only：versionCode 单调性门禁失败"
   find_aapt
   EMBEDDED_NAME=$(apk_version_name "$RELEASE_DIR/$APK_NAME")
