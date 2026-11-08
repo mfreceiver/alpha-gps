@@ -134,8 +134,8 @@ private class SonyWifiConnection(
     }
 
     override suspend fun photoPage(offset: Int) = checkNotNull(current).transfer.page(offset)
-    override suspend fun photoThumbnail(handle: Long) =
-        checkNotNull(current).transfer.thumbnail(handle)
+    override suspend fun photoThumbnail(handle: Long, stats: ThumbnailStatsSink?) =
+        checkNotNull(current).transfer.thumbnail(handle, stats)
 
     override suspend fun photoPreview(handle: Long) = checkNotNull(current).transfer.preview(handle)
     override suspend fun downloadPhoto(

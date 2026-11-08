@@ -78,7 +78,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             return cameraPhotoPage(groupCameraPhotos(photos), offset)
         }
 
-        override suspend fun photoThumbnail(handle: Long): ImageBitmap? {
+        override suspend fun photoThumbnail(handle: Long, stats: ThumbnailStatsSink?): ImageBitmap? {
             thumbnailRequests += handle
             return thumbnailImage
         }

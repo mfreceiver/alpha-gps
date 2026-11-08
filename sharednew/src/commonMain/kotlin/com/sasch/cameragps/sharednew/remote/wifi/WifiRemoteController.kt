@@ -36,7 +36,7 @@ internal interface WifiRemoteConnection {
     val photoHandlesSurviveModeSwitch: Boolean get() = true
     suspend fun openPhotoBrowser(): CameraPhotoPage = error("Photo browsing unavailable")
     suspend fun photoPage(offset: Int): CameraPhotoPage = error("Photo browsing unavailable")
-    suspend fun photoThumbnail(handle: Long): ImageBitmap? = null
+    suspend fun photoThumbnail(handle: Long, stats: ThumbnailStatsSink? = null): ImageBitmap? = null
     suspend fun photoPreview(handle: Long): ImageBitmap? = null
     suspend fun downloadPhoto(
         handle: Long,
@@ -105,6 +105,9 @@ class WifiRemoteController internal constructor(
     private val manualSetupConnector: WifiManualSetupConnector? = null,
 ) {
     private val log = logging()
+
+    /** Wi-Fi photo-browser thumbnail diagnostics (see ThumbnailDiagnostics.kt). */
+    private val thumbLog = logging("AlphaThumb")
     private var attempt = 0
     val supportsAutomaticConnection get() = automaticConnector != null
     val supportsManualSetup get() = manualSetupConnector != null
@@ -270,11 +273,32 @@ class WifiRemoteController internal constructor(
             val captures = groupCameraPhotos(page.photos)
             val previewOrder = if (preferredPhotoIndex == null) captures.indices.toList()
             else captures.indices.sortedBy { abs(page.offset + it - preferredPhotoIndex) }
-            for (index in previewOrder) {
-                val capture = captures[index]
-                val photo = capture.thumbnail
-                connection.photoThumbnail(photo.handle)
-                    ?.let { _thumbnails.value += photo.handle to it }
+            // "AlphaThumb" diagnostics: quantify per-page thumbnail fetch time and memory.
+            val pageStats = ThumbnailPageStats(page.offset, captures.size)
+            try {
+                for ((position, index) in previewOrder.withIndex()) {
+                    val capture = captures[index]
+                    val photo = capture.thumbnail
+                    var fetchedBytes = 0L
+                    var requestMs = 0L
+                    connection.photoThumbnail(photo.handle, ThumbnailStatsSink { _, bytes, ms ->
+                        fetchedBytes = bytes.toLong()
+                        requestMs = ms
+                    })?.also { bitmap ->
+                        val bitmapEstBytes = bitmap.width.toLong() * bitmap.height * 4
+                        pageStats.record(ThumbnailSample(requestMs, fetchedBytes, bitmapEstBytes))
+                        thumbLog.d {
+                            "page=${page.offset} #$position handle=${photo.handle} " +
+                                    "cid=${photo.captureId ?: "-"} bytes=$fetchedBytes reqMs=$requestMs " +
+                                    "bitmap=${bitmap.width}x${bitmap.height} estBytes=$bitmapEstBytes"
+                        }
+                        _thumbnails.value += photo.handle to bitmap
+                    }
+                }
+                pageStats.takeSummary()?.let { line -> thumbLog.i { line } }
+            } catch (cancelled: CancellationException) {
+                pageStats.takeCancelled()?.let { line -> thumbLog.i { line } }
+                throw cancelled
             }
         }
     }
