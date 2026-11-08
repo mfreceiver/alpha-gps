@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # alpha-gps 发版脚本（精简移植自另一个内部项目的发版脚本，保留 fail-closed 精神）：
-#   - 版本注入：app/build.gradle.kts 的 versionName 硬编码（带 v 前缀），构建前 sed 改写、
-#     构建后（含失败）自动还原；versionCode 不做公式镜像，一律从产物 manifest 读取
+#   - 版本注入：app/build.gradle.kts 的 versionName 硬编码（无 v 前缀，如 "0.1.0"），构建前
+#     sed 改写、构建后（含失败）自动还原；versionCode 不做公式镜像，一律从产物 manifest 读取
 #   - 产物 app/build/outputs/apk/foss/release/app-foss-release.apk（签名可用时）归档为
 #     release/alpha-gps-<版本>.apk；release/ 只留最新版，SHA256SUMS 每次全量重生成
 #   - 断言：构建后必须调用 scripts/release_assert_apk.sh（签名者/证书钉定/包名/版本/权限）
@@ -32,7 +32,7 @@ GRADLE_PROPS=$HOME/.gradle/gradle.properties
 SIGNING_KEYSTORE_PATH=$HOME/.config/alphagps/signing/release.jks
 SIGNING_KEY_ALIAS=release
 PINNED_CERT_SHA256="18ff24c56bc52533c75ec709ea53497aa4323dac13c511979ac0a5fd7f9d97d7"
-# 本仓库 versionName 硬编码带 v 前缀（如 "v1.7.2"），产物内嵌 versionName = v$VERSION_NAME
+# 本仓库 versionName 硬编码无 v 前缀（如 "0.1.0"），产物内嵌 versionName = v$VERSION_NAME
 PRIMARY_HOST=forge.example.com:443
 PRIMARY_REPO=owner/alphagps
 PRIMARY_REMOTE=primary
@@ -309,7 +309,7 @@ if (( PUBLISH_ONLY )); then
 fi
 
 # ─── 版本注入（sed 改写 + 构建后还原）────────────────────────────────────
-# app/build.gradle.kts 硬编码 versionName = "vX.Y.Z"（无 env 注入），构建前改写、
+# app/build.gradle.kts 硬编码 versionName = "X.Y.Z"（无 v 前缀，无 env 注入），构建前改写、
 # 无论如何（成功/失败/中断经 EXIT trap）还原备份；父层 trap 仅在 inject 成功、
 # 还原责任交接完成后激活。备份/还原的 fail-closed 语义
 # （备份完整校验后才激活恢复责任；还原失败保留备份并终止）在
