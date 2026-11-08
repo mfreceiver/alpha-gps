@@ -721,6 +721,82 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     }
 
     @Test
+    fun originalBatchDropsASettledJpegOnlyBatchSummary() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = pagedConnection()
+        connection.downloadResults = Channel(Channel.UNLIMITED)
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        // JpegOnly batch A (two files) runs to completion and latches.
+        model.togglePhotoSelection("photo:0")
+        model.togglePhotoSelection("photo:1")
+        model.recordBatchSummary(WifiBatchSummary(2, emptyMap()))
+        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(0), WifiPhotoDownload(2)))
+        runCurrent()
+        repeat(2) {
+            connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Saved))
+            runCurrent()
+        }
+        assertTrue(model.batchSummarySettled(), "batch A must settle after completing")
+        // Submitting an Original batch B through the VM entry must drop the old summary.
+        model.downloadOriginalBatch(listOf(WifiPhotoDownload(4))) { controller.downloadPhotos("camera", it) }
+        assertNull(model.batchSummary, "an Original batch must drop the previous JpegOnly summary")
+        assertFalse(model.batchSummarySettled(), "the dropped summary must not stay settled")
+        // Batch B really saves: the old summary must not re-show off B's own result.
+        runCurrent()
+        connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Saved))
+        runCurrent()
+        val transfer = registry.get("camera")!!.wifiRemote.imageTransfer
+        assertEquals(WifiImageTransferStatus.Saved, transfer.status)
+        assertNull(model.batchSummary)
+        assertFalse(
+            shouldShowBatchSummary(model.batchSummarySettled(), transfer),
+            "batch B's Saved result must not show batch A's summary line",
+        )
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun originalBatchMustNotSettleAFailedSameSizeJpegOnlySummary() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = pagedConnection()
+        connection.downloadResults = Channel(Channel.UNLIMITED)
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        // A one-file JpegOnly batch A fails.
+        model.togglePhotoSelection("photo:0")
+        model.recordBatchSummary(WifiBatchSummary(1, emptyMap()))
+        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(0)))
+        runCurrent()
+        connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Failed))
+        runCurrent()
+        assertFalse(model.batchSummarySettled(), "the failed batch A must not settle")
+        // Original batch B (same file count) succeeds: A must not be settled by B.
+        model.downloadOriginalBatch(listOf(WifiPhotoDownload(2))) { controller.downloadPhotos("camera", it) }
+        runCurrent()
+        connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Saved))
+        runCurrent()
+        val transfer = registry.get("camera")!!.wifiRemote.imageTransfer
+        assertEquals(WifiImageTransferStatus.Saved, transfer.status)
+        assertNull(model.batchSummary, "the Original batch entry must have dropped batch A's summary")
+        assertFalse(
+            shouldShowBatchSummary(model.batchSummarySettled(), transfer),
+            "batch A's summary must not settle off batch B's Saved result",
+        )
+        controller.closeAndJoin()
+    }
+
+    @Test
     fun previewIsRefusedWhileATransferIsBusyAndKeepsBatchSummaryAndSelection() = runTest {
         val registry = CameraSessionRegistry()
         val connection = pagedConnection()

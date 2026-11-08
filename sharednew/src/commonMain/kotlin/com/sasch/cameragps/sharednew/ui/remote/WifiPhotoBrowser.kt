@@ -392,7 +392,12 @@ internal fun WifiPhotoBrowser(
             // The batch receives the whole cross-page selection snapshot, in selection order.
             viewModel.selectedPhotos.values.toList(), state,
             onDismiss = { showBatchOptions = false },
-            onDownload = { downloads -> showBatchOptions = false; onDownload(downloads) },
+            onDownload = { downloads ->
+                showBatchOptions = false
+                // An Original batch is a NEW download: drop any latched JpegOnly summary
+                // first so it cannot re-show or settle off this batch's own result.
+                viewModel.downloadOriginalBatch(downloads, onDownload)
+            },
         )
     }
 }

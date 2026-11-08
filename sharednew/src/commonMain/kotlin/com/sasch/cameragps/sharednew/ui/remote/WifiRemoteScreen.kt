@@ -227,6 +227,20 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     }
 
     /**
+     * Original-format batch download entry (the format sheet's confirm). Drops any batch
+     * summary first, exactly like [downloadSinglePhoto]: the summary describes a previous
+     * JpegOnly batch, and a leftover one must neither re-show after this batch nor settle
+     * off this batch's own Saved result.
+     */
+    internal fun downloadOriginalBatch(
+        downloads: List<WifiPhotoDownload>,
+        onDownload: (List<WifiPhotoDownload>) -> Unit,
+    ) {
+        recordBatchSummary(null)
+        onDownload(downloads)
+    }
+
+    /**
      * Latches the current batch summary as complete if the transfer finished it. Must be
      * called before anything clears the transfer result (preview/viewer round-trips);
      * does nothing when no batch is pending or it already settled.
