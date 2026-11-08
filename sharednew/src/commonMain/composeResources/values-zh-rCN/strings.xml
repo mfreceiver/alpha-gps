@@ -423,6 +423,8 @@
     <string name="wifi_remote_transfer_cancel">取消</string>
     <string name="wifi_remote_storage_permission">请允许访问存储空间以便将照片保存到手机。</string>
     <string name="wifi_remote_browse_unsupported">此相机未声明支持照片浏览功能。</string>
+    <string name="wifi_remote_browse_mode">Wi-Fi 仅浏览模式</string>
+    <string name="wifi_remote_browse_mode_description">连接相机仅用于 GPS 记录和照片下载，不进行遥控拍摄和实时取景。如果相机无法建立连接，请关闭此选项。</string>
     <string name="wifi_remote_jpeg_copy">JPEG 副本（由 HEIF 转换）</string>
     <string name="wifi_remote_jpeg_copy_hint">下载 HEIF 文件，并在此手机上保存一份全分辨率 JPEG 副本。HDR 信息及部分元数据可能无法保留。</string>
     <string name="wifi_remote_converting_jpeg">正在转换为 JPEG…</string>

@@ -67,6 +67,7 @@ internal fun IosWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
                 } else controller.imageStoragePermissionDenied(identifier)
             }
         },
+        browseOnly = IosAppPreferences.isWifiBrowseOnly(),
         onClose = {
             logIosLifecycle("Wi-Fi remote screen closed by user -> Wi-Fi disconnect requested")
             controller.disconnect(identifier)

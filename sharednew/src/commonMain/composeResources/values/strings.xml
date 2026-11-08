@@ -460,6 +460,8 @@
     <string name="wifi_remote_transfer_cancel">Cancel</string>
     <string name="wifi_remote_storage_permission">Allow storage access to save photos to your phone.</string>
     <string name="wifi_remote_browse_unsupported">This camera does not advertise supported photo browsing.</string>
+    <string name="wifi_remote_browse_mode">Wi-Fi browse-only mode</string>
+    <string name="wifi_remote_browse_mode_description">Connect to the camera only for GPS logging and photo download, without remote shooting or live view. Turn this off if your camera refuses the connection.</string>
     <string name="wifi_remote_jpeg_copy">JPEG copy (from HEIF)</string>
     <string name="wifi_remote_jpeg_copy_hint">Downloads the HEIF and saves a full-resolution JPEG copy on this phone. HDR and some metadata may not be preserved.</string>
     <string name="wifi_remote_converting_jpeg">Converting to JPEG…</string>

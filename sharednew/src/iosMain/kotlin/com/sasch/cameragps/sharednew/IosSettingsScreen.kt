@@ -62,6 +62,8 @@ import cameragps.sharednew.generated.resources.tip_jar_error_prefix
 import cameragps.sharednew.generated.resources.tip_jar_loading
 import cameragps.sharednew.generated.resources.tip_jar_thank_you
 import cameragps.sharednew.generated.resources.tip_jar_unavailable
+import cameragps.sharednew.generated.resources.wifi_remote_browse_mode
+import cameragps.sharednew.generated.resources.wifi_remote_browse_mode_description
 import com.diamondedge.logging.LogLevel
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController
 import com.sasch.cameragps.sharednew.ui.settings.SharedLanguageSettingsCard
@@ -172,6 +174,16 @@ internal fun IosSettingsScreen(
                     description = stringResource(Res.string.haptic_feedback_description),
                     checked = hapticsEnabled,
                     onCheckedChange = onHapticsEnabledChange,
+                )
+                var wifiBrowseOnly by remember { mutableStateOf(IosAppPreferences.isWifiBrowseOnly()) }
+                SharedToggleRow(
+                    title = stringResource(Res.string.wifi_remote_browse_mode),
+                    description = stringResource(Res.string.wifi_remote_browse_mode_description),
+                    checked = wifiBrowseOnly,
+                    onCheckedChange = { enabled ->
+                        IosAppPreferences.setWifiBrowseOnly(enabled)
+                        wifiBrowseOnly = enabled
+                    },
                 )
             }
 

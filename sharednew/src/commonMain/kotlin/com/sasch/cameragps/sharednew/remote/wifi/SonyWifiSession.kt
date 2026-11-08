@@ -37,10 +37,11 @@ internal suspend fun openSonyWifiSession(
     decodePreview: (ByteArray) -> ImageBitmap?,
     networkLost: Flow<Unit> = emptyFlow(),
     releaseNetwork: () -> Unit = {},
+    browseOnly: Boolean = false,
 ): WifiRemoteConnection {
     val connection = SonyWifiConnection(
         connections, scope, host, http, imageStore,
-        decodeThumbnail, decodePreview, networkLost, releaseNetwork
+        decodeThumbnail, decodePreview, networkLost, releaseNetwork, browseOnly
     )
     try {
         connection.open()
@@ -62,6 +63,8 @@ private class SonyWifiConnection(
     private val decodePreview: (ByteArray) -> ImageBitmap?,
     networkLost: Flow<Unit>,
     private val releaseNetwork: () -> Unit,
+    /** When set, the session starts (and stays) in ImageTransfer mode: no remote shooting, no live view. */
+    private val browseOnly: Boolean = false,
 ) : WifiRemoteConnection {
     private val log = logging("SonyWifiSession")
 
@@ -102,7 +105,9 @@ private class SonyWifiConnection(
     }
 
     suspend fun open() {
-        replaceSession(SonySessionPurpose.RemoteShooting)
+        // Browse-only skips the remote-shooting protocol entirely: open straight into
+        // transfer mode so no live-view stream or shutter session is ever negotiated.
+        replaceSession(if (browseOnly) SonySessionPurpose.ImageTransfer else SonySessionPurpose.RemoteShooting)
         val session = checkNotNull(current)
         name = session.ptp.camera.cameraName
         separateTransfer = session.ready.supportsSeparateTransferSession
@@ -141,7 +146,9 @@ private class SonyWifiConnection(
 
     override suspend fun closePhotoBrowser() {
         current?.transfer?.closeBrowser()
-        if (separateTransfer && current?.ready?.purpose != SonySessionPurpose.RemoteShooting) {
+        // Browse-only never leaves ImageTransfer mode; only the full remote session
+        // returns to remote shooting when the browser closes.
+        if (!browseOnly && separateTransfer && current?.ready?.purpose != SonySessionPurpose.RemoteShooting) {
             replaceSession(SonySessionPurpose.RemoteShooting)
         }
     }
@@ -151,6 +158,8 @@ private class SonyWifiConnection(
     }
 
     override val images = flow {
+        // Browse-only sessions never start the live-view HTTP stream; collectors just idle.
+        if (browseOnly) return@flow
         val session = checkNotNull(current)
         check(session.ready.purpose == SonySessionPurpose.RemoteShooting)
         log.i { "Wi-Fi live view resolving camera endpoint" }

@@ -147,28 +147,30 @@ class SonyWifiSessionTest : WifiLoggingTest() {
             return Peer(channels.size / 2 + 1, channels.size % 2 == 1).also { channels += it }
         }
 
-        suspend fun open(scope: CoroutineScope): WifiRemoteConnection = openSonyWifiSession(
-            this, scope, "192.168.1.1", {
-                previewOpened++
-                object : SonyLiveViewByteStream {
-                    override suspend fun read(): ByteArray? = awaitCancellation()
-                    override suspend fun close() {
-                        previewClosed++
+        suspend fun open(scope: CoroutineScope, browseOnly: Boolean = false): WifiRemoteConnection =
+            openSonyWifiSession(
+                this, scope, "192.168.1.1", {
+                    previewOpened++
+                    object : SonyLiveViewByteStream {
+                        override suspend fun read(): ByteArray? = awaitCancellation()
+                        override suspend fun close() {
+                            previewClosed++
+                        }
                     }
-                }
-            }, {
-                object : CameraImageDestination {
-                    override suspend fun write(bytes: ByteArray) {
-                        saved += bytes.toList()
-                    }
+                }, {
+                    object : CameraImageDestination {
+                        override suspend fun write(bytes: ByteArray) {
+                            saved += bytes.toList()
+                        }
 
-                    override suspend fun commit() {
-                        committed = true
-                    }
+                        override suspend fun commit() {
+                            committed = true
+                        }
 
-                    override suspend fun abort() {}
-                }
-            }, { null }, { null }, releaseNetwork = { releaseCount++ })
+                        override suspend fun abort() {}
+                    }
+                }, { null }, { null }, releaseNetwork = { releaseCount++ }, browseOnly = browseOnly
+            )
 
         fun openModes() = operations.filter { it.second == 0x9210 }.map { it.third }
     }
@@ -217,6 +219,41 @@ class SonyWifiSessionTest : WifiLoggingTest() {
             assertTrue(camera.channels.all { it.closed })
             assertEquals(1, camera.releaseCount)
         }
+    }
+
+    @Test
+    fun browseOnlyOpensTransferSessionDirectlyAndNeverReturnsToShooting() = runTest {
+        val camera = Camera()
+        val connection = camera.open(backgroundScope, browseOnly = true)
+        // The controller always collects `images`; in browse-only the flow must
+        // simply complete instead of failing or starting the live-view stream.
+        val liveView = backgroundScope.launch { connection.images.collect { } }
+        try {
+            liveView.join()
+            assertFalse(connection.canCapture)
+            assertTrue(connection.canTransferImages)
+            assertEquals(listOf(listOf(1L, 1L)), camera.openModes())
+            assertEquals("DSC0007.JPG", connection.openPhotoBrowser().photos.single().filename)
+            assertEquals(
+                listOf(listOf(1L, 1L)),
+                camera.openModes(),
+                "Opening the browser must not re-open the session"
+            )
+            assertEquals(
+                WifiImageTransferStatus.Saved,
+                connection.downloadPhoto(7, WifiPhotoDownloadFormat.Original) {}.status
+            )
+            connection.closePhotoBrowser()
+            assertFalse(
+                connection.canCapture,
+                "Browse-only must never switch back to remote shooting"
+            )
+            assertEquals(listOf(listOf(1L, 1L)), camera.openModes())
+            assertEquals(0, camera.previewOpened, "Live view must never start in browse-only")
+        } finally {
+            liveView.cancel(); connection.close()
+        }
+        assertEquals(1, camera.releaseCount)
     }
 
     @Test

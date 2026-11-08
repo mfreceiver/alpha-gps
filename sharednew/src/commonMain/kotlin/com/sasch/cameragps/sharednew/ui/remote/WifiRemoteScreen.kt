@@ -216,6 +216,7 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
                      networkPermissionMessage: String = stringResource(Res.string.wifi_remote_permission),
                      openingSessionMessage: String = stringResource(Res.string.wifi_remote_opening),
                      onAppSettings: (() -> Unit)? = null,
+                     browseOnly: Boolean = false,
                      onDownloadPhotos: (List<WifiPhotoDownload>) -> Unit = { downloads ->
                          viewModel.controller.downloadPhotos(viewModel.identifier, downloads)
                      }
@@ -249,6 +250,13 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
     )
     LaunchedEffect(ready, state.photoBrowser.open) {
         if (!ready || state.photoBrowser.open) viewModel.collapsePreview()
+    }
+    // Browse-only: as soon as the session is ready, walk straight into the photo
+    // browser — there is no live view or shutter to show first.
+    LaunchedEffect(browseOnly, ready, state.photoBrowser.open, state.canTransferImages) {
+        if (browseOnly && ready && !state.photoBrowser.open && state.canTransferImages) {
+            controller.browsePhotos(id)
+        }
     }
     LaunchedEffect(
         ready,
@@ -387,8 +395,10 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
                         ) {
                             Text(stringResource(Res.string.wifi_remote_browse))
                         } else Text(stringResource(Res.string.wifi_remote_browse_unsupported))
-                        Button(onClick = { controller.capture(id) },
-                            enabled = state.canCaptureStill && state.capture != WifiCaptureStatus.Shooting && !state.imageTransfer.busy
+                        // Browse-only hides the shutter: the session never offers capture anyway.
+                        if (!browseOnly) Button(onClick = { controller.capture(id) },
+                            enabled = state.canCaptureStill &&
+                                    state.capture != WifiCaptureStatus.Shooting && !state.imageTransfer.busy
                         ) {
                             Text(stringResource(if (state.capture == WifiCaptureStatus.Shooting)
                                 Res.string.wifi_remote_shooting else Res.string.wifi_remote_capture))
@@ -406,12 +416,17 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
                     }
                 }
             }
-            if (maxWidth > maxHeight) Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            // Browse-only has no live view once connected; the connect placeholder
+            // still shows until the session is ready.
+            val showPreview = !browseOnly || !ready
+            if (showPreview && maxWidth > maxHeight) Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 preview(Modifier.weight(1f).fillMaxHeight())
                 controls(Modifier.widthIn(max = 300.dp).fillMaxHeight())
-            } else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            } else if (showPreview) Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 preview(Modifier.fillMaxWidth().weight(1f))
                 controls(Modifier.fillMaxWidth().weight(1f))
+            } else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                controls(Modifier.fillMaxWidth().fillMaxHeight())
             }
         }
     }

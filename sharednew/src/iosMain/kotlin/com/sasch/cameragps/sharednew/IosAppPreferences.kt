@@ -13,6 +13,7 @@ internal object IosAppPreferences {
     private const val keyAutoScanEnabled = "ios.autoScanEnabled"
     private const val keyTransmissionNotifications = "ios.transmissionNotifications"
     private const val keyHapticsEnabled = "ios.hapticsEnabled"
+    private const val keyWifiBrowseOnly = "ios.wifiBrowseOnly"
     private const val keyDonationHintLastShown = "ios.donationHintLastShown"
     private const val keyDonationHintShownTimes = "ios.donationHintShownTimes"
     private const val keyForceDonationDialogOnNextStart = "ios.forceDonationDialogOnNextStart"
@@ -83,6 +84,15 @@ internal object IosAppPreferences {
 
     fun setHapticsEnabled(enabled: Boolean) {
         defaults.setBool(enabled, forKey = keyHapticsEnabled)
+    }
+
+    /** Wi-Fi browse-only mode: default on — connect for GPS logging + photo download, no remote shooting. */
+    fun isWifiBrowseOnly(): Boolean = defaults.objectForKey(keyWifiBrowseOnly)?.let {
+        defaults.boolForKey(keyWifiBrowseOnly)
+    } ?: true
+
+    fun setWifiBrowseOnly(enabled: Boolean) {
+        defaults.setBool(enabled, forKey = keyWifiBrowseOnly)
     }
 
     fun isTransmissionNotificationsEnabled(): Boolean =

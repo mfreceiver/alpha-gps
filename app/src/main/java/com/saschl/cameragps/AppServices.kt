@@ -12,6 +12,7 @@ import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
 import com.sasch.cameragps.sharednew.remote.wifi.createAndroidWifiRemoteController
 import com.saschl.cameragps.service.location.createLocationSource
 import com.saschl.cameragps.service.transport.AndroidBleTransport
+import com.saschl.cameragps.utils.PreferencesManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -63,7 +64,11 @@ class AppServices(context: Context) {
      * with the same device clears the source and re-arms the dialog.
      */
     private val _pairingFailedDevice = MutableStateFlow<String?>(null)
-    val wifiRemote = createAndroidWifiRemoteController(appContext, scope, orchestrator)
+    val wifiRemote = createAndroidWifiRemoteController(
+        appContext, scope, orchestrator,
+        // Read at every connect: the setting can change while the app lives.
+        browseOnly = { PreferencesManager.isWifiBrowseOnly(appContext) },
+    )
     val pairingFailedDevice: StateFlow<String?> = _pairingFailedDevice
 
     init {

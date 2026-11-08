@@ -131,7 +131,9 @@ fun AndroidWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
                 storagePermission.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
             } else controller.downloadPhotos(identifier, downloads)
         },
-        onWifiSettings = { context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) }, onClose = close)
+        onWifiSettings = { context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) },
+        browseOnly = PreferencesManager.isWifiBrowseOnly(context),
+        onClose = close)
 }
 
 @Composable

@@ -12,9 +12,12 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import java.net.InetAddress
 
-fun createAndroidWifiRemoteController(context: Context, scope: CoroutineScope,
-                                      orchestrator: CameraSessionOrchestrator): WifiRemoteController {
-    val connector = AndroidWifiRemoteConnector(context.applicationContext)
+fun createAndroidWifiRemoteController(
+    context: Context, scope: CoroutineScope,
+    orchestrator: CameraSessionOrchestrator,
+    browseOnly: () -> Boolean = { true },
+): WifiRemoteController {
+    val connector = AndroidWifiRemoteConnector(context.applicationContext, browseOnly)
     val automatic = if (Build.VERSION.SDK_INT >= 29) AutomaticWifiRemoteConnector(
         orchestrator::prepareCameraWifi,
         { credentials -> AndroidCameraNetworkRequest(context.applicationContext, credentials) },
@@ -33,7 +36,10 @@ fun createAndroidWifiRemoteController(context: Context, scope: CoroutineScope,
     )
 }
 
-private class AndroidWifiRemoteConnector(context: Context) : WifiRemoteConnector {
+private class AndroidWifiRemoteConnector(
+    context: Context,
+    private val browseOnly: () -> Boolean,
+) : WifiRemoteConnector {
     override val supportsAddressDiscovery = true
     private val imageStore = AndroidCameraImageStore(context)
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
@@ -84,6 +90,7 @@ private class AndroidWifiRemoteConnector(context: Context) : WifiRemoteConnector
             AndroidCameraHttpTransport(network.socketFactory), imageStore,
             ::decodeAndroidCameraThumbnail, ::decodeAndroidCameraPreview, losses.receiveAsFlow(),
             releaseNetwork = { connectivity.unregisterNetworkCallback(callback); losses.close() },
+            browseOnly = browseOnly(),
         )
     }
 }
