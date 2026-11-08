@@ -310,19 +310,24 @@ fi
 
 # ─── 版本注入（sed 改写 + 构建后还原）────────────────────────────────────
 # app/build.gradle.kts 硬编码 versionName = "vX.Y.Z"（无 env 注入），构建前改写、
-# 无论如何（成功/失败/中断经 EXIT trap）还原备份。要求恰一行 versionName，否则 fail。
+# 无论如何（成功/失败/中断经 EXIT trap）还原备份。备份/还原的 fail-closed 语义
+# （备份完整校验后才激活恢复责任；还原失败保留备份并终止）在
+# scripts/release_version_inject.sh 中实现并由 scripts/release_version_inject_test.sh
+# 做故障注入自测。
 log "版本注入: versionName → $EMBED_NAME（构建后还原）"
-GRADLE_BAK="$REPO_ROOT/app/build.gradle.kts.release-bak"
-[[ -f "$GRADLE_BAK" ]] && fail "残留备份存在: $GRADLE_BAK（上次构建异常退出？请人工核对后删除）"
-VN_LINES=$(grep -cE '^[[:space:]]*versionName = "' "$BUILD_GRADLE" || true)
-[[ "$VN_LINES" -eq 1 ]] || fail "app/build.gradle.kts 中 versionName 定义行数异常（$VN_LINES，期望 1）——版本注入锚点失效，人工检查"
+VERSION_INJECT="$REPO_ROOT/scripts/release_version_inject.sh"
+BUILD_GRADLE="$REPO_ROOT/app/build.gradle.kts"
+GRADLE_BAK="$BUILD_GRADLE.release-bak"
+# 还原失败必须终止后续归档/tag/发布：绝不带着改写过的构建文件继续，也绝不把
+# 残缺备份静默盖回去——保留备份、非零退出，人工处理。
 restore_gradle() {
-  if [[ -f "$GRADLE_BAK" ]]; then mv -f -- "$GRADLE_BAK" "$BUILD_GRADLE" || echo "WARN 还原 $BUILD_GRADLE 失败，请手工从 $GRADLE_BAK 恢复" >&2; fi
+  if ! bash "$VERSION_INJECT" restore "$BUILD_GRADLE"; then
+    echo "FATAL release_build: 版本注入还原失败，已终止（备份保留在 $GRADLE_BAK，请人工恢复后重试）" >&2
+    exit 1
+  fi
 }
 trap restore_gradle EXIT
-cp -- "$BUILD_GRADLE" "$GRADLE_BAK"
-sed -i -E "s/^([[:space:]]*versionName = )\"[^\"]*\"/\1\"$EMBED_NAME\"/" "$BUILD_GRADLE"
-grep -qE "^[[:space:]]*versionName = \"$EMBED_NAME\"$" "$BUILD_GRADLE" || fail "版本注入后校验失败"
+bash "$VERSION_INJECT" inject "$BUILD_GRADLE" "$EMBED_NAME" || fail "版本注入失败（源文件已还原或未改动）"
 
 # ─── 构建 ────────────────────────────────────────────────────────────────
 log "构建 :app:assembleFossRelease（versionName=$EMBED_NAME）"
@@ -330,7 +335,7 @@ export SIGNING_KEYSTORE_PATH SIGNING_KEY_ALIAS
 export SIGNING_KEY_PASSWORD=$DSH_KEY_PASSWORD
 export SIGNING_STORE_PASSWORD=$DSH_KEYSTORE_PASSWORD
 ./gradlew --no-daemon :app:assembleFossRelease --console=plain || fail "构建失败"
-restore_gradle
+restore_gradle || fail "构建成功但版本注入还原失败（备份保留在 $GRADLE_BAK，请人工恢复）"
 trap - EXIT
 
 OUT_APK=""
