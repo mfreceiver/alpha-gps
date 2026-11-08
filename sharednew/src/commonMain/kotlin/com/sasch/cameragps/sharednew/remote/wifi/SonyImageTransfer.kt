@@ -11,6 +11,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.jetbrains.compose.resources.decodeToImageBitmap
+import kotlin.time.TimeSource
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -159,12 +160,14 @@ internal class SonyImageTransfer(
         return cameraPhotoPage(captures, offset).also { pagePhotos = it.photos }
     }
 
-    suspend fun thumbnail(handle: Long): ImageBitmap? {
+    suspend fun thumbnail(handle: Long, stats: ThumbnailStatsSink? = null): ImageBitmap? {
         if (!(catalog?.hasThumbnails
                 ?: capabilities.deviceInfo.supports(GET_THUMB)) || pagePhotos.none { it.handle == handle }
         ) return null
         return try {
+            val requestStarted = TimeSource.Monotonic.markNow()
             val bytes = catalog?.thumbnail(handle) ?: data(GET_THUMB, listOf(handle), 512 * 1024)
+            stats?.onThumbnailBytes(handle, bytes.size, requestStarted.elapsedNow().inWholeMilliseconds)
             withContext(Dispatchers.Default) {
                 if (bytes.size >= 2 && bytes[0] == 0xff.toByte() && bytes[1] == 0xd8.toByte()) {
                     val jpeg = SonyJpeg.inspect(bytes)
