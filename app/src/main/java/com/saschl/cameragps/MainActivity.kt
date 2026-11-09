@@ -127,7 +127,13 @@ class MainActivity : AppCompatActivity() {
             } else {
                 // Android 12+ would only move the task to the background here, leaving the
                 // camera connected. Back at the root means exit: finish so onDestroy disconnects.
-                finish()
+                // finishAndRemoveTask also removes the Recents card, so Back and a real swipe
+                // share one semantics: the task removal is delivered at once, the card is gone,
+                // and no later genuine "swipe the still-listed card" can race the exit flow.
+                // If the removal's unowned delivery arrives while the owned teardown is still
+                // active, the exit gate's replace path folds it in; if it arrives after a
+                // background connect retired the flow, the gate's retirement rules apply.
+                finishAndRemoveTask()
             }
         }
 

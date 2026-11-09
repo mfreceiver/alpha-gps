@@ -40,3 +40,8 @@
 - 做什么：README:63-66、88-89 改写为“knownRegions 仅 en/Base；保留的 `iosApp/alphagps/InfoPlist.xcstrings` 仍含历史德语翻译（iOS 默认禁用，未清理）”，或直接删除该文件的 de 条目。
 - 验收：README 陈述与 `InfoPlist.xcstrings`、`project.pbxproj` 实际一致。
 - 依据：sol 对 a4f756f 的复核（InfoPlist.xcstrings:28-54）。
+
+### 8. 残余风险：任务移除的首次 onTaskRemoved 迟到投递可落在重连后的新服务上
+- 做什么：评估在 AppExitGate/LocationSenderService 增加对“重连后立刻到达的 unowned removal”的启发式甄别，或接受现状并在此记录。窗口条件：Android 15 AOSP 中 ActivityTaskSupervisor.cleanUpRemovedTask → ActiveServices.cleanUpServices 只把 taskRemoved 的枚举投到 system-server Handler，执行时才枚举当时运行的服务；同一 removal 的**首次**投递可晚于旧服务 teardown 完成与 Connect 重启，落到新服务实例上。若旧 flow 在退休时已完成（completedAtRetire=true），Gate 按状态机会放行该迟到投递（AppExitGate.kt scheduleExit），disconnectAll 会清掉新 GATT、stopSelf 停掉新 FGS。根页 Back 已改 finishAndRemoveTask()，"Back 完成后卡片仍在→真实划卡" 主路径已消除；该残余窗口与既有 unowned-entered flow 的同类窗口同级，本地无法区分（事件序列与"真实新划卡"完全相同）。AOSP 依据：ActivityTaskSupervisor.cleanUpRemovedTask/ActiveServices.cleanUpServices 的异步 Handler 投递（sol 源码分析，2026-11-09）。
+- 验收：若处置，需与 AppExitGateTest 全部既有反例测试兼容；若接受现状，保留本条作已知风险登记。
+- 依据：sol 对 9b436d9 的复核（P2-2 设计处置结论）。
