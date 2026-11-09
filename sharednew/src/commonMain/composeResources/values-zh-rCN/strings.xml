@@ -364,6 +364,12 @@
     <string name="wifi_remote_selection_count">已选 %1$d 张</string>
     <string name="wifi_remote_selection_clear">取消选择</string>
     <string name="wifi_remote_selection_all">全选本页</string>
+    <string name="wifi_remote_selection_count_other_dates">已选 %1$d 张（含其它日期）</string>
+    <string name="wifi_remote_dates_loading">正在读取照片目录…</string>
+    <string name="wifi_remote_dates_empty">相机上没有支持的照片。</string>
+    <string name="wifi_remote_dates_unknown">未知日期</string>
+    <string name="wifi_remote_dates_count">%1$d 张</string>
+    <string name="wifi_remote_back_busy">请等待当前操作完成或取消后再返回。</string>
     <string name="wifi_remote_batch_formats">选择下载格式</string>
     <string name="wifi_remote_batch_formats_hint">选择要下载的格式。已保存或超过大小限制的照片会被跳过。</string>
     <string name="wifi_remote_batch_file_count">%1$d 个文件</string>

@@ -99,7 +99,8 @@ internal fun WifiPhotoViewer(
     val browser = state.photoBrowser
     val policy = WifiFormatPolicy.of(defaultDownloadFormatJpeg)
     val captures = remember(browser.photos) { groupCameraPhotos(browser.photos) }
-    val thumbnails by viewModel.controller.thumbnails.collectAsState()
+    val controller = viewModel.controller
+    val thumbnails by controller.thumbnails.collectAsState()
     val preview by viewModel.controller.photoPreview.collectAsState()
     DisposableEffect(viewModel) {
         onDispose { viewModel.controller.clearPhotoPreview(viewModel.identifier) }
@@ -117,6 +118,16 @@ internal fun WifiPhotoViewer(
         val changingPage = browser.loading && (viewModel.viewedPhotoIndex ?: browser.offset) !in
                 browser.offset until browser.offset + captures.size
 
+        // Date pages fetch thumbnails on demand only: the viewer wants the one on screen (the
+        // placeholder behind its preview) and its neighbours ready for the next swipe.
+        if (browser.grouped) LaunchedEffect(pager.currentPage, browser.pageRevision, captures) {
+            val shown = pager.currentPage - preceding
+            controller.requestThumbnails(
+                viewModel.identifier, browser.pageRevision,
+                listOfNotNull(captures.getOrNull(shown)?.id),
+                listOfNotNull(captures.getOrNull(shown + 1)?.id, captures.getOrNull(shown - 1)?.id)
+            )
+        }
         LaunchedEffect(
             pager.settledPage,
             browser.loading,

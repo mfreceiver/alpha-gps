@@ -25,9 +25,11 @@ import cameragps.sharednew.generated.resources.wifi_remote_download
 import cameragps.sharednew.generated.resources.wifi_remote_selection_all
 import cameragps.sharednew.generated.resources.wifi_remote_selection_clear
 import cameragps.sharednew.generated.resources.wifi_remote_selection_count
+import cameragps.sharednew.generated.resources.wifi_remote_selection_count_other_dates
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
+import com.sasch.cameragps.sharednew.remote.wifi.dateKey
 import com.sasch.cameragps.sharednew.remote.wifi.formatByteSize
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import org.jetbrains.compose.resources.painterResource
@@ -58,11 +60,23 @@ internal fun WifiPhotoBrowserTopBar(
     val selectedIds = viewModel.selectedPhotoIds
     val selecting = selectedIds.isNotEmpty()
     val captures = remember(browser.photos) { groupCameraPhotos(browser.photos) }
+    val dateKey = browser.dateKey
+    // Selections survive switching days; say so when the count includes captures not on this day.
+    val includesOtherDates = browser.grouped && dateKey != null &&
+            viewModel.selectedPhotos.values.any { it.dateKey != dateKey }
+    // Select-all works on a grid; the day list has nothing to select.
+    val gridShown = !browser.grouped || dateKey != null
     TopAppBar(
         title = {
             Text(
-                if (selecting) stringResource(Res.string.wifi_remote_selection_count, selectedIds.size)
-                else stringResource(Res.string.wifi_remote_browser_title),
+                when {
+                    selecting && includesOtherDates -> stringResource(
+                        Res.string.wifi_remote_selection_count_other_dates, selectedIds.size
+                    )
+                    selecting -> stringResource(Res.string.wifi_remote_selection_count, selectedIds.size)
+                    dateKey != null -> dateKeyLabel(dateKey)
+                    else -> stringResource(Res.string.wifi_remote_browser_title)
+                },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -86,7 +100,7 @@ internal fun WifiPhotoBrowserTopBar(
         },
         actions = {
             if (selecting) {
-                IconButton(
+                if (gridShown) IconButton(
                     onClick = viewModel::selectAllPhotos,
                     enabled = !busy && captures.any { it.id !in selectedIds },
                 ) {
@@ -114,7 +128,11 @@ internal fun WifiPhotoBrowserTopBar(
                 }
             } else {
                 IconButton(
-                    onClick = { viewModel.controller.browsePhotos(viewModel.identifier) },
+                    onClick = {
+                        // A refresh re-enumerates the card and starts a new catalog generation.
+                        if (browser.grouped) viewModel.controller.browseDates(viewModel.identifier)
+                        else viewModel.controller.browsePhotos(viewModel.identifier)
+                    },
                     enabled = !busy,
                 ) {
                     Icon(

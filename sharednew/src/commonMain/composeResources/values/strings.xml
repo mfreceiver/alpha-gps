@@ -401,6 +401,12 @@
     <string name="wifi_remote_selection_count">%1$d selected</string>
     <string name="wifi_remote_selection_clear">Cancel selection</string>
     <string name="wifi_remote_selection_all">Select all on page</string>
+    <string name="wifi_remote_selection_count_other_dates">%1$d selected (incl. other dates)</string>
+    <string name="wifi_remote_dates_loading">Reading the photo catalog…</string>
+    <string name="wifi_remote_dates_empty">No supported photos on the camera.</string>
+    <string name="wifi_remote_dates_unknown">Unknown date</string>
+    <string name="wifi_remote_dates_count">%1$d photos</string>
+    <string name="wifi_remote_back_busy">Wait for the current operation to finish, or cancel it, before going back.</string>
     <string name="wifi_remote_batch_formats">Choose formats to download</string>
     <string name="wifi_remote_batch_formats_hint">Choose which formats to download. Photos already saved or over the size limit are skipped.</string>
     <string name="wifi_remote_batch_file_count">%1$d files</string>
