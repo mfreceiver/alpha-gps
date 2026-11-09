@@ -56,6 +56,13 @@ android {
         versionName = "0.1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // arm64-only（用户要求）：只打包/构建 arm64-v8a，缩短 native 构建时间。
+        // 老 32 位（armeabi-v7a）与 x86/x86_64 设备/模拟器不可安装本应用。
+        // heif 子模块的 externalNativeBuild 同步设置，CMake 只编译 arm64-v8a。
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     // F-Droid builds from source without the keystore or signing secrets — release

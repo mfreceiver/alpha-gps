@@ -79,5 +79,35 @@ grep -q "^uses-permission: name='android.permission.INTERNET'$" <<< "$BADGING" \
   || fail "缺少 INTERNET 权限"
 pass "package=$EXPECT_PACKAGE、INTERNET 权限、versionName=$VERSION_NAME、versionCode=$VERSION_CODE"
 
+# ─── 3. ABI 断言（仅 arm64-v8a；app/build.gradle.kts ndk.abiFilters）──────
+# lib/ 下所有条目必须位于 lib/arm64-v8a/ 且该目录至少有一个 .so。
+# 用 python3 zipfile（unzip 逐条列出不便于断言；此处已有 python3 依赖）。
+ABI_OUT=$(python3 - "$APK_PATH" <<'PY'
+import sys, zipfile
+try:
+    z = zipfile.ZipFile(sys.argv[1])
+    names = z.namelist()
+except Exception as e:
+    print(f"OPEN_FAIL {e}"); sys.exit(0)
+bad = sorted(n for n in names
+             if n.startswith("lib/") and not n.startswith("lib/arm64-v8a/"))
+so = [n for n in names
+      if n.startswith("lib/arm64-v8a/") and n.endswith(".so")]
+if bad:
+    print("BAD_ABI " + ",".join(bad[:5]))
+elif not so:
+    print("NO_SO")
+else:
+    print("OK " + str(len(so)))
+PY
+) || fail "APK ABI 检查：zipfile 打开/读取失败（非有效 zip/APK）"
+case "$ABI_OUT" in
+  OK\ *) pass "APK 仅含 arm64-v8a（lib/arm64-v8a/ 下 ${ABI_OUT#OK } 个 .so）" ;;
+  OPEN_FAIL*) fail "APK 无法作为 zip 打开（ABI 检查）: $ABI_OUT" ;;
+  BAD_ABI*)  fail "APK 含非 arm64-v8a 的 native 库目录（必须仅 arm64-v8a）: $ABI_OUT" ;;
+  NO_SO)     fail "APK 的 lib/arm64-v8a/ 下没有任何 .so（native 库缺失）" ;;
+  *)         fail "APK ABI 检查输出异常: $ABI_OUT" ;;
+esac
+
 echo
 echo "${C_GRN}全部断言通过${C_RST}: $(basename "$APK_PATH")"
