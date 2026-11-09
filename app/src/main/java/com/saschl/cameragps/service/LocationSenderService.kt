@@ -141,10 +141,13 @@ class LocationSenderService : LifecycleService() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         Timber.i("Task removed; disconnecting cameras and stopping service")
+        // Snapshot: the teardown callback used to read the mutable field, which a
+        // start command arriving during the window could have advanced meanwhile.
+        val startId = lastHandledStartId
         services.disconnectAllOnExit {
             // Only stop for our own last start: a start command that arrived during
             // the teardown window (and cancelled it) must keep the service alive.
-            if (lastHandledStartId > 0) stopSelf(lastHandledStartId) else stopSelf()
+            if (startId > 0) stopSelf(startId) else stopSelf()
         }
     }
 
