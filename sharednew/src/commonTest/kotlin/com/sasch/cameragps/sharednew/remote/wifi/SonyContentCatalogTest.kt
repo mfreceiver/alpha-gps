@@ -266,6 +266,85 @@ class SonyContentCatalogTest : WifiLoggingTest() {
     }
 
     @Test
+    fun versionFourDateCatalogGroupsTheRecordedLocalDayAndServesPagesWithoutExtraTraffic() = runTest {
+        val connection = EventConnection()
+        val events = PtpIpEventMonitor(connection, backgroundScope)
+        val requests = mutableListOf<Pair<Int, List<Long>>>()
+        val replies = Channel<PtpIpPacket>(Channel.UNLIMITED)
+        val may1Noon = 1714564800000L // 2024-05-01T12:00:00 camera-local
+        val may2Early = 1714609800000L // 2024-05-02T00:30:00 camera-local
+        val transport = object : PtpIpCommandTransport {
+            override suspend fun receive() = replies.receive()
+            override suspend fun send(packet: PtpIpPacket) {
+                if (packet.type != 6) return
+                fun read(at: Int, size: Int): Long = (0 until size).fold(0L) { n, i ->
+                    n or ((packet.body[at + i].toLong() and 255) shl (i * 8))
+                }
+
+                val code = read(4, 2).toInt()
+                val id = read(6, 4).toInt()
+                requests += code to (10 until packet.body.size step 4).map { read(it, 4) }
+                val data = when (code) {
+                    0x9207 -> {
+                        connection.packets.send(
+                            PtpIpPacket(
+                                8, number(0xc222, 2) + number(id.toLong(), 4) +
+                                        number(0x9207d30f, 4) + number(1, 4)
+                            )
+                        )
+                        null
+                    }
+
+                    0x923c -> batch(
+                        content(1, may1Noon, jpeg, raw), content(2, may2Early, jpeg),
+                        content(3, 1000, jpeg)
+                    )
+
+                    0x923e -> byteArrayOf(0, 0, 0, 16) + "ftypheic".encodeToByteArray() + ByteArray(4)
+                    else -> error("Unexpected operation $code")
+                }
+                if (data != null) {
+                    replies.send(PtpIpOperations.startData(id, data.size))
+                    replies.send(PtpIpOperations.endData(id, data))
+                }
+                replies.send(PtpIpPacket(7, number(0x2001, 2) + number(id.toLong(), 4)))
+            }
+        }
+        val queue = PtpIpCommandQueue(transport, backgroundScope)
+        val ready = SonyPtpInitializationResult.Ready(
+            "4.00", 310,
+            SonyExtendedDeviceInfo(300, emptySet(), setOf(0xd30f)),
+            PtpDeviceInfo(setOf(0x9207, 0x923c, 0x923d, 0x923e)), null
+        )
+        val transfer = SonyImageTransfer(queue, ready, events) { error("No file") }
+        assertEquals(
+            listOf(
+                DateGroup("2024-05-02", 1), DateGroup("2024-05-01", 1), DateGroup("1970-01-01", 1)
+            ), transfer.openCatalog(),
+            "The recorded local day is used as is; the JPG+RAW pair is one capture"
+        )
+        val enumerated = requests.size
+        val hidden = (1L shl 56) or (1L shl 32) or 2L // The May 2 JPEG: no page shows it yet.
+        assertEquals(null, transfer.thumbnail(hidden))
+        assertEquals(enumerated, requests.size)
+        val day = transfer.datePage("2024-05-01", 0)
+        assertEquals(2, day.photos.size)
+        assertEquals(1, day.totalObjects)
+        // Full 64-bit handles are kept as they are; only a displayed page makes them addressable.
+        assertEquals(
+            setOf((1L shl 56) or (1L shl 32) or 1L, (1L shl 56) or (2L shl 32) or 1L),
+            day.photos.map { it.handle }.toSet()
+        )
+        assertEquals(enumerated, requests.size)
+        assertEquals(null, transfer.thumbnail(hidden))
+        assertEquals(enumerated, requests.size)
+        transfer.thumbnail(day.photos.first().handle)
+        assertEquals(0x923e, requests.last().first)
+        queue.close()
+        events.close()
+    }
+
+    @Test
     fun versionFourDownloadFailuresKeepTransportReasons() = runTest {
         val connection = EventConnection()
         val events = PtpIpEventMonitor(connection, backgroundScope)
