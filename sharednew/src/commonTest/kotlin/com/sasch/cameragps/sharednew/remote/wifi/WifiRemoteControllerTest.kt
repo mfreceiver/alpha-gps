@@ -53,6 +53,10 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         var photos = listOf(WifiCameraPhoto(42L, "DSC.JPG", 100L, "image/jpeg", ""))
         val thumbnailRequests = mutableListOf<Long>()
         var thumbnailImage: ImageBitmap? = null
+        /** Runs after the request is recorded; lets a test stall or observe a specific request. */
+        var thumbnailHook: (suspend (Long) -> Unit)? = null
+        val throwingThumbnails = mutableSetOf<Long>()
+        val missingThumbnails = mutableSetOf<Long>()
         val screenPreviewRequests = mutableListOf<Long>()
         var screenPreviewGate: CompletableDeferred<Unit>? = null
         var screenPreviewImage: ImageBitmap? = PreviewBitmap()
@@ -84,6 +88,9 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
 
         override suspend fun photoThumbnail(handle: Long, stats: ThumbnailStatsSink?): ImageBitmap? {
             thumbnailRequests += handle
+            thumbnailHook?.invoke(handle)
+            check(handle !in throwingThumbnails) { "thumbnail $handle failed" }
+            if (handle in missingThumbnails) return null
             return thumbnailImage
         }
 
@@ -2364,6 +2371,142 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         assertEquals(WifiRemotePhase.Closing, registry.get("camera")?.wifiRemote?.phase)
         runCurrent()
         assertNull(registry.get("camera"))
+        controller.closeAndJoin()
+    }
+
+    // ---- Batched, non-blocking thumbnail loading ----
+
+    private fun thumbHandle(index: Int) = index * 2L + 1 // RAW is the grid thumbnail of a JPG+ARW capture
+
+    @Test
+    fun catalogEndsLoadingBeforeThumbnailsAndTheyArriveInSmallBatches() = runTest {
+        val connection = pagedConnection()
+        connection.thumbnailImage = PreviewBitmap(160, 120)
+        val stall = CompletableDeferred<Unit>()
+        connection.thumbnailHook = { handle ->
+            if (handle == thumbHandle(THUMBNAIL_BATCH_SIZE)) stall.await()
+        }
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        val browser = registry.get("camera")!!.wifiRemote.photoBrowser
+        assertFalse(browser.loading, "the grid is usable as soon as the catalog page is in")
+        assertFalse(browser.failed)
+        assertEquals(pageSize, groupCameraPhotos(browser.photos).size)
+        assertEquals(
+            THUMBNAIL_BATCH_SIZE, controller.thumbnails.value.size,
+            "the first batch is already on screen while the second is still being fetched"
+        )
+        assertEquals((0 until THUMBNAIL_BATCH_SIZE).map(::thumbHandle).toSet(), controller.thumbnails.value.keys)
+        stall.complete(Unit)
+        runCurrent()
+        assertEquals(pageSize, controller.thumbnails.value.size)
+        assertEquals((0 until pageSize).map(::thumbHandle), connection.thumbnailRequests)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun gridPositionDecidesWhichBatchIsFetchedNext() = runTest {
+        val connection = pagedConnection()
+        connection.thumbnailImage = PreviewBitmap(160, 120)
+        val stall = CompletableDeferred<Unit>()
+        connection.thumbnailHook = { handle ->
+            if (handle == thumbHandle(THUMBNAIL_BATCH_SIZE)) stall.await()
+        }
+        val controller = WifiRemoteController(
+            backgroundScope, CameraSessionRegistry(), { _, _ -> connection }, {}, {})
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        controller.focusThumbnails("camera", 40) // user scrolled down while batch 2 was in flight
+        stall.complete(Unit)
+        runCurrent()
+        // Batch 2 (12..23) was already chosen and finishes; the batch chosen after the scroll starts at 40.
+        val rest = connection.thumbnailRequests.drop(THUMBNAIL_BATCH_SIZE + 1)
+        assertEquals((THUMBNAIL_BATCH_SIZE + 1 until 2 * THUMBNAIL_BATCH_SIZE).map(::thumbHandle),
+            rest.take(THUMBNAIL_BATCH_SIZE - 1))
+        assertEquals((40 until 40 + THUMBNAIL_BATCH_SIZE).map(::thumbHandle),
+            rest.drop(THUMBNAIL_BATCH_SIZE - 1).take(THUMBNAIL_BATCH_SIZE))
+        assertEquals(pageSize, controller.thumbnails.value.size, "the skipped ones are filled in afterwards")
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun aFailedOrMissingThumbnailOnlyAffectsItself() = runTest {
+        val connection = pagedConnection()
+        connection.thumbnailImage = PreviewBitmap(160, 120)
+        connection.throwingThumbnails += thumbHandle(3)
+        connection.missingThumbnails += thumbHandle(5)
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        val expected = (0 until pageSize).filter { it != 3 && it != 5 }.map(::thumbHandle).toSet()
+        assertEquals(expected, controller.thumbnails.value.keys)
+        val browser = registry.get("camera")!!.wifiRemote.photoBrowser
+        assertFalse(browser.failed, "a thumbnail problem must not fail the page")
+        assertFalse(browser.loading)
+        assertEquals(pageSize, connection.thumbnailRequests.size, "failed ones are not retried in a loop")
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun changingPageCancelsTheLoaderAndStopsFetchingTheOldPage() = runTest {
+        val connection = pagedConnection()
+        connection.thumbnailImage = PreviewBitmap(160, 120)
+        val never = CompletableDeferred<Unit>()
+        connection.thumbnailHook = { handle ->
+            if (handle == thumbHandle(THUMBNAIL_BATCH_SIZE)) never.await()
+        }
+        val controller = WifiRemoteController(
+            backgroundScope, CameraSessionRegistry(), { _, _ -> connection }, {}, {})
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        val requestsBefore = connection.thumbnailRequests.size
+        assertEquals(THUMBNAIL_BATCH_SIZE + 1, requestsBefore)
+        controller.browsePhotos("camera", pageSize)
+        runCurrent()
+        assertEquals(listOf(pageSize), connection.pageRequests)
+        val later = connection.thumbnailRequests.drop(requestsBefore)
+        assertEquals(listOf(thumbHandle(pageSize), thumbHandle(pageSize + 1)), later,
+            "only the new page's thumbnails are fetched after the switch")
+        assertEquals(setOf(thumbHandle(pageSize), thumbHandle(pageSize + 1)), controller.thumbnails.value.keys)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun aDownloadPausesThumbnailLoadingAndItResumesAfterwards() = runTest {
+        val connection = pagedConnection()
+        connection.thumbnailImage = PreviewBitmap(160, 120)
+        val stall = CompletableDeferred<Unit>()
+        connection.thumbnailHook = { handle ->
+            if (handle == thumbHandle(THUMBNAIL_BATCH_SIZE)) stall.await()
+        }
+        val controller = WifiRemoteController(
+            backgroundScope, CameraSessionRegistry(), { _, _ -> connection }, {}, {})
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        controller.downloadPhoto("camera", 0L)
+        runCurrent()
+        stall.complete(Unit) // the request in flight finishes, nothing new may start
+        runCurrent()
+        assertEquals(1, connection.downloads)
+        assertEquals(THUMBNAIL_BATCH_SIZE + 1, connection.thumbnailRequests.size,
+            "no thumbnail competes with the running download")
+        connection.downloadResult.complete(WifiImageTransferState(WifiImageTransferStatus.Saved))
+        runCurrent()
+        assertEquals(pageSize, connection.thumbnailRequests.size)
+        assertEquals(pageSize, controller.thumbnails.value.size)
         controller.closeAndJoin()
     }
 }

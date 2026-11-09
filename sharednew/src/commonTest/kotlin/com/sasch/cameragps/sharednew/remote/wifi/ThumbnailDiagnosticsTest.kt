@@ -57,4 +57,12 @@ class ThumbnailDiagnosticsTest {
         assertNull(stats.takeCancelled(), "cancellation must not repeat")
         assertNull(stats.takeSummary(), "summary must not follow cancellation")
     }
+
+    @Test
+    fun batchLineReportsFetchedOfRequestedAndTimings() {
+        assertEquals(
+            "page=60 batch=2 n=11/12 reqMs=640 wallMs=700 bytes=120000",
+            thumbnailBatchLine(60, 2, 11, 12, 640, 700, 120_000)
+        )
+    }
 }

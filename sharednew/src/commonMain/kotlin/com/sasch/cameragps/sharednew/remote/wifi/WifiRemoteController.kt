@@ -22,11 +22,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlin.math.abs
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 internal interface WifiRemoteConnection {
     val cameraName: String
@@ -120,6 +121,9 @@ class WifiRemoteController internal constructor(
     private var job: Job? = null
     private val _thumbnails = MutableStateFlow<Map<Long, ImageBitmap>>(emptyMap())
     val thumbnails = _thumbnails.asStateFlow()
+    private val _thumbnailsLoading = MutableStateFlow(false)
+    /** True while the current page still has thumbnails to fetch (including while paused). */
+    val thumbnailsLoading = _thumbnailsLoading.asStateFlow()
     private val _photoPreview = MutableStateFlow<WifiPhotoPreview?>(null)
     val photoPreview = _photoPreview.asStateFlow()
     private var photoPreviewJob: Job? = null
@@ -127,6 +131,15 @@ class WifiRemoteController internal constructor(
     private var activeConnection: WifiRemoteConnection? = null
     private var previewJob: Job? = null
     private var photoJob: Job? = null
+    /** Background batched thumbnail loader of the current page (independent of [photoJob]). */
+    private var thumbJob: Job? = null
+    /** Page-relative capture index the grid is showing; the loader serves it (and what follows) first. */
+    private var thumbFocus = 0
+    /**
+     * While > 0 (a catalog load, download or screen preview is using the camera's single
+     * command queue) the thumbnail loader waits between requests instead of competing.
+     */
+    private val thumbnailHolds = MutableStateFlow(0)
     /** Monotonic catalog generation: every (re)open or refresh starts a new one. */
     private var browserGeneration = 0L
     /** Full handle index of pages that loaded successfully within the current generation. */
@@ -251,6 +264,8 @@ class WifiRemoteController internal constructor(
             previewJob?.cancelAndJoin()
             previewJob = null
             _image.value = null
+            thumbJob?.cancelAndJoin()
+            thumbJob = null
             if (offset == null) {
                 photoCatalog = emptyMap()
                 _thumbnails.value = emptyMap()
@@ -271,35 +286,94 @@ class WifiRemoteController internal constructor(
                 )
             }
             val captures = groupCameraPhotos(page.photos)
-            val previewOrder = if (preferredPhotoIndex == null) captures.indices.toList()
-            else captures.indices.sortedBy { abs(page.offset + it - preferredPhotoIndex) }
-            // "AlphaThumb" diagnostics: quantify per-page thumbnail fetch time and memory.
-            val pageStats = ThumbnailPageStats(page.offset, captures.size)
-            try {
-                for ((position, index) in previewOrder.withIndex()) {
-                    val capture = captures[index]
-                    val photo = capture.thumbnail
+            thumbFocus = preferredPhotoIndex?.minus(page.offset)
+                ?.coerceIn(0, (captures.size - 1).coerceAtLeast(0)) ?: 0
+            // The catalog is on screen now: `loading` ends with this work, and the thumbnails
+            // arrive in small batches afterwards (paused while a transfer/preview runs).
+            thumbJob = sessionScope?.launch { loadThumbnails(connection, page.offset, captures) }
+        }
+    }
+
+    /** The grid reports the first capture (page-relative) it shows so nearby thumbnails load first. */
+    fun focusThumbnails(identifier: String, captureIndex: Int) {
+        if (_owner.value.equals(identifier, true)) thumbFocus = captureIndex.coerceAtLeast(0)
+    }
+
+    private fun holdThumbnails() = thumbnailHolds.update { it + 1 }
+    private fun releaseThumbnails() = thumbnailHolds.update { (it - 1).coerceAtLeast(0) }
+
+    /**
+     * Fetches the page's thumbnails in batches of [THUMBNAIL_BATCH_SIZE], each one published as soon
+     * as it arrives. The next batch is chosen from what is still missing, starting at the grid's
+     * current position. A failed or missing thumbnail only affects itself: already arrived ones are
+     * kept and the loader moves on. Cancelling (page change, refresh, disconnect) stops after the
+     * request in flight and keeps what arrived.
+     */
+    private suspend fun loadThumbnails(
+        connection: WifiRemoteConnection, pageOffset: Int, captures: List<WifiCameraCapture>
+    ) {
+        val settled = HashSet<Int>()
+        // "AlphaThumb" diagnostics: per-batch lines plus one per-page summary.
+        val pageStats = ThumbnailPageStats(pageOffset, captures.size)
+        var batchNumber = 0
+        _thumbnailsLoading.value = true
+        try {
+            while (true) {
+                val batch = nextThumbnailBatch(captures.size, settled, thumbFocus)
+                if (batch.isEmpty()) break
+                batchNumber++
+                val started = TimeSource.Monotonic.markNow()
+                var fetched = 0
+                var requestMs = 0L
+                var bytes = 0L
+                for (index in batch) {
+                    thumbnailHolds.first { it == 0 }
+                    settled += index
+                    val photo = captures[index].thumbnail
                     var fetchedBytes = 0L
-                    var requestMs = 0L
-                    connection.photoThumbnail(photo.handle, ThumbnailStatsSink { _, bytes, ms ->
-                        fetchedBytes = bytes.toLong()
-                        requestMs = ms
-                    })?.also { bitmap ->
-                        val bitmapEstBytes = bitmap.width.toLong() * bitmap.height * 4
-                        pageStats.record(ThumbnailSample(requestMs, fetchedBytes, bitmapEstBytes))
-                        thumbLog.d {
-                            "page=${page.offset} #$position handle=${photo.handle} " +
-                                    "cid=${photo.captureId ?: "-"} bytes=$fetchedBytes reqMs=$requestMs " +
-                                    "bitmap=${bitmap.width}x${bitmap.height} estBytes=$bitmapEstBytes"
-                        }
-                        _thumbnails.value += photo.handle to bitmap
+                    var itemMs = 0L
+                    val bitmap = try {
+                        connection.photoThumbnail(photo.handle, ThumbnailStatsSink { _, received, ms ->
+                            fetchedBytes = received.toLong()
+                            itemMs = ms
+                        })
+                    } catch (_: TimeoutCancellationException) {
+                        currentCoroutineContext().ensureActive() // a real cancel still propagates
+                        thumbLog.w { "page=$pageOffset handle=${photo.handle} timed out" }
+                        null
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (failure: Exception) {
+                        thumbLog.w { "page=$pageOffset handle=${photo.handle} failed: ${failure.message}" }
+                        null
                     }
+                    if (bitmap == null) continue
+                    val bitmapEstBytes = bitmap.width.toLong() * bitmap.height * 4
+                    pageStats.record(ThumbnailSample(itemMs, fetchedBytes, bitmapEstBytes))
+                    thumbLog.d {
+                        "page=$pageOffset #$index handle=${photo.handle} cid=${photo.captureId ?: "-"} " +
+                                "bytes=$fetchedBytes reqMs=$itemMs bitmap=${bitmap.width}x${bitmap.height} " +
+                                "estBytes=$bitmapEstBytes"
+                    }
+                    _thumbnails.value += photo.handle to bitmap
+                    fetched++
+                    requestMs += itemMs
+                    bytes += fetchedBytes
                 }
-                pageStats.takeSummary()?.let { line -> thumbLog.i { line } }
-            } catch (cancelled: CancellationException) {
-                pageStats.takeCancelled()?.let { line -> thumbLog.i { line } }
-                throw cancelled
+                thumbLog.i {
+                    thumbnailBatchLine(
+                        pageOffset, batchNumber, fetched, batch.size, requestMs,
+                        started.elapsedNow().inWholeMilliseconds, bytes
+                    )
+                }
             }
+            pageStats.takeSummary()?.let { line -> thumbLog.i { line } }
+        } catch (cancelled: CancellationException) {
+            pageStats.takeCancelled()?.let { line -> thumbLog.i { line } }
+            throw cancelled
+        } finally {
+            // A replacement loader only starts after this one was joined, so this cannot clobber it.
+            _thumbnailsLoading.value = false
         }
     }
 
@@ -316,6 +390,7 @@ class WifiRemoteController internal constructor(
         ) return
         clearPhotoPreview(id)
         _photoPreview.value = WifiPhotoPreview(handle)
+        holdThumbnails()
         photoPreviewJob = parent.launch {
             var image: ImageBitmap? = null
             for (photo in capture.previewCandidates) {
@@ -335,7 +410,7 @@ class WifiRemoteController internal constructor(
             currentCoroutineContext().ensureActive()
             _photoPreview.value = WifiPhotoPreview(handle, image, loading = false)
             if (image == null) log.d { "Camera screen preview unavailable; retaining thumbnail" }
-        }
+        }.also { it.invokeOnCompletion { releaseThumbnails() } }
     }
 
     fun clearPhotoPreview(identifier: String) {
@@ -443,6 +518,8 @@ class WifiRemoteController internal constructor(
             clearPhotoPreview(id)
             previewJob?.cancelAndJoin()
             previewJob = null
+            thumbJob?.cancelAndJoin()
+            thumbJob = null
             connection.closePhotoBrowser()
             photoCatalog = emptyMap()
             _thumbnails.value = emptyMap()
@@ -498,6 +575,7 @@ class WifiRemoteController internal constructor(
         _photoPreview.value =
             _photoPreview.value?.takeIf { it.image != null }?.copy(loading = false)
         registry.updateWifiRemote(id, starting(state))
+        holdThumbnails()
         val work = parent.launch(start = CoroutineStart.LAZY) {
             try {
                 action(id, connection)
@@ -549,6 +627,7 @@ class WifiRemoteController internal constructor(
                     )
                 }
             }
+            releaseThumbnails()
         }
         work.start()
     }
@@ -635,6 +714,9 @@ class WifiRemoteController internal constructor(
             activeConnection = null
             previewJob = null
             photoJob = null
+            thumbJob = null
+            _thumbnailsLoading.value = false
+            thumbnailHolds.value = 0
             photoPreviewJob = null
             photoCatalog = emptyMap()
             _photoPreview.value = null
