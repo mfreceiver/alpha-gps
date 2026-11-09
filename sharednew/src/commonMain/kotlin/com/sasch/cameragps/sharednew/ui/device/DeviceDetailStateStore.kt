@@ -35,16 +35,34 @@ class DeviceDetailStateStore(
     private val _uiState = MutableStateFlow(DeviceDetailToggleState())
     val uiState: StateFlow<DeviceDetailToggleState> = _uiState.asStateFlow()
 
-    suspend fun load(deviceId: String, deviceName: String? = null) {
+    /**
+     * Loads the row. The "enable device" and "always on" switches no longer exist
+     * in the UI, so flags persisted by earlier versions are normalised here: a
+     * device must not stay disabled with no way to re-enable it, and always-on is
+     * off (exiting the app disconnects the camera).
+     *
+     * @return true when a previously disabled device was re-enabled, so the
+     * platform can restore presence observation.
+     */
+    suspend fun load(deviceId: String, deviceName: String? = null): Boolean {
         val normalized = deviceId.uppercase()
         dataSource.ensureDeviceExists(normalized, deviceName)
+        var reEnabled = false
+        if (!dataSource.isDeviceEnabled(normalized)) {
+            dataSource.setDeviceEnabled(normalized, true)
+            reEnabled = true
+        }
+        if (dataSource.isAlwaysOnEnabled(normalized)) {
+            dataSource.setAlwaysOnEnabled(normalized, false)
+        }
         _uiState.update {
             it.copy(
                 deviceName = dataSource.getDeviceName(normalized) ?: deviceName.orEmpty(),
-                isAlwaysOnEnabled = dataSource.isAlwaysOnEnabled(normalized),
-                isDeviceEnabled = dataSource.isDeviceEnabled(normalized),
+                isAlwaysOnEnabled = false,
+                isDeviceEnabled = true,
             )
         }
+        return reEnabled
     }
 
     suspend fun setDeviceEnabled(deviceId: String, enabled: Boolean, deviceName: String? = null) {

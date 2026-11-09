@@ -2050,13 +2050,16 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         model.maybeAutoEnterBrowser()
         runCurrent()
         assertFalse(registry.get("camera")!!.wifiRemote.photoBrowser.open)
-        // Back navigation with the browser open disconnects the session instead of
-        // stranding the user on a live-view-less Ready screen.
+        // Back navigation with the browser open disconnects the session and returns to
+        // the caller (device page) instead of stranding the user on a live-view-less
+        // Ready screen or an intermediate "connect" page.
+        var exits = 0
         controller.browsePhotos("camera")
         runCurrent()
         model.maybeAutoEnterBrowser()
         try {
-            model.navigateBack { error("Browse-only back must disconnect, not exit the screen") }
+            model.navigateBack { exits++ }
+            assertEquals(1, exits, "Browse-only back must also leave the screen")
             // Back itself must have started teardown immediately — a Closing phase
             // here proves it, without any closeAndJoin()/disconnect() call that
             // would disconnect on its own and mask a broken Back path.
@@ -2107,9 +2110,11 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             registry.get("camera")!!.wifiRemote.photoBrowser.open,
             "A fresh connection after null-cleanup must auto-enter the browser again"
         )
-        // And Back on the reconnected session still disconnects.
+        // And Back on the reconnected session still disconnects and leaves the screen.
+        var exits = 0
         try {
-            model.navigateBack { error("Browse-only back must disconnect, not exit the screen") }
+            model.navigateBack { exits++ }
+            assertEquals(1, exits, "Browse-only back must also leave the screen")
             assertEquals(WifiRemotePhase.Closing, registry.get("camera")?.wifiRemote?.phase)
             runCurrent()
             assertNull(registry.get("camera"))

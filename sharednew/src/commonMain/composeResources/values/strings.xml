@@ -224,6 +224,12 @@
     <string name="no_devices_message">Tap the button above to start pairing your camera device.</string>
     <string name="tap_to_connect">Disconnected</string>
     <string name="connected">Connected</string>
+    <string name="device_connection_status">Connection: %1$s</string>
+    <string name="device_connection_connecting">Connecting…</string>
+    <string name="device_remove_confirm_title">Remove this camera?</string>
+    <string name="device_remove_confirm_message">%1$s will be unpaired from this phone. You can pair it again later.</string>
+    <string name="device_info_title">Camera info</string>
+    <string name="device_info_address">Bluetooth address: %1$s</string>
     <string name="transmission_active">Transmission active</string>
     <string name="transmission_inactive">Transmission inactive</string>
     <!-- Error messages for device association -->
@@ -236,21 +242,14 @@
     <string name="back">Back</string>
     <string name="device_icon">Device icon</string>
     <string name="show_details">Show details</string>
-    <string name="device_name_with_address">Name: %1$s (%2$s)</string>
-    <string name="enable_device">Enable device</string>
-    <string name="enableConstantly">Keep active (Always On)</string>
     <string name="not_paired_tap_to_pair_again">Not paired, please pair the device in the bluetooth settings</string>
     <string name="to_pair_with_your_camera_please">To pair with your camera \'%1$s\', please:</string>
     <string name="_1_turn_on_your_camera">\n1. Turn on your camera</string>
     <string name="_2_go_to_camera_settings_and_enable_bluetooth_pairing_mode">2. Go to camera settings and enable Bluetooth/Pairing mode</string>
     <string name="_3_make_sure_the_camera_is_discoverable">3. Make sure the camera is discoverable</string>
     <string name="once_your_camera_is_ready_tap_continue_to_start_pairing">\nOnce your camera is ready, tap \'Continue\' to start pairing.</string>
-    <string name="android_12_requires_keep_alive">Devices running Android 11 and below must enable keepalive mode. Tap the device and enable the setting</string>
-    <string name="always_on_description">Runs the app in the foreground. Useful if the connection cannot be established reliably on devices with aggressive battery saving measures (e.g. Xiaomi and probably more)</string>
     <string name="quick_start_feature_title">Quickstart</string>
     <string name="quick_start_feature_description">On the next screen, follow the instructions to pair your camera. Once pairing is complete, the app will automatically connect to your camera and start transmitting location data. If it does not start immediately, try restarting your camera.</string>
-    <string name="always_on_quickstart">Always On mode</string>
-    <string name="always_on_quickstart_description">If the default connection mode does not work, you can enable Always On mode after pairing your device. Tap the device entry on the main screen and turn on the toggle. This mode may use more battery, but only transmits location data when connected to the camera.</string>
     <string name="reset_welcome">Show welcome screen on next launch</string>
     <string name="will_show_welcome">Will show welcome screen on next launch!</string>
     <string name="is_there_documenation">Is there any documentation?</string>
@@ -290,9 +289,7 @@
     <string name="continue_label">Continue</string>
     <string name="cancel">Cancel</string>
     <string name="dialog_ok">OK</string>
-    <string name="setting_info">More information</string>
     <string name="enable_auto_start_description">Auto starts the app after a device reboot for configured "Always On" devices.</string>
-    <string name="hint_if_issues_after_switching">Note: Due to recent changes in the app, you may need to perform a one-time action if you encounter issues after disabling Always On mode. Simply deactivate and reactivate the device once in these settings. This is only needed once after the app update – subsequent mode changes will work immediately.</string>
     <!-- Sentry Consent Dialog -->
     <string name="sentry_consent_title">Help Improve Alpha GPS</string>
     <string name="sentry_consent_message">Would you like to help us improve the app by sending anonymous crash reports and error logs? This information helps us identify and fix issues. No personal data or location information is transmitted. You can change this setting later in the app settings.</string>
@@ -320,17 +317,6 @@
     <string name="donation_dialog_message">If the app helps your photography, a small donation helps keep development going. It is completely optional.</string>
     <string name="donation_dialog_confirm">Support project</string>
     <string name="donation_dialog_dismiss">Not now</string>
-    <string name="auto_time_correction">Automatic time correction</string>
-    <string name="auto_time_correction_hint">Let the camera automatically correct its date and time using information from your phone. This changes the setting on the connected camera.</string>
-    <string name="auto_area_adjustment">Automatic area adjustment</string>
-    <string name="auto_area_adjustment_hint">Let the camera automatically adjust its area and time zone using information from your phone. This changes the setting on the connected camera.</string>
-    <string name="camera_settings_header">Camera settings</string>
-    <string name="camera_settings_disconnected">Connect the camera to view and change these settings.</string>
-    <string name="camera_setting_unknown">Unknown</string>
-    <string name="camera_setting_pending">Waiting for the camera…</string>
-    <string name="camera_setting_unsupported">This camera does not support changing this setting from the app.</string>
-    <string name="camera_setting_failed">The camera setting could not be confirmed. Refresh to check its current value.</string>
-    <string name="camera_setting_retry">Refresh camera settings</string>
 
     <!-- In-app release notes. -->
     <string name="whats_new_title">What’s new</string>

@@ -114,6 +114,7 @@ fun AndroidWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
         } else if (host == null) startCameraSetup() else controller.connect(identifier, host)
     }
     WifiRemoteScreen(model, onConnect = { connect(it) }, onConnectAutomatically = { connect(null) },
+        autoConnectOnEntry = true,
         isExperimentalNoticeAcknowledged = {
             PreferencesManager.isWifiRemoteNoticeAcknowledged(
                 context

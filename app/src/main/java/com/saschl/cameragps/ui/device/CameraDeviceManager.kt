@@ -56,6 +56,7 @@ import cameragps.sharednew.generated.resources.pairing_failed_title
 import com.sasch.cameragps.sharednew.database.LogDatabase
 import com.sasch.cameragps.sharednew.database.devices.CameraDevice
 import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
+import com.sasch.cameragps.sharednew.ui.device.autoOpenDeviceAddress
 import com.sasch.cameragps.sharednew.whatsnew.WhatsNewDialog
 import com.sasch.cameragps.sharednew.whatsnew.WhatsNewState
 import com.saschl.cameragps.AppServices
@@ -112,7 +113,19 @@ fun CameraDeviceManager(
         mutableStateOf<String?>(null)
     }
 
-    val selectedDevice = associatedDevices.firstOrNull() { it.address == selectedDeviceAddress }
+    // Set once the user backs out of the detail screen to the list, so the
+    // single-camera shortcut below does not bounce them straight back in.
+    var autoOpenDismissed by rememberSaveable { mutableStateOf(false) }
+
+    // With exactly one saved camera the list adds nothing: open its detail screen
+    // directly (computed, not an effect, so the list never flashes first).
+    val effectiveDeviceAddress = selectedDeviceAddress ?: if (SCREENSHOT_MODE) {
+        null
+    } else {
+        autoOpenDeviceAddress(associatedDevices.map { it.address }, autoOpenDismissed)
+    }
+
+    val selectedDevice = associatedDevices.firstOrNull() { it.address == effectiveDeviceAddress }
 
     var isBluetoothEnabled by remember {
         mutableStateOf(adapter?.isEnabled == true)
@@ -292,6 +305,8 @@ fun CameraDeviceManager(
                             deviceManager.getAssociatedDevices(adapter)
                     }
                     selectedDeviceAddress = null
+                    // Removing one of several cameras must not auto-open the one left over.
+                    autoOpenDismissed = true
                 }
         }
 
@@ -343,7 +358,10 @@ fun CameraDeviceManager(
                                 deviceManager = deviceManager,
                                 associationId = it,
                         onDisassociate = disassociateDevice,
-                        onClose = { selectedDeviceAddress = null },
+                        onClose = {
+                            selectedDeviceAddress = null
+                            autoOpenDismissed = true
+                        },
                                 onHelpClick = onHelpClick
                             )
                         }

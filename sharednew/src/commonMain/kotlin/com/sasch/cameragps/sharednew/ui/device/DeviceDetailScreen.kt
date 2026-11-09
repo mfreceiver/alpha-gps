@@ -1,6 +1,8 @@
 package com.sasch.cameragps.sharednew.ui.device
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -9,14 +11,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,51 +31,34 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import cameragps.sharednew.generated.resources.Res
-import cameragps.sharednew.generated.resources.always_on_description
-import cameragps.sharednew.generated.resources.auto_area_adjustment
-import cameragps.sharednew.generated.resources.auto_area_adjustment_hint
-import cameragps.sharednew.generated.resources.auto_time_correction
-import cameragps.sharednew.generated.resources.auto_time_correction_hint
 import cameragps.sharednew.generated.resources.camera_24px
-import cameragps.sharednew.generated.resources.camera_setting_failed
-import cameragps.sharednew.generated.resources.camera_setting_pending
-import cameragps.sharednew.generated.resources.camera_setting_retry
-import cameragps.sharednew.generated.resources.camera_setting_unknown
-import cameragps.sharednew.generated.resources.camera_setting_unsupported
-import cameragps.sharednew.generated.resources.camera_settings_disconnected
-import cameragps.sharednew.generated.resources.camera_settings_header
 import cameragps.sharednew.generated.resources.cancel_button
-import cameragps.sharednew.generated.resources.dialog_ok
-import cameragps.sharednew.generated.resources.enableConstantly
-import cameragps.sharednew.generated.resources.enable_device
-import cameragps.sharednew.generated.resources.hint_if_issues_after_switching
-import cameragps.sharednew.generated.resources.info_24px
+import cameragps.sharednew.generated.resources.connected
+import cameragps.sharednew.generated.resources.device_connection_connecting
+import cameragps.sharednew.generated.resources.device_connection_status
 import cameragps.sharednew.generated.resources.keyboard_arrow_right_24px
 import cameragps.sharednew.generated.resources.rename_camera_hint
 import cameragps.sharednew.generated.resources.rename_camera_label
 import cameragps.sharednew.generated.resources.rename_camera_save
 import cameragps.sharednew.generated.resources.rename_camera_title
-import cameragps.sharednew.generated.resources.setting_info
+import cameragps.sharednew.generated.resources.tap_to_connect
 import cameragps.sharednew.generated.resources.wifi_remote_entry_hint
 import cameragps.sharednew.generated.resources.wifi_remote_title
-import com.sasch.cameragps.sharednew.bluetooth.BleSessionPhase
-import com.sasch.cameragps.sharednew.bluetooth.session.CameraAutoCorrectionSetting
-import com.sasch.cameragps.sharednew.bluetooth.session.CameraSettingState
 import com.sasch.cameragps.sharednew.ui.components.ScreenContent
-import com.sasch.cameragps.sharednew.ui.components.ScrollbarLazyColumn
-import com.sasch.cameragps.sharednew.util.KotlinPlatform
-import com.sasch.cameragps.sharednew.util.currentPlatform
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Shared device detail content that displays toggle rows for device settings.
- * Platform hosts wrap this with their own scaffold/toolbar.
+ * Shared device detail content: camera name with its connection status, and one
+ * large "photo transfer" entry pinned to the bottom (thumb reach). Platform hosts
+ * wrap this with their own scaffold/toolbar (title, remove, info).
+ *
+ * Auto time correction / auto area adjustment have no switches: they are kept on
+ * automatically ([DeviceDetailViewModel.enforceAutoCorrection]).
  */
 @Composable
 fun DeviceDetailContent(
@@ -81,8 +66,7 @@ fun DeviceDetailContent(
     deviceId: String,
     deviceName: String? = null,
     modifier: Modifier = Modifier,
-    headerContent: @Composable ((String) -> Unit)? = null,
-    onDeviceEnabledChanged: ((Boolean) -> Unit)? = null,
+    onDeviceReEnabled: (() -> Unit)? = null,
     onPresentSystemRename: (() -> Unit)? = null,
     renameEnabled: Boolean = true,
     onWifiRemote: (() -> Unit)? = null,
@@ -90,7 +74,7 @@ fun DeviceDetailContent(
     val state = viewModel.uiState.collectAsState().value
     val sessions by viewModel.sessions.collectAsState()
     val session = sessions[deviceId.uppercase()]
-    val cameraReady = session?.phase == BleSessionPhase.Transmitting
+    val status = deviceConnectionStatus(session)
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         viewModel.refreshCameraSettings(deviceId)
@@ -99,122 +83,69 @@ fun DeviceDetailContent(
     // Reload on a name change too: an iOS system rename lands asynchronously,
     // through the accessory snapshot rather than through this screen.
     LaunchedEffect(deviceId, deviceName) {
-        viewModel.load(deviceId, deviceName)
+        viewModel.load(deviceId, deviceName, onDeviceReEnabled)
+    }
+
+    // Keep the camera's auto time/area settings on whenever the camera reports them off.
+    LaunchedEffect(session?.phase, session?.autoTimeCorrection, session?.autoAreaAdjustment) {
+        viewModel.enforceAutoCorrection(deviceId)
     }
 
     ScreenContent(modifier = modifier) {
-        ScrollbarLazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(bottom = 16.dp),
         ) {
-            if (headerContent != null) {
-                item { headerContent(state.deviceName.ifEmpty { deviceName.orEmpty() }) }
-            }
-
-            if (onWifiRemote != null) {
-                item {
-                    Button(
-                        onClick = onWifiRemote,
-                        enabled = state.isDeviceEnabled,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 88.dp),
-                        shape = MaterialTheme.shapes.large,
-                        contentPadding = PaddingValues(20.dp),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        ) {
-                            Icon(
-                                painterResource(Res.drawable.camera_24px),
-                                contentDescription = null,
-                                modifier = Modifier.size(28.dp)
-                            )
-                            Column(
-                                Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    stringResource(Res.string.wifi_remote_title),
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                                Text(
-                                    stringResource(Res.string.wifi_remote_entry_hint),
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                            Icon(
-                                painterResource(Res.drawable.keyboard_arrow_right_24px),
-                                contentDescription = null
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (renameEnabled) {
-                item {
-                    DeviceRenameRow(
-                        currentName = state.deviceName.ifEmpty { deviceName.orEmpty() },
-                        onPresentSystemRename = onPresentSystemRename,
-                        onRenameInApp = { newName -> viewModel.renameDevice(deviceId, newName) },
-                    )
-                }
-            }
-
-            item {
-                DeviceToggleRow(
-                    title = stringResource(Res.string.enable_device),
-                    checked = state.isDeviceEnabled,
-                    enabled = !state.isAlwaysOnEnabled && state.buttonEnabled,
-                    onCheckedChange = { enabled ->
-                        viewModel.setDeviceEnabled(enabled, deviceId, onDeviceEnabledChanged)
-                    },
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                DeviceNameBlock(
+                    currentName = state.deviceName.ifEmpty { deviceName.orEmpty() },
+                    status = status,
+                    renameEnabled = renameEnabled,
+                    onPresentSystemRename = onPresentSystemRename,
+                    onRenameInApp = { newName -> viewModel.renameDevice(deviceId, newName) },
                 )
             }
 
-
-            if (currentPlatform == KotlinPlatform.Android) {
-                item {
-                    DeviceToggleRow(
-                        title = stringResource(Res.string.enableConstantly),
-                        checked = state.isAlwaysOnEnabled,
-                        enabled = state.isDeviceEnabled && state.buttonEnabled,
-                        onCheckedChange = { enabled ->
-                            viewModel.setAlwaysOnEnabled(enabled, deviceId)
-                        },
-                        infoText = stringResource(Res.string.always_on_description) +
-                                "\n\n" + stringResource(Res.string.hint_if_issues_after_switching),
-                    )
-                }
-            }
-
-            // These settings live on the camera, unlike the app-side toggles above,
-            // so they are boxed into their own section that explains why they need a connection.
-            item(key = "camera_settings") {
-                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
+            if (onWifiRemote != null) {
+                Button(
+                    onClick = onWifiRemote,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 88.dp),
+                    shape = MaterialTheme.shapes.large,
+                    contentPadding = PaddingValues(20.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        CameraSettingsHeader(cameraReady = cameraReady)
-                        for (setting in CameraAutoCorrectionSetting.entries) {
-                            val settingState =
-                                session?.autoCorrectionSetting(setting) ?: CameraSettingState()
-                            val isTime = setting == CameraAutoCorrectionSetting.Time
-                            CameraSettingRow(
-                                title = stringResource(if (isTime) Res.string.auto_time_correction else Res.string.auto_area_adjustment),
-                                infoText = stringResource(if (isTime) Res.string.auto_time_correction_hint else Res.string.auto_area_adjustment_hint),
-                                state = settingState,
-                                cameraReady = cameraReady,
-                                onCheckedChange = {
-                                    viewModel.setAutoCorrectionSetting(deviceId, setting, it)
-                                },
-                                onRetry = { viewModel.refreshCameraSettings(deviceId) },
+                        Icon(
+                            painterResource(Res.drawable.camera_24px),
+                            contentDescription = null,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Column(
+                            Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                stringResource(Res.string.wifi_remote_title),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                stringResource(Res.string.wifi_remote_entry_hint),
+                                style = MaterialTheme.typography.bodySmall
                             )
                         }
+                        Icon(
+                            painterResource(Res.drawable.keyboard_arrow_right_24px),
+                            contentDescription = null
+                        )
                     }
                 }
             }
@@ -222,79 +153,12 @@ fun DeviceDetailContent(
     }
 }
 
+/** Camera name (with rename) and, directly beneath it, the connection status entry. */
 @Composable
-private fun CameraSettingsHeader(cameraReady: Boolean) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            text = stringResource(Res.string.camera_settings_header),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (!cameraReady) {
-            Text(
-                text = stringResource(Res.string.camera_settings_disconnected),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun CameraSettingRow(
-    title: String,
-    infoText: String,
-    state: CameraSettingState,
-    cameraReady: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    onRetry: () -> Unit,
-) {
-    val enabled = cameraReady && state.supported == true && state.enabled != null && !state.pending
-    // Without a live value, a switch drawn "off" would read as "feature disabled".
-    val valueKnown = cameraReady && state.enabled != null
-    Column {
-        DeviceToggleRow(
-            title = title,
-            checked = state.enabled == true,
-            enabled = enabled,
-            onCheckedChange = onCheckedChange,
-            infoText = infoText,
-            titleColor = if (enabled) MaterialTheme.colorScheme.onSurface
-            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-            trailingLabel = if (valueKnown) null else stringResource(Res.string.camera_setting_unknown),
-        )
-        // While disconnected, the section header explains the state for both rows.
-        val status = when {
-            !cameraReady -> null
-            state.pending -> Res.string.camera_setting_pending
-            state.supported == false -> Res.string.camera_setting_unsupported
-            state.failed -> Res.string.camera_setting_failed
-            state.enabled == null -> Res.string.camera_setting_pending
-            else -> null
-        }
-        if (status != null) {
-            Text(
-                stringResource(status),
-                style = MaterialTheme.typography.bodySmall,
-                color = if (state.failed && cameraReady) MaterialTheme.colorScheme.error
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (cameraReady && state.failed && !state.pending) {
-            TextButton(onClick = onRetry) { Text(stringResource(Res.string.camera_setting_retry)) }
-        }
-    }
-}
-
-/**
- * Rename affordance. When the platform can rename the camera in the system's own
- * accessory record it presents that sheet instead of the in-app dialog, so the
- * two never disagree; the app-side dialog is used everywhere else.
- */
-@Composable
-private fun DeviceRenameRow(
+private fun DeviceNameBlock(
     currentName: String,
+    status: DeviceConnectionStatus,
+    renameEnabled: Boolean,
     onPresentSystemRename: (() -> Unit)?,
     onRenameInApp: (String) -> Unit,
 ) {
@@ -304,25 +168,25 @@ private fun DeviceRenameRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 text = stringResource(Res.string.rename_camera_label),
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (currentName.isNotEmpty()) {
-                Text(
-                    text = currentName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text(text = currentName, style = MaterialTheme.typography.titleMedium)
             }
+            ConnectionStatusEntry(status)
         }
-        TextButton(
-            onClick = {
-                if (onPresentSystemRename != null) onPresentSystemRename() else showDialog = true
-            },
-        ) {
-            Text(stringResource(Res.string.rename_camera_title))
+        if (renameEnabled) {
+            TextButton(
+                onClick = {
+                    if (onPresentSystemRename != null) onPresentSystemRename() else showDialog = true
+                },
+            ) {
+                Text(stringResource(Res.string.rename_camera_title))
+            }
         }
     }
 
@@ -334,6 +198,33 @@ private fun DeviceRenameRow(
                 showDialog = false
                 onRenameInApp(newName)
             },
+        )
+    }
+}
+
+@Composable
+private fun ConnectionStatusEntry(status: DeviceConnectionStatus) {
+    val label = when (status) {
+        DeviceConnectionStatus.Connected -> stringResource(Res.string.connected)
+        DeviceConnectionStatus.Connecting -> stringResource(Res.string.device_connection_connecting)
+        DeviceConnectionStatus.Disconnected -> stringResource(Res.string.tap_to_connect)
+    }
+    val dot = when (status) {
+        DeviceConnectionStatus.Connected -> Color(0xFF2E7D32)
+        DeviceConnectionStatus.Connecting -> Color(0xFFF9A825)
+        DeviceConnectionStatus.Disconnected -> MaterialTheme.colorScheme.outline
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .padding(end = 8.dp)
+                .size(8.dp)
+                .background(dot, CircleShape),
+        )
+        Text(
+            text = stringResource(Res.string.device_connection_status, label),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -380,73 +271,4 @@ private fun RenameCameraDialog(
             }
         },
     )
-}
-
-/**
- * Info affordance for a setting row: a small icon button that opens a dialog
- * with the setting's explanation (replaces the former inline hint texts).
- */
-@Composable
-private fun SettingInfoButton(title: String, text: String) {
-    var showDialog by remember { mutableStateOf(false) }
-    IconButton(onClick = { showDialog = true }) {
-        Icon(
-            painterResource(Res.drawable.info_24px),
-            contentDescription = stringResource(Res.string.setting_info),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-    if (showDialog) {
-        AlertDialog(
-            onDismissRequest = { showDialog = false },
-            title = { Text(title) },
-            text = { Text(text) },
-            confirmButton = {
-                TextButton(onClick = { showDialog = false }) {
-                    Text(stringResource(Res.string.dialog_ok))
-                }
-            },
-        )
-    }
-}
-
-@Composable
-private fun DeviceToggleRow(
-    title: String,
-    checked: Boolean,
-    enabled: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    infoText: String? = null,
-    titleColor: Color = Color.Unspecified,
-    /** Shown in place of the switch when the value is unknown. */
-    trailingLabel: String? = null,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyLarge,
-            color = titleColor,
-            modifier = Modifier.weight(1f),
-        )
-        if (infoText != null) {
-            SettingInfoButton(title = title, text = infoText)
-        }
-        if (trailingLabel != null) {
-            Text(
-                text = trailingLabel,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            Switch(
-                checked = checked,
-                enabled = enabled,
-                onCheckedChange = onCheckedChange,
-            )
-        }
-    }
 }

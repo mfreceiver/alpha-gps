@@ -23,6 +23,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -86,6 +87,23 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiShutdownStatus
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import org.jetbrains.compose.resources.stringResource
+
+/**
+ * Entering the photo-transfer screen from the device page acts as a tap on the
+ * one-tap "automatic connect" button, exactly once. It waits for the experimental
+ * notice to be acknowledged, never fires on top of a running/failed session (a
+ * failure keeps its message and the manual button), and never fights another
+ * camera's session.
+ */
+internal fun shouldAutoConnectOnEntry(
+    autoConnectOnEntry: Boolean,
+    alreadyAttempted: Boolean,
+    noticeAcknowledged: Boolean,
+    supportsAutomaticConnection: Boolean,
+    phase: WifiRemotePhase,
+    otherCamera: Boolean,
+): Boolean = autoConnectOnEntry && !alreadyAttempted && noticeAcknowledged &&
+        supportsAutomaticConnection && phase == WifiRemotePhase.Idle && !otherCamera
 
 class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteController) : ViewModel() {
     var host by mutableStateOf("")
@@ -314,10 +332,13 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
                 val state = controller.sessions.value[identifier.uppercase()]!!.wifiRemote
                 if (browseOnly) {
                     // Browse-only has no remote-shooting screen to go "back" to: leaving
-                    // the browser means ending the session. While a transfer or catalog
-                    // load is in flight the controllers would ignore it anyway — wait.
+                    // the browser means ending the session and returning to the caller
+                    // (the device screen) — not to a "connect" page the user would have to
+                    // click through again. While a transfer or catalog load is in flight
+                    // the controllers would ignore it anyway — wait.
                     if (!state.photoBrowser.loading && !state.imageTransfer.busy) {
                         controller.disconnect(identifier)
+                        onClose()
                     }
                 } else {
                     controller.leavePhotoBrowser(identifier)
@@ -341,6 +362,7 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
                      isExperimentalNoticeAcknowledged: () -> Boolean,
                      onAcknowledgeExperimentalNotice: () -> Unit,
                      onConnectAutomatically: () -> Unit = {},
+                     autoConnectOnEntry: Boolean = false,
                      wifiSettingsLabel: String = stringResource(Res.string.wifi_remote_settings),
                      networkPermissionMessage: String = stringResource(Res.string.wifi_remote_permission),
                      openingSessionMessage: String = stringResource(Res.string.wifi_remote_opening),
@@ -369,6 +391,17 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
     val busy = state.phase !in setOf(WifiRemotePhase.Idle, WifiRemotePhase.Failed)
     val otherCamera = owner != null && owner != id
     var manual by remember { mutableStateOf(!controller.supportsAutomaticConnection && !controller.supportsManualSetup) }
+    var autoConnectAttempted by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(noticeAcknowledged, state.phase, otherCamera) {
+        if (shouldAutoConnectOnEntry(
+                autoConnectOnEntry, autoConnectAttempted, noticeAcknowledged,
+                controller.supportsAutomaticConnection, state.phase, otherCamera
+            )
+        ) {
+            autoConnectAttempted = true
+            onConnectAutomatically()
+        }
+    }
     val back = { viewModel.navigateBack(onClose) }
     val browserStateHolder = rememberSaveableStateHolder()
     NavigationBackHandler(

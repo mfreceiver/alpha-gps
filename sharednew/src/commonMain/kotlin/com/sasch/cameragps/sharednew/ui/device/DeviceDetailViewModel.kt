@@ -29,9 +29,21 @@ class DeviceDetailViewModel(
     private val stateStore = DeviceDetailStateStore(dataSource)
     val uiState: StateFlow<DeviceDetailToggleState> = stateStore.uiState
 
-    fun load(address: String, deviceName: String? = null) {
+    /**
+     * [onReEnabled] fires when a device left disabled by an older version was
+     * switched back on, so the host can restore presence observation.
+     */
+    fun load(address: String, deviceName: String? = null, onReEnabled: (() -> Unit)? = null) {
         viewModelScope.launch {
-            stateStore.load(address, deviceName)
+            if (stateStore.load(address, deviceName)) onReEnabled?.invoke()
+        }
+    }
+
+    /** Auto time/area are fixed on: switch on whatever is supported but currently off. */
+    fun enforceAutoCorrection(device: String) {
+        val session = sessions.value[device.uppercase()]
+        for (setting in autoCorrectionSettingsToEnable(session)) {
+            cameraSettings.setAutoCorrectionSetting(device, setting, true)
         }
     }
 

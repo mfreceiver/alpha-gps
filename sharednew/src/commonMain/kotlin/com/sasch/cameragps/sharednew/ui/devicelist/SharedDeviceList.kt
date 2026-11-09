@@ -37,7 +37,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
-import cameragps.sharednew.generated.resources.android_12_requires_keep_alive
 import cameragps.sharednew.generated.resources.cancel
 import cameragps.sharednew.generated.resources.connected
 import cameragps.sharednew.generated.resources.delete
@@ -74,8 +73,6 @@ import org.jetbrains.compose.resources.stringResource
 fun SharedDeviceList(
     devices: List<BluetoothDeviceInfo>,
     items: Map<String, DeviceListItem>,
-    /** Android SDK < S needs always-on to survive; hosts compute this. */
-    showKeepAliveHint: Boolean = false,
     /** User setting: shutter press/completion haptics (default on). */
     hapticsEnabled: Boolean = true,
     contentPadding: PaddingValues = PaddingValues(top = 16.dp, bottom = 16.dp),
@@ -161,7 +158,6 @@ fun SharedDeviceList(
                 SwipeToDeleteDeviceCard(
                     device = device,
                     item = items[device.identifier.uppercase()],
-                    showKeepAliveHint = showKeepAliveHint,
                     hapticsEnabled = hapticsEnabled,
                     onConnect = { onConnect(device) },
                     onDeleteRequest = { deviceToDelete = device },
@@ -188,7 +184,6 @@ fun SharedDeviceList(
                 DeviceCard(
                     device = device,
                     item = items[device.identifier.uppercase()],
-                    showKeepAliveHint = showKeepAliveHint,
                     hapticsEnabled = hapticsEnabled,
                     onConnect = { deviceToPair = device },
                     onOpenDetails = { onOpenDetails(device) },
@@ -256,7 +251,6 @@ private fun SectionHeader(title: String) {
 private fun SwipeToDeleteDeviceCard(
     device: BluetoothDeviceInfo,
     item: DeviceListItem?,
-    showKeepAliveHint: Boolean,
     hapticsEnabled: Boolean,
     onConnect: () -> Unit,
     onDeleteRequest: () -> Unit,
@@ -307,7 +301,6 @@ private fun SwipeToDeleteDeviceCard(
         DeviceCard(
             device = device,
             item = item,
-            showKeepAliveHint = showKeepAliveHint,
             hapticsEnabled = hapticsEnabled,
             onConnect = onConnect,
             onOpenDetails = onOpenDetails,
@@ -321,7 +314,6 @@ private fun SwipeToDeleteDeviceCard(
 private fun DeviceCard(
     device: BluetoothDeviceInfo,
     item: DeviceListItem?,
-    showKeepAliveHint: Boolean,
     hapticsEnabled: Boolean,
     onConnect: () -> Unit,
     onOpenDetails: () -> Unit,
@@ -399,13 +391,6 @@ private fun DeviceCard(
                 ) {
                     Text(stringResource(Res.string.guide_open_button))
                 }
-            }
-            if (showKeepAliveHint && item?.isAlwaysOnEnabled == false) {
-                Text(
-                    text = stringResource(Res.string.android_12_requires_keep_alive),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
             }
             val statusText = when {
                 device.isConnected -> stringResource(Res.string.connected)
