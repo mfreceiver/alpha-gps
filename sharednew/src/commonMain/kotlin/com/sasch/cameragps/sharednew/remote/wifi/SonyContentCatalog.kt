@@ -174,8 +174,8 @@ internal class SonyContentCatalog(
                 length.toLong()
             ),
             maxDataBytes = length
-        )
-        check(response is PtpIpTransactionResult.Response && response.response.code == 0x2001)
+        ).ensureResponded()
+        check(response.response.code == 0x2001)
         if (response.response.parameters.size >= 2) {
             val timestamp =
                 response.response.parameters[0] or (response.response.parameters[1] shl 32)
@@ -235,8 +235,8 @@ internal class SonyContentCatalog(
     )
 
     private suspend fun data(code: Int, parameters: List<Long>, limit: Int): ByteArray {
-        val result = commands.executeDataIn(code, parameters, maxDataBytes = limit)
-        check(result is PtpIpTransactionResult.Response && result.response.code == 0x2001)
+        val result = commands.executeDataIn(code, parameters, maxDataBytes = limit).ensureResponded()
+        check(result.response.code == 0x2001)
         return result.data ?: error("Missing camera catalog data")
     }
 

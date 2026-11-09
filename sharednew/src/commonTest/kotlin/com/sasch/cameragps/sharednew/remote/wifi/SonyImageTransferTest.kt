@@ -55,6 +55,10 @@ class SonyImageTransferTest : WifiLoggingTest() {
         var shortChunk = false
         var oversizedChunk = false
         var rejected = false
+        /** Codes the transport never answers, so the command queue times them out (Uncertain). */
+        var hangCodes: Set<Int> = emptySet()
+        /** Codes whose send fails, as a broken socket/protocol would. */
+        var failCodes: Set<Int> = emptySet()
         var imageRange: ((Long, Int) -> ByteArray)? = null
         override suspend fun receive() = replies.receive()
         override suspend fun send(packet: PtpIpPacket) {
@@ -67,6 +71,8 @@ class SonyImageTransferTest : WifiLoggingTest() {
             val code = read(4, 2).toInt()
             val params = (10 until packet.body.size step 4).map { read(it, 4) }
             operations += code to params
+            if (code in failCodes) throw IllegalStateException("connection reset by peer")
+            if (code in hangCodes) return
             val data = when (code) {
                 0x9209 -> properties(polls++ >= readyAfterPolls)
                 0x1004 -> number(1, 4) + number(0x10001, 4)
@@ -381,6 +387,64 @@ class SonyImageTransferTest : WifiLoggingTest() {
         assertEquals(WifiTransferFailureReason.Timeout, state.failureReason)
         assertTrue(output.aborted)
         assertFalse(output.committed)
+        queue.close()
+    }
+
+    @Test
+    fun metadataCommandTimeoutReportsTimeoutNotCatalogChanged() = runTest {
+        val transport = Transport()
+        val queue = PtpIpCommandQueue(transport, backgroundScope)
+        val transfer = SonyImageTransfer(queue, ready()) { Destination() }
+        transfer.openBrowser()
+        // The pre-download metadata query gets no answer: a single-command timeout is a
+        // communication failure, not proof that the photo or card changed.
+        transport.hangCodes = setOf(0x1008)
+        val result = transfer.download(1L) {}
+        assertEquals(WifiImageTransferStatus.Failed, result.status)
+        assertEquals(WifiTransferFailureReason.Timeout, result.failureReason)
+        assertFalse(transport.operations.any { it.first == 0x9211 })
+        queue.close()
+    }
+
+    @Test
+    fun metadataConnectionFailureReportsProtocolNotCatalogChanged() = runTest {
+        val transport = Transport()
+        val queue = PtpIpCommandQueue(transport, backgroundScope)
+        val transfer = SonyImageTransfer(queue, ready()) { Destination() }
+        transfer.openBrowser()
+        transport.failCodes = setOf(0x1008)
+        val result = transfer.download(1L) {}
+        assertEquals(WifiImageTransferStatus.Failed, result.status)
+        assertEquals(WifiTransferFailureReason.Protocol, result.failureReason)
+        queue.close()
+    }
+
+    @Test
+    fun chunkReadCommandTimeoutReportsTimeoutNotProtocol() = runTest {
+        val transport = Transport()
+        val queue = PtpIpCommandQueue(transport, backgroundScope)
+        val transfer = SonyImageTransfer(queue, ready()) { Destination() }
+        transfer.openBrowser()
+        transport.hangCodes = setOf(0x9211)
+        val result = transfer.download(1L) {}
+        assertEquals(WifiImageTransferStatus.Failed, result.status)
+        assertEquals(WifiTransferFailureReason.Timeout, result.failureReason)
+        // One metadata read while browsing, one revalidation before the hanging chunk read.
+        assertEquals(2, transport.operations.count { it.first == 0x1008 })
+        assertEquals(1, transport.operations.count { it.first == 0x9211 })
+        queue.close()
+    }
+
+    @Test
+    fun chunkReadConnectionFailureReportsProtocol() = runTest {
+        val transport = Transport()
+        val queue = PtpIpCommandQueue(transport, backgroundScope)
+        val transfer = SonyImageTransfer(queue, ready()) { Destination() }
+        transfer.openBrowser()
+        transport.failCodes = setOf(0x9211)
+        val result = transfer.download(1L) {}
+        assertEquals(WifiImageTransferStatus.Failed, result.status)
+        assertEquals(WifiTransferFailureReason.Protocol, result.failureReason)
         queue.close()
     }
 
