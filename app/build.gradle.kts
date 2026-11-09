@@ -32,6 +32,10 @@ android {
 
     androidResources {
         generateLocaleConfig = true
+        // Ship only the English baseline + Simplified Chinese; keeps library
+        // locales (Material etc.) out of the APK too. Sync res dirs & AGENTS.md
+        // when changing this.
+        localeFilters.addAll(listOf("en", "zh-rCN"))
     }
 
     bundle {
