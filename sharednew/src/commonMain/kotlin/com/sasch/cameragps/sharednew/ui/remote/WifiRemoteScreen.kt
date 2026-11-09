@@ -92,10 +92,12 @@ import org.jetbrains.compose.resources.stringResource
 
 /**
  * Entering the photo-transfer screen from the device page acts as a tap on the
- * one-tap "automatic connect" button, exactly once. It waits for the experimental
- * notice to be acknowledged, never fires on top of a running/failed session (a
- * failure keeps its message and the manual button), and never fights another
- * camera's session.
+ * one-tap "automatic connect" button, exactly once per entry. It waits for the
+ * experimental notice to be acknowledged, never fires on top of a running
+ * session (opening/connected stays untouched), but does allow the one attempt
+ * when the previous entry ended in [WifiRemotePhase.Failed] — a fresh entry is
+ * a new explicit user action, not a retry loop within one entry. It never
+ * fights another camera's session.
  */
 internal fun shouldAutoConnectOnEntry(
     autoConnectOnEntry: Boolean,
@@ -105,7 +107,8 @@ internal fun shouldAutoConnectOnEntry(
     phase: WifiRemotePhase,
     otherCamera: Boolean,
 ): Boolean = autoConnectOnEntry && !alreadyAttempted && noticeAcknowledged &&
-        supportsAutomaticConnection && phase == WifiRemotePhase.Idle && !otherCamera
+        supportsAutomaticConnection &&
+        (phase == WifiRemotePhase.Idle || phase == WifiRemotePhase.Failed) && !otherCamera
 
 class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteController) : ViewModel() {
     var host by mutableStateOf("")
@@ -435,7 +438,10 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
     val busy = state.phase !in setOf(WifiRemotePhase.Idle, WifiRemotePhase.Failed)
     val otherCamera = owner != null && owner != id
     var manual by remember { mutableStateOf(!controller.supportsAutomaticConnection && !controller.supportsManualSetup) }
-    var autoConnectAttempted by rememberSaveable { mutableStateOf(false) }
+    // Deliberately not saveable: "once" means once per screen entry, so leaving and
+    // re-entering allows a fresh automatic attempt (e.g. after a Failed session);
+    // within one entry the flag prevents a retry loop.
+    var autoConnectAttempted by remember { mutableStateOf(false) }
     LaunchedEffect(noticeAcknowledged, state.phase, otherCamera) {
         if (shouldAutoConnectOnEntry(
                 autoConnectOnEntry, autoConnectAttempted, noticeAcknowledged,
