@@ -116,5 +116,89 @@ class AppExitGateTest {
         }
     }
 
+    @Test
+    fun `a late owned onDestroy after its exit was cancelled by a connect is rejected`() =
+        runBlocking {
+            // Counterexample this pins down: beginSession(A) → task swiped away,
+            // unowned exit hangs in the Wi-Fi close → a connect command cancels it
+            // (session still A) → the SAME exit flow's late A.onDestroy passes the
+            // owner===session check and must not rebuild the teardown / run
+            // afterwards, which would kill the connection the connect just made.
+            withTimeout(10_000) {
+                val g = gate()
+                val activity = Any()
+                g.beginSession(activity)
+
+                val inTeardown = CompletableDeferred<Unit>()
+                g.scheduleExit(
+                    owner = null,
+                    teardown = { inTeardown.complete(Unit); hang() },
+                    afterwards = {},
+                )
+                inTeardown.await()
+
+                g.cancelPendingExit() // the connect command
+
+                var ran = false
+                g.scheduleExit(
+                    owner = activity,
+                    teardown = { ran = true },
+                    afterwards = { ran = true },
+                )
+                assertFalse("a late callback of the cancelled exit flow must not run", ran)
+            }
+        }
+
+    @Test
+    fun `a retired generation does not block the next session's exits`() = runBlocking {
+        // The retired exit generation must not leak into a new activity session.
+        withTimeout(10_000) {
+            val g = gate()
+            val oldActivity = Any()
+            val newActivity = Any()
+            g.beginSession(oldActivity)
+            val inTeardown = CompletableDeferred<Unit>()
+            g.scheduleExit(
+                owner = null,
+                teardown = { inTeardown.complete(Unit); hang() },
+                afterwards = {},
+            )
+            inTeardown.await()
+            g.cancelPendingExit()
+
+            g.beginSession(newActivity)
+
+            val done = CompletableDeferred<Unit>()
+            g.scheduleExit(owner = newActivity, teardown = { done.complete(Unit) }, afterwards = {})
+            assertTrue("a new session's owner exits freely", done.isCompleted)
+        }
+    }
+
+    @Test
+    fun `an unowned task removal after a cancelled exit still runs`() = runBlocking {
+        // A genuine new task removal after a connect cancelled an earlier exit
+        // must still disconnect (onTaskRemoved fires once per real removal, so
+        // it is never a late duplicate of the cancelled flow).
+        withTimeout(10_000) {
+            val g = gate()
+            val inTeardown = CompletableDeferred<Unit>()
+            g.scheduleExit(
+                owner = null,
+                teardown = { inTeardown.complete(Unit); hang() },
+                afterwards = {},
+            )
+            inTeardown.await()
+            g.cancelPendingExit()
+
+            val calls = mutableListOf<String>()
+            g.scheduleExit(
+                owner = null,
+                teardown = { calls += "teardown" },
+                afterwards = { calls += "afterwards" },
+            )
+            assertEquals(listOf("teardown", "afterwards"), calls)
+        }
+    }
+
     private suspend fun hang() = CompletableDeferred<Unit>().await()
 }

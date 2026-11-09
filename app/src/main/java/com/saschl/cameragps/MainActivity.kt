@@ -75,6 +75,10 @@ class MainActivity : AppCompatActivity() {
         if (isFinishing && !isChangingConfigurations) {
             Timber.i("MainActivity finishing; disconnecting cameras")
             val appContext = applicationContext
+            // The stopService afterwards is guarded by the exit gate: it only runs
+            // if this teardown itself ran to completion (not cancelled by a newer
+            // session, not a late duplicate of an already-cancelled exit flow —
+            // the gate retires the exit generation a connect cancelled).
             AppServices.from(appContext).disconnectAllOnExit(owner = this) {
                 appContext.stopService(Intent(appContext, LocationSenderService::class.java))
             }
