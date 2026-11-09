@@ -60,8 +60,10 @@ Apple targets (`iosArm64`/`iosSimulatorArm64`), their source sets, KSP configura
 Cocoa linking plugin. Android builds are therefore not slowed down or otherwise affected by iOS.
 The switch lives in `gradle.properties` (`alphagps.enableIos=false`).
 
-All iOS sources are kept untouched (`sharednew/src/iosMain`, `sharednew/src/iosTest`, the
-`iosApp/` Xcode project, localization tooling), so merging upstream changes stays conflict-free.
+The remaining iOS sources (`sharednew/src/iosMain`, `sharednew/src/iosTest`, the `iosApp/` Xcode
+project) are kept for potential future use, but the iOS app currently has an English-only string
+baseline (`en` + `Base` regions in the Xcode project; the German region has been removed) and is
+not built or shipped.
 
 To build the iOS app again on a Mac with Xcode installed, pass the flag explicitly:
 
@@ -81,12 +83,10 @@ lifetimes, start with the [Wi-Fi architecture guide](docs/wifi-architecture.md).
 If you wish to improve the translations, the project is also available on Weblate. Check it
 out [here](https://hosted.weblate.org/engage/alpha-gps/)
 
-iOS permission messages use the String Catalog `iosApp/alphagps/InfoPlist.xcstrings`. A separate
-Weblate component can translate `localization/ios/*.xliff` using **XLIFF 1.2 with Apple
-extensions**. The local bridge exports/imports these files with Xcode while preserving the catalog
-format; no legacy `.strings` files are needed.
-See [the iOS localization bridge](tools/ios_localization/README.md) for commands, Weblate settings,
-source-update ordering and adding languages.
+This fork ships only English (`values/`) and Simplified Chinese (`values-zh-rCN/`) — do not add
+other language directories. Android APKs are arm64-only (`arm64-v8a`); 32-bit and x86 devices are
+not supported. The iOS app is disabled by default and currently carries an English baseline only
+(see [the iOS localization bridge](tools/ios_localization/README.md) for the tooling itself).
 
 If you want to contribute financially, consider supporting my work via [Buy Me A Coffee](https://buymeacoffee.com/wj8tism4dq)
 
