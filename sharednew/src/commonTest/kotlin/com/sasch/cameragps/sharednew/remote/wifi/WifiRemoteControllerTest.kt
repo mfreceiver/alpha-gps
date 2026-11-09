@@ -2228,6 +2228,36 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         controller.closeAndJoin()
     }
 
+    @Test
+    fun batchStopsAtFirstCommunicationFailureKeepingItsReason() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = pagedConnection()
+        val downloadResults = Channel<WifiImageTransferState>(Channel.UNLIMITED)
+        connection.downloadResults = downloadResults
+        // A transport-level failure (e.g. single-command timeout) surfaces as a Failed
+        // state carrying its reason — not as a thrown exception.
+        downloadResults.trySend(
+            WifiImageTransferState(
+                WifiImageTransferStatus.Failed,
+                failureReason = WifiTransferFailureReason.Timeout
+            )
+        )
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(0), WifiPhotoDownload(2)))
+        runCurrent()
+        val transfer = registry.get("camera")!!.wifiRemote.imageTransfer
+        assertEquals(WifiImageTransferStatus.Failed, transfer.status)
+        assertEquals(WifiTransferFailureReason.Timeout, transfer.failureReason)
+        // Stop-at-first-failure: the second selected photo was never attempted.
+        assertEquals(1, connection.downloads)
+        controller.closeAndJoin()
+    }
+
     private suspend fun timeoutException(): TimeoutCancellationException =
         try {
             withTimeout(1.milliseconds) { awaitCancellation() }

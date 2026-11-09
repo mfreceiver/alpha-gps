@@ -10,10 +10,12 @@ import kotlin.test.assertTrue
 
 class SonyContentCatalogTest : WifiLoggingTest() {
     private fun number(value: Long, size: Int) = ByteArray(size) { (value ushr (8 * it)).toByte() }
-    private fun file(id: Int, format: Int, path: String): ByteArray {
+    private fun file(
+        id: Int, format: Int, path: String, size: Long = 600_000
+    ): ByteArray {
         val name = path.encodeToByteArray() + byteArrayOf(0)
         return number(id.toLong(), 2) + ByteArray(2) + number(name.size.toLong(), 4) + name +
-                number(format.toLong(), 4) + number(600_000, 8) + ByteArray(32) +
+                number(format.toLong(), 4) + number(size, 8) + ByteArray(32) +
                 number(1, 4) + number(6000, 4) + number(4000, 4) + number(0, 4) + number(0, 4)
     }
 
@@ -259,6 +261,93 @@ class SonyContentCatalogTest : WifiLoggingTest() {
         assertEquals(WifiImageTransferStatus.Saved, transfer.download(firstPageHandle) {}.status)
         transfer.closeBrowser()
         assertEquals(0x9207, requests.last().first)
+        queue.close()
+        events.close()
+    }
+
+    @Test
+    fun versionFourDownloadFailuresKeepTransportReasons() = runTest {
+        val connection = EventConnection()
+        val events = PtpIpEventMonitor(connection, backgroundScope)
+        var hangCodes = emptySet<Int>()
+        var failCodes = emptySet<Int>()
+        var jpegSize = 600_000L
+        val replies = Channel<PtpIpPacket>(Channel.UNLIMITED)
+        val transport = object : PtpIpCommandTransport {
+            override suspend fun receive() = replies.receive()
+            override suspend fun send(packet: PtpIpPacket) {
+                if (packet.type != 6) return
+                fun read(at: Int, size: Int): Long = (0 until size).fold(0L) { n, i ->
+                    n or ((packet.body[at + i].toLong() and 255) shl (i * 8))
+                }
+
+                val code = read(4, 2).toInt()
+                val id = read(6, 4).toInt()
+                val params = (10 until packet.body.size step 4).map { read(it, 4) }
+                if (code in failCodes) throw IllegalStateException("connection reset by peer")
+                if (code in hangCodes) return
+                val data = when (code) {
+                    0x9207 -> {
+                        connection.packets.send(
+                            PtpIpPacket(
+                                8, number(0xc222, 2) + number(id.toLong(), 4) +
+                                        number(0x9207d30f, 4) + number(1, 4)
+                            )
+                        )
+                        null
+                    }
+
+                    0x923c -> batch(content(42, 1000, file(1, 0x3801, "DCIM/100MSDCF/DSC00001.JPG", jpegSize)))
+                    0x923d -> ByteArray(params.last().toInt()) { 7 }
+                    else -> error("Unexpected operation $code")
+                }
+                if (data != null) {
+                    replies.send(PtpIpOperations.startData(id, data.size))
+                    replies.send(PtpIpOperations.endData(id, data))
+                }
+                replies.send(
+                    PtpIpPacket(
+                        7, number(0x2001, 2) + number(id.toLong(), 4) +
+                                if (code == 0x923d) number(2000, 8) else byteArrayOf()
+                    )
+                )
+            }
+        }
+        val queue = PtpIpCommandQueue(transport, backgroundScope)
+        val ready = SonyPtpInitializationResult.Ready(
+            "4.00", 310,
+            SonyExtendedDeviceInfo(300, emptySet(), setOf(0xd30f)),
+            PtpDeviceInfo(setOf(0x9207, 0x923c, 0x923d)), null
+        )
+        var aborted = false
+        val transfer = SonyImageTransfer(queue, ready, events) {
+            object : CameraImageDestination {
+                override suspend fun write(bytes: ByteArray) {}
+                override suspend fun commit() {}
+                override suspend fun abort() {
+                    aborted = true
+                }
+            }
+        }
+        val handle = transfer.openBrowser().photos.single().handle
+        // A hanging or broken catalog revalidation query is a communication failure.
+        hangCodes = setOf(0x923c)
+        assertEquals(WifiTransferFailureReason.Timeout, transfer.download(handle) {}.failureReason)
+        hangCodes = emptySet()
+        failCodes = setOf(0x923c)
+        assertEquals(WifiTransferFailureReason.Protocol, transfer.download(handle) {}.failureReason)
+        failCodes = emptySet()
+        // Genuinely changed metadata still reports CatalogChanged.
+        jpegSize = 600_001
+        assertEquals(WifiTransferFailureReason.CatalogChanged, transfer.download(handle) {}.failureReason)
+        jpegSize = 600_000
+        // Chunk reads keep their transport reason too.
+        hangCodes = setOf(0x923d)
+        assertEquals(WifiTransferFailureReason.Timeout, transfer.download(handle) {}.failureReason)
+        assertTrue(aborted)
+        hangCodes = emptySet()
+        failCodes = setOf(0x923d)
+        assertEquals(WifiTransferFailureReason.Protocol, transfer.download(handle) {}.failureReason)
         queue.close()
         events.close()
     }

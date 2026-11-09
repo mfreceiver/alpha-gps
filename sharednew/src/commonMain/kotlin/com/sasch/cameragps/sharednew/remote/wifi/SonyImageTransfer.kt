@@ -255,6 +255,10 @@ internal class SonyImageTransfer(
                     catalog?.revalidate(handle) ?: objectInfo(handle)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
+                } catch (transport: PtpTransportException) {
+                    // Communication with the camera failed, not the metadata check.
+                    failureReason = transport.reason
+                    throw transport
                 } catch (changed: Exception) {
                     failureReason = WifiTransferFailureReason.CatalogChanged
                     throw changed
@@ -284,6 +288,9 @@ internal class SonyImageTransfer(
                         read(handle, offset, length)
                     } catch (cancelled: CancellationException) {
                         throw cancelled
+                    } catch (transport: PtpTransportException) {
+                        failureReason = transport.reason
+                        throw transport
                     } catch (protocol: Exception) {
                         failureReason = WifiTransferFailureReason.Protocol
                         throw protocol
@@ -413,7 +420,8 @@ internal class SonyImageTransfer(
     }
 
     private fun accepted(result: PtpIpTransactionResult) {
-        check(result is PtpIpTransactionResult.Response && result.response.code == 0x2001) { "Camera refused image operation" }
+        // Timeouts and broken connections are transport failures, not catalog changes.
+        check(result.ensureResponded().response.code == 0x2001) { "Camera refused image operation" }
     }
 
     internal companion object {

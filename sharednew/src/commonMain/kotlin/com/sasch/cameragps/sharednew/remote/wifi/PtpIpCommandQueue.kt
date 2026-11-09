@@ -160,6 +160,25 @@ internal class PtpIpCommandQueue(
     }
 }
 
+/** Transport-level communication failure at the image/catalog boundary, with the user-facing reason. */
+internal class PtpTransportException(
+    val reason: WifiTransferFailureReason,
+    cause: Throwable? = null,
+) : Exception(cause)
+
+/**
+ * Maps a transaction result to the user-facing failure reason at the image/catalog boundary:
+ * a single-command timeout (Uncertain) is a Timeout, a broken connection (Failure/Closed) is a
+ * Protocol failure; only genuinely inconsistent metadata stays CatalogChanged at the caller.
+ */
+internal fun PtpIpTransactionResult.ensureResponded(): PtpIpTransactionResult.Response = when (this) {
+    PtpIpTransactionResult.Uncertain ->
+        throw PtpTransportException(WifiTransferFailureReason.Timeout)
+    is PtpIpTransactionResult.Failure, PtpIpTransactionResult.Closed ->
+        throw PtpTransportException(WifiTransferFailureReason.Protocol)
+    is PtpIpTransactionResult.Response -> this
+}
+
 internal fun PtpIpTransactionResult.diagnosticSummary(): String = when (this) {
     is PtpIpTransactionResult.Response -> "response=0x${response.code.toString(16)} dataBytes=${data?.size ?: 0}"
     is PtpIpTransactionResult.Failure -> "failed=$reason"
