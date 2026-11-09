@@ -2,9 +2,6 @@ package com.sasch.cameragps.sharednew.ui.remote
 
 import androidx.compose.foundation.Image
 import com.sasch.cameragps.sharednew.remote.wifi.formatLabel
-import com.sasch.cameragps.sharednew.remote.wifi.singleDownloadAction
-import com.sasch.cameragps.sharednew.remote.wifi.downloadOptions
-import com.sasch.cameragps.sharednew.remote.wifi.WifiSingleDownloadAction
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.alpha
@@ -56,10 +53,6 @@ import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.wifi_remote_photo_captured
 import cameragps.sharednew.generated.resources.wifi_remote_photo_close
-import cameragps.sharednew.generated.resources.wifi_remote_photo_format
-import cameragps.sharednew.generated.resources.wifi_remote_photo_size
-import cameragps.sharednew.generated.resources.wifi_remote_jpeg_copy_hint
-import cameragps.sharednew.generated.resources.wifi_remote_jpeg_copy
 import cameragps.sharednew.generated.resources.wifi_remote_download_too_large
 import cameragps.sharednew.generated.resources.wifi_remote_download_saved
 import cameragps.sharednew.generated.resources.wifi_remote_download
@@ -81,9 +74,9 @@ import cameragps.sharednew.generated.resources.wifi_remote_viewer_retry
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_select
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_transfer_wait
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
+import com.sasch.cameragps.sharednew.remote.wifi.planDownloads
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
-import com.sasch.cameragps.sharednew.remote.wifi.detailPlan
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
@@ -280,22 +273,12 @@ internal fun WifiPhotoViewer(
                         )
                     }
                     // The download is right here — no details page in between.
-                    if (current != null && policy == WifiFormatPolicy.JpegOnly) {
-                        PhotoJpegOnlyActions(
-                            current.detailPlan(policy, state.canConvertHeif), state,
-                            onDownload = { handle, format ->
-                                viewModel.downloadSinglePhoto(WifiPhotoDownload(handle, format), onDownload)
-                            },
-                            modifier = Modifier.weight(1f),
-                        )
-                    } else {
-                        ViewerDownloadButton(
-                            capture = current,
-                            state = state,
-                            onDownload = { download -> viewModel.downloadSinglePhoto(download, onDownload) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+                    PhotoDownloadAction(
+                        plan = current?.let { planDownloads(listOf(it), policy, browser.savedDownloads) },
+                        state = state,
+                        onDownload = { downloads -> viewModel.downloadSingleCapture(downloads, onDownload) },
+                        modifier = Modifier.weight(1f),
+                    )
                     IconButton(
                         onClick = { scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } },
                         enabled = pager.currentPage < count - 1 && !changingPage && !pager.isScrollInProgress
@@ -308,108 +291,6 @@ internal fun WifiPhotoViewer(
                 }
             }
         }
-    }
-}
-
-/**
- * Original-format single-photo download. One downloadable choice downloads on tap; a pair
- * (JPG + RAW, HEIF + its JPEG copy…) first asks which one — a small picker, not a details page.
- */
-@Composable
-private fun ViewerDownloadButton(
-    capture: WifiCameraCapture?,
-    state: WifiRemoteState,
-    onDownload: (WifiPhotoDownload) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val browser = state.photoBrowser
-    var choosing by rememberSaveable { mutableStateOf(false) }
-    val options = capture?.downloadOptions(state.canConvertHeif, browser.savedDownloads).orEmpty()
-    val action = singleDownloadAction(options)
-    val idle = !browser.loading && !state.imageTransfer.busy
-    Button(
-        onClick = {
-            when (action) {
-                is WifiSingleDownloadAction.Direct -> onDownload(action.option.download)
-                is WifiSingleDownloadAction.Choose -> choosing = true
-                WifiSingleDownloadAction.Unavailable,
-                WifiSingleDownloadAction.NotDownloadable -> Unit
-            }
-        },
-        enabled = capture != null && idle &&
-                (action is WifiSingleDownloadAction.Direct || action is WifiSingleDownloadAction.Choose),
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Text(
-            stringResource(
-                when {
-                    capture != null && action == WifiSingleDownloadAction.Unavailable ->
-                        Res.string.wifi_remote_download_saved
-                    capture != null && action == WifiSingleDownloadAction.NotDownloadable ->
-                        Res.string.wifi_remote_download_too_large
-                    else -> Res.string.wifi_remote_download
-                }
-            )
-        )
-    }
-    if (choosing && action is WifiSingleDownloadAction.Choose) {
-        AlertDialog(
-            onDismissRequest = { choosing = false },
-            title = { Text(stringResource(Res.string.wifi_remote_photo_format)) },
-            text = {
-                Column {
-                    action.options.forEach { option ->
-                        Column(
-                            Modifier.fillMaxWidth().clickable(
-                                enabled = option.enabled, role = Role.Button,
-                                onClick = {
-                                    choosing = false
-                                    onDownload(option.download)
-                                },
-                            ).padding(vertical = 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            val alpha = if (option.enabled) 1f else 0.5f
-                            Text(
-                                if (option.converted) stringResource(Res.string.wifi_remote_jpeg_copy)
-                                else option.file.formatLabel,
-                                style = MaterialTheme.typography.titleSmall,
-                                modifier = Modifier.alpha(alpha)
-                            )
-                            Text(
-                                if (option.converted) option.file.filename.substringBeforeLast('.') + ".jpg"
-                                else option.file.filename,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.alpha(alpha)
-                            )
-                            when {
-                                option.saved -> Text(
-                                    stringResource(Res.string.wifi_remote_download_saved),
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                                !option.file.downloadable -> Text(
-                                    stringResource(Res.string.wifi_remote_download_too_large),
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                                option.converted -> Text(
-                                    stringResource(Res.string.wifi_remote_jpeg_copy_hint),
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                                else -> Text(
-                                    stringResource(Res.string.wifi_remote_photo_size, (option.file.size + 1023) / 1024),
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { choosing = false }) {
-                    Text(stringResource(Res.string.wifi_remote_photo_close))
-                }
-            },
-        )
     }
 }
 

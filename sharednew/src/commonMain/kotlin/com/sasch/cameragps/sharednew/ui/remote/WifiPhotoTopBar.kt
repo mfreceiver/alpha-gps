@@ -16,12 +16,12 @@ import cameragps.sharednew.generated.resources.link_off_24px
 import cameragps.sharednew.generated.resources.refresh_24px
 import cameragps.sharednew.generated.resources.select_all_24px
 import cameragps.sharednew.generated.resources.wifi_remote_batch_download_jpg
-import cameragps.sharednew.generated.resources.wifi_remote_batch_download_jpg_none
+import cameragps.sharednew.generated.resources.wifi_remote_batch_download_none
+import cameragps.sharednew.generated.resources.wifi_remote_batch_download_size
 import cameragps.sharednew.generated.resources.wifi_remote_browser_refresh
 import cameragps.sharednew.generated.resources.wifi_remote_browser_title
 import cameragps.sharednew.generated.resources.wifi_remote_close
 import cameragps.sharednew.generated.resources.wifi_remote_disconnect
-import cameragps.sharednew.generated.resources.wifi_remote_download
 import cameragps.sharednew.generated.resources.wifi_remote_selection_all
 import cameragps.sharednew.generated.resources.wifi_remote_selection_clear
 import cameragps.sharednew.generated.resources.wifi_remote_selection_count
@@ -109,20 +109,24 @@ internal fun WifiPhotoBrowserTopBar(
                         contentDescription = stringResource(Res.string.wifi_remote_selection_all),
                     )
                 }
-                // JPG-only: the description carries the batch size ("Download 5 JPG (12 MB)")
-                // that the old text button showed; an empty plan disables the action.
-                val plan = viewModel.jpegBatchPlan(policy, state)
+                // The description carries the batch size ("Download 5 JPG (12 MB)"). A plan with nothing
+                // in it stays tappable: the tap records the "downloaded 0, skipped N" result instead
+                // of doing nothing.
+                val plan = viewModel.batchPlan(policy, state)
                 val downloadLabel = when {
-                    plan == null -> stringResource(Res.string.wifi_remote_download)
-                    plan.downloads.isEmpty() -> stringResource(Res.string.wifi_remote_batch_download_jpg_none)
-                    else -> stringResource(
+                    plan.files.isEmpty() -> stringResource(Res.string.wifi_remote_batch_download_none)
+                    policy == WifiFormatPolicy.JpegOnly -> stringResource(
                         Res.string.wifi_remote_batch_download_jpg,
-                        plan.downloads.size, formatByteSize(plan.totalBytes)
+                        plan.files.size, formatByteSize(plan.totalBytes)
+                    )
+                    else -> stringResource(
+                        Res.string.wifi_remote_batch_download_size,
+                        plan.files.size, formatByteSize(plan.totalBytes)
                     )
                 }
                 IconButton(
                     onClick = { viewModel.requestBatchDownload(policy, state, onDownload) },
-                    enabled = !busy && (plan == null || plan.downloads.isNotEmpty()),
+                    enabled = !busy,
                 ) {
                     Icon(painterResource(Res.drawable.download_24px), contentDescription = downloadLabel)
                 }
