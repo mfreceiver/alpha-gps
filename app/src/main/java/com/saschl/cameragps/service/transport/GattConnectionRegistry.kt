@@ -12,9 +12,11 @@ import java.util.WeakHashMap
  * nor replaced by a newer handle owning the address. A late callback of an old handle therefore
  * returns null and can never corrupt the connection that owns the address now (no flipping the
  * new one inactive, no MTU reset to 23, no stale events attributed to it). Mutations that emit
- * transport events do so inside their [update] block, so synthetic events (e.g. the Disconnected
- * of a manual disconnect) can never overtake or be overtaken by a racing callback of the same
- * handle.
+ * transport events do so inside their [update] block, so a synthetic event is atomic with its
+ * registry mutation and can never interleave with a racing callback of the same handle. Ordering
+ * between separate synthetic events (e.g. the Disconnected of one manual disconnect vs. the
+ * Connected of a later connect) is not guaranteed by this monitor alone: it relies on
+ * [AndroidBleTransport] confining those emissions to the main thread.
  *
  * Pure JVM (no Android types) so the interleavings are unit-testable; [AndroidBleTransport]
  * instantiates it with [android.bluetooth.BluetoothGatt].
@@ -87,6 +89,20 @@ internal class GattConnectionRegistry<G : Any> {
         if (!entry.isActive) return false
         entry.isActive = false
         true
+    }
+
+    /**
+     * Atomically retires the address's handle, but only while it is parked (link inactive):
+     * removed from the registry and marked retired. Null when no handle exists or the link is
+     * still active — a handle that reconnected between the caller's check and this call keeps
+     * its place.
+     */
+    fun retireIfParked(address: String): Entry<G>? = synchronized(lock) {
+        val entry = connections[address] ?: return null
+        if (entry.isActive) return null
+        connections.remove(address)
+        retiredGatts.add(entry.gatt)
+        entry
     }
 
     /**
