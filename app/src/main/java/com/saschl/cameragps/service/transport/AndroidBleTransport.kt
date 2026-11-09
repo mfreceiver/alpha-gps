@@ -163,6 +163,35 @@ class AndroidBleTransport(
     /** Number of devices with a live (resumed) connection. */
     fun connectedCount(): Int = registry.activeCount()
 
+    /** `true` when the device has a GATT handle whose link is inactive (parked on autoConnect). */
+    fun isHandleParked(mac: String): Boolean =
+        registry.entry(mac.uppercase())?.isActive == false
+
+    /**
+     * Closes the parked handle of a camera that is gone and will not come back on its own
+     * (absent, "keep active" off): removed from the registry so it stops counting as connection
+     * demand, autoConnect cancelled, GATT really closed. A no-op while the link is active or the
+     * handle is already gone. Emits no event: the session ended with the earlier Disconnected.
+     *
+     * @return true when a parked handle was retired.
+     */
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    fun retireParkedHandle(mac: String): Boolean {
+        val address = mac.uppercase()
+        val entry = registry.retireIfParked(address) ?: return false
+        synchronized(pendingSubscribeEnable) {
+            pendingSubscribeEnable.keys.removeAll { it.startsWith("$address:") }
+        }
+        runCatching {
+            try {
+                entry.gatt.disconnect()
+            } finally {
+                entry.gatt.close()
+            }
+        }.onFailure { Timber.w(it) }
+        return true
+    }
+
     /**
      * Number of registered GATT handles, whatever their state: active links, connects still
      * pending and handles parked on `autoConnect` waiting for the camera to reappear. This is
