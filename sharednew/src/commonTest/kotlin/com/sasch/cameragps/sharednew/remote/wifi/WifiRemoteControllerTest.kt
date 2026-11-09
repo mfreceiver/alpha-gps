@@ -2876,4 +2876,91 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         assertTrue(model.batchSummary != null, "paging inside a day does not drop the batch summary")
         controller.closeAndJoin()
     }
+
+    // ---- Drag range selection through the ViewModel ----
+
+    private suspend fun kotlinx.coroutines.test.TestScope.rangeModel(
+        connection: Connection = pagedConnection()
+    ): Triple<WifiRemoteViewModel, WifiRemoteController, CameraSessionRegistry> {
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browseDates("camera")
+        runCurrent()
+        model.openDate(UNKNOWN_DATE_KEY)
+        runCurrent()
+        return Triple(model, controller, registry)
+    }
+
+    @Test
+    fun dragSetsTheClosedRangeAgainstTheSelectionBeforeTheGestureAndShrinkingRestoresIt() = runTest {
+        val (model, controller, _) = rangeModel()
+        model.togglePhotoSelection("photo:9")
+        val session = model.beginRangeSelection("photo:2")!!
+        assertEquals(setOf("photo:9", "photo:2"), model.selectedPhotoIds, "the anchor is applied at once")
+        assertTrue(model.updateRangeSelection(session, 5))
+        assertEquals(setOf("photo:9") + photoIds(2..5), model.selectedPhotoIds)
+        assertTrue(model.updateRangeSelection(session, 0), "dragging past the anchor spans [0, 2]")
+        assertEquals(setOf("photo:9") + photoIds(0..2), model.selectedPhotoIds)
+        assertTrue(model.updateRangeSelection(session, 2))
+        assertEquals(setOf("photo:9", "photo:2"), model.selectedPhotoIds, "shrinking back restores passed tiles")
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun anAlreadySelectedAnchorMakesTheWholeDragADeselection() = runTest {
+        val (model, controller, _) = rangeModel()
+        photoIds(0..6).forEach { model.togglePhotoSelection(it) }
+        val session = model.beginRangeSelection("photo:3")!!
+        assertFalse(session.select)
+        assertEquals(photoIds(0..6).toSet() - "photo:3", model.selectedPhotoIds)
+        model.updateRangeSelection(session, 5)
+        assertEquals(setOf("photo:0", "photo:1", "photo:2", "photo:6"), model.selectedPhotoIds)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun aGestureFromAnEarlierPageViewOrDayNeverWritesIntoTheSelection() = runTest {
+        val (model, controller, registry) = rangeModel()
+        val session = model.beginRangeSelection("photo:1")!!
+        // Same day, next page: the page identity changed.
+        model.openDatePage(pageSize)
+        runCurrent()
+        assertFalse(model.updateRangeSelection(session, 1), "another page rejects the old token")
+        // Back on page 0 (A -> B -> A): the revision still differs, so the late token is rejected.
+        model.openDatePage(0)
+        runCurrent()
+        assertFalse(model.updateRangeSelection(session, 3), "A -> B -> A does not revive the old gesture")
+        assertEquals(setOf("photo:1"), model.selectedPhotoIds)
+        // A refresh (new generation) is rejected as well.
+        val fresh = model.beginRangeSelection("photo:2")!!
+        controller.browseDates("camera")
+        runCurrent()
+        assertFalse(model.updateRangeSelection(fresh, 4))
+        assertTrue(registry.get("camera")!!.wifiRemote.photoBrowser.dateKey == null)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun rangeSelectionIsRefusedWhileBusyOrViewingAndAnAnchorMustBeOnThePage() = runTest {
+        val (model, controller, _) = rangeModel()
+        assertNull(model.beginRangeSelection("photo:999"), "anchor not on this page")
+        assertNull(model.beginRangeSelection("photo:${pageSize + 1}"), "anchor on another page of the day")
+        val session = model.beginRangeSelection("photo:1")!!
+        model.previewPhoto("photo:2") // the magnifier opens the viewer even while selecting
+        runCurrent()
+        assertTrue(model.viewedPhotoIndex != null)
+        assertFalse(model.updateRangeSelection(session, 3), "the viewer ends the gesture")
+        assertNull(model.beginRangeSelection("photo:4"))
+        model.closePhoto()
+        controller.downloadPhoto("camera", 0L) // never completed: busy
+        runCurrent()
+        assertFalse(model.updateRangeSelection(session, 3), "a running transfer ends the gesture")
+        assertNull(model.beginRangeSelection("photo:4"))
+        controller.cancelPhotoOperation("camera")
+        runCurrent()
+        controller.closeAndJoin()
+    }
 }

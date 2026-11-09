@@ -64,30 +64,26 @@ internal fun WifiCameraCapture.jpegTarget(canConvertHeif: Boolean): WifiJpegTarg
 internal fun WifiCameraCapture.manualOriginal(): WifiCameraPhoto? =
     files.firstOrNull { it.mimeType == MIME_RAW } ?: files.firstOrNull { it.downloadable } ?: files.firstOrNull()
 
-/** Grid corner badge for one capture. */
-internal sealed interface WifiFormatBadge {
-    data object None : WifiFormatBadge
-
-    /** Format names that are not localized, e.g. "JPEG + RAW". */
-    data class Label(val text: String) : WifiFormatBadge
-
-    /** JpegOnly: the capture has nothing but RAW. Localized by the UI ("RAW only"). */
-    data object RawOnly : WifiFormatBadge
-}
-
-internal fun WifiCameraCapture.formatBadge(policy: WifiFormatPolicy, canConvertHeif: Boolean): WifiFormatBadge =
-    when (policy) {
-        Original -> WifiFormatBadge.Label(files.joinToString(" + ") { it.formatLabel })
-        JpegOnly -> when {
-            jpegTarget(canConvertHeif) != null -> WifiFormatBadge.None
-            files.all { it.mimeType == MIME_RAW } -> WifiFormatBadge.RawOnly
-            // No JPG and not RAW-only (e.g. HEIF the platform cannot convert): name what
-            // is there, but never mention a RAW companion in JPG-only mode.
-            else -> WifiFormatBadge.Label(
-                files.filter { it.mimeType != MIME_RAW }.joinToString(" + ") { it.formatLabel }
-            )
+/**
+ * Grid corner badge for one capture, decided purely by the MIME types of its files (never by the
+ * download policy, and never claiming a format the card does not hold): JPEG -> "JPG", RAW -> "RAW",
+ * HEIF -> "HEIF"; two or more formats collapse to their initials joined by "&" (JPEG+RAW "J&R",
+ * HEIF+RAW "H&R"). Null when no file has a known format. Format names are not localized.
+ */
+internal fun WifiCameraCapture.formatBadge(): String? {
+    val jpeg = files.any { it.mimeType == MIME_JPEG }
+    val heif = files.any { it.mimeType == MIME_HEIF }
+    val raw = files.any { it.mimeType == MIME_RAW }
+    return when (listOf(jpeg, heif, raw).count { it }) {
+        0 -> null
+        1 -> when {
+            jpeg -> "JPG"
+            heif -> "HEIF"
+            else -> "RAW"
         }
+        else -> listOfNotNull("J".takeIf { jpeg }, "H".takeIf { heif }, "R".takeIf { raw }).joinToString("&")
     }
+}
 
 /** How the details page of one capture behaves under a [WifiFormatPolicy]. */
 internal sealed interface WifiDetailPlan {
