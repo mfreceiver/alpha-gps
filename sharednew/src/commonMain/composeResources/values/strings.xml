@@ -289,7 +289,7 @@
     <string name="continue_label">Continue</string>
     <string name="cancel">Cancel</string>
     <string name="dialog_ok">OK</string>
-    <string name="enable_auto_start_description">Automatically reconnects all saved, enabled cameras after the device reboots or the app is updated.</string>
+    <string name="enable_auto_start_description">When enabled, automatically reconnects all saved, enabled cameras after the device reboots. Automatic reconnection after an app update is controlled only by the main app switch.</string>
     <!-- Sentry Consent Dialog -->
     <string name="sentry_consent_title">Help Improve Alpha GPS</string>
     <string name="sentry_consent_message">Would you like to help us improve the app by sending anonymous crash reports and error logs? This information helps us identify and fix issues. No personal data or location information is transmitted. You can change this setting later in the app settings.</string>

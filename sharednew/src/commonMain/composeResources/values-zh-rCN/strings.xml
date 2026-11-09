@@ -115,7 +115,7 @@
     <string name="how_about_privacy_answer">本应用不会向开发者或任何第三方传输您的个人数据。所有收集到的信息（位置信息）仅用于将 GPS 坐标传输到已连接的相机，不会被永久存储。一旦与相机的连接中断，位置采集即会停止。为分析问题和崩溃，本应用可能会将匿名日志发送到 Sentry 错误报告服务。您可以随时在应用设置中的“错误报告设置”里关闭此功能。如有任何问题或疑虑，请通过上方提到的电子邮件地址与我们联系。</string>
     <string name="app_standby_title">待机</string>
     <string name="app_standby_content">等待相机连接</string>
-    <string name="enable_auto_start_description">在设备重启或应用更新后，自动重连所有已保存且启用的相机。</string>
+    <string name="enable_auto_start_description">开启后设备重启时自动重连所有已保存且启用的相机；应用更新后的自动重连仅受应用总开关控制。</string>
     <string name="pairing_camera_title">正在配对相机</string>
     <string name="pairing_complete_title">配对完成</string>
     <string name="pairing_failed_title">配对失败</string>
