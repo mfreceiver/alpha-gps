@@ -18,14 +18,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -42,7 +42,6 @@ import cameragps.sharednew.generated.resources.wifi_remote_auto_setup
 import cameragps.sharednew.generated.resources.wifi_remote_bluetooth_required
 import cameragps.sharednew.generated.resources.wifi_remote_browse
 import cameragps.sharednew.generated.resources.wifi_remote_browse_unsupported
-import cameragps.sharednew.generated.resources.wifi_remote_browser_back
 import cameragps.sharednew.generated.resources.wifi_remote_close
 import cameragps.sharednew.generated.resources.wifi_remote_closing
 import cameragps.sharednew.generated.resources.wifi_remote_connect
@@ -64,7 +63,6 @@ import cameragps.sharednew.generated.resources.wifi_remote_permission
 import cameragps.sharednew.generated.resources.wifi_remote_prepare_only
 import cameragps.sharednew.generated.resources.wifi_remote_prepare_only_hint
 import cameragps.sharednew.generated.resources.wifi_remote_preparing
-import cameragps.sharednew.generated.resources.wifi_remote_selection_clear
 import cameragps.sharednew.generated.resources.wifi_remote_settings
 import cameragps.sharednew.generated.resources.wifi_remote_setup
 import cameragps.sharednew.generated.resources.wifi_remote_setup_detect_address
@@ -79,6 +77,8 @@ import com.sasch.cameragps.sharednew.remote.wifi.SonyImageTransfer
 import com.sasch.cameragps.sharednew.remote.wifi.WifiBatchSummary
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
 import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferState
+import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
+import com.sasch.cameragps.sharednew.remote.wifi.WifiJpegBatchPlan
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteController
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteFailure
@@ -86,6 +86,8 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiRemotePhase
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiShutdownStatus
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
+import com.sasch.cameragps.sharednew.remote.wifi.jpegOnlyBatchPlan
+import com.sasch.cameragps.sharednew.remote.wifi.toSummary
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -206,7 +208,49 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
 
     fun clearPhotoSelection() {
         selectedPhotos = emptyMap()
+        showBatchOptions = false
         recordBatchSummary(null)
+    }
+
+    /** The Original-format batch sheet is open (raised by the top bar's download action). */
+    internal var showBatchOptions by mutableStateOf(false)
+
+    internal fun dismissBatchOptions() {
+        showBatchOptions = false
+    }
+
+    /** JPG-only plan for the current cross-page selection; null in Original mode. */
+    internal fun jpegBatchPlan(policy: WifiFormatPolicy, state: WifiRemoteState): WifiJpegBatchPlan? =
+        if (policy == WifiFormatPolicy.JpegOnly) {
+            jpegOnlyBatchPlan(selectedPhotos.values.toList(), state.photoBrowser.savedDownloads, state.canConvertHeif)
+        } else null
+
+    /**
+     * The top bar's download action for the selection. JPG-only starts the download of the
+     * plan's JPGs right away (remembering the skip counts for the result line); Original
+     * opens the format sheet. Nothing happens for an empty selection or an empty plan.
+     */
+    internal fun requestBatchDownload(
+        policy: WifiFormatPolicy,
+        state: WifiRemoteState,
+        onDownload: (List<WifiPhotoDownload>) -> Unit,
+    ) {
+        if (selectedPhotos.isEmpty()) return
+        val plan = jpegBatchPlan(policy, state)
+        if (plan == null) {
+            showBatchOptions = true
+        } else if (plan.downloads.isNotEmpty()) {
+            recordBatchSummary(plan.toSummary())
+            onDownload(plan.downloads)
+        }
+    }
+
+    /** Explicit disconnect from the top bar: end the session and return to the caller. */
+    fun disconnectAndExit(onClose: () -> Unit) {
+        clearPhotoSelection()
+        closePhoto()
+        controller.disconnect(identifier)
+        onClose()
     }
 
     /**
@@ -430,17 +474,13 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
         return
     }
     Scaffold(topBar = {
-        TopAppBar(title = { Text(stringResource(Res.string.wifi_remote_title)) }, navigationIcon = {
-            TextButton(onClick = back,
-                enabled = viewModel.selectedPhotoIds.isNotEmpty() || !state.photoBrowser.open ||
-                        (!state.photoBrowser.loading && !state.imageTransfer.busy)
-            ) {
-                Text(
-                    stringResource(
-                        if (viewModel.selectedPhotoIds.isNotEmpty()) Res.string.wifi_remote_selection_clear
-                        else if (state.photoBrowser.open) Res.string.wifi_remote_browser_back
-                    else Res.string.wifi_remote_close))
-            }
+        if (state.photoBrowser.open) {
+            WifiPhotoBrowserTopBar(
+                state, viewModel, WifiFormatPolicy.of(defaultDownloadFormatJpeg),
+                onDownloadPhotos, onBack = back, onClose = onClose
+            )
+        } else TopAppBar(title = { Text(stringResource(Res.string.wifi_remote_title)) }, navigationIcon = {
+            TextButton(onClick = back) { Text(stringResource(Res.string.wifi_remote_close)) }
         })
     }) { padding ->
         Column(

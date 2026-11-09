@@ -393,10 +393,8 @@
     <string name="wifi_remote_location_required">This Android version requires phone Location to be turned on for automatic Wi-Fi joining.</string>
     <string name="wifi_remote_browse">Browse camera photos</string>
     <string name="wifi_remote_browser_title">Camera photos</string>
-    <string name="wifi_remote_browser_tap_hint">Tap to view, long-press to select</string>
     <string name="wifi_remote_viewer_back">Back to camera photos</string>
     <string name="wifi_remote_viewer_position">%1$d / %2$d</string>
-    <string name="wifi_remote_viewer_details">Details &amp; download</string>
     <string name="wifi_remote_viewer_retry">Retry</string>
     <string name="wifi_remote_viewer_transfer_wait">Finish or cancel the download to load more photos.</string>
     <string name="wifi_remote_selection_start">Select photo</string>
@@ -420,7 +418,6 @@
     <string name="wifi_remote_browser_failed">Could not read camera photos or change transfer mode. Retry, or disconnect and reconnect if the camera is busy.</string>
     <string name="wifi_remote_browser_empty">No supported photos on this page.</string>
     <string name="wifi_remote_browser_refresh">Refresh</string>
-    <string name="wifi_remote_browser_back">Disconnect</string>
     <string name="wifi_remote_browser_previous">Previous</string>
     <string name="wifi_remote_browser_next">Next</string>
     <string name="wifi_remote_browser_page">Page %1$d</string>
@@ -466,5 +463,7 @@
     <string name="wifi_remote_preview_photo">Preview</string>
     <string name="wifi_remote_viewer_select">Select this photo</string>
     <string name="wifi_remote_viewer_deselect">Deselect this photo</string>
+    <string name="wifi_remote_viewer_previous_photo">Previous photo</string>
+    <string name="wifi_remote_viewer_next_photo">Next photo</string>
 
 </resources>

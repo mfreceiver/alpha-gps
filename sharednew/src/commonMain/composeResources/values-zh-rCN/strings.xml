@@ -356,10 +356,8 @@
     <string name="wifi_remote_location_required">此 Android 版本要求开启手机定位服务，才能自动连接 Wi-Fi。</string>
     <string name="wifi_remote_browse">浏览相机照片</string>
     <string name="wifi_remote_browser_title">相机照片</string>
-    <string name="wifi_remote_browser_tap_hint">点击查看，长按多选</string>
     <string name="wifi_remote_viewer_back">返回相机照片</string>
     <string name="wifi_remote_viewer_position">%1$d / %2$d</string>
-    <string name="wifi_remote_viewer_details">详情与下载</string>
     <string name="wifi_remote_viewer_retry">重试</string>
     <string name="wifi_remote_viewer_transfer_wait">请完成或取消下载后，再加载更多照片。</string>
     <string name="wifi_remote_selection_start">选择照片</string>
@@ -383,7 +381,6 @@
     <string name="wifi_remote_browser_failed">无法读取相机照片或切换传输模式。请重试；如果相机正忙，请断开连接后重新连接。</string>
     <string name="wifi_remote_browser_empty">此页没有支持的照片。</string>
     <string name="wifi_remote_browser_refresh">刷新</string>
-    <string name="wifi_remote_browser_back">断开连接</string>
     <string name="wifi_remote_browser_previous">上一页</string>
     <string name="wifi_remote_browser_next">下一页</string>
     <string name="wifi_remote_browser_page">第 %1$d 页</string>
@@ -435,5 +432,7 @@
     <string name="wifi_remote_preview_photo">预览</string>
     <string name="wifi_remote_viewer_select">选中此照片</string>
     <string name="wifi_remote_viewer_deselect">取消选中此照片</string>
+    <string name="wifi_remote_viewer_previous_photo">上一张</string>
+    <string name="wifi_remote_viewer_next_photo">下一张</string>
 
 </resources>
