@@ -166,9 +166,13 @@ internal fun WifiPhotoBrowser(
         if (busy) TextButton(onClick = { controller.cancelPhotoOperation(identifier) }) {
             Text(stringResource(Res.string.wifi_remote_transfer_cancel))
         }
-        // One progress indicator for everything that is loading: a catalog page or the thumbnails.
+        // One progress indicator for everything that is loading: a catalog page or the
+        // thumbnails. An active transfer takes precedence — the thumbnail loader is
+        // held during it anyway, so its "loading" is a paused wait, not progress.
         Box(Modifier.fillMaxWidth().height(4.dp)) {
-            if (browser.loading || thumbnailsLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (browserProgressVisible(browser.loading, thumbnailsLoading, transfer.busy)) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
         }
         LazyVerticalGrid(
             state = gridState,
@@ -220,7 +224,10 @@ internal fun WifiPhotoBrowser(
                             if (selecting) selected = isSelected
                         },
                     ) {
-                        PhotoTile(thumbnails[capture.thumbnail.handle], browser.loading || thumbnailsLoading)
+                        PhotoTile(
+                            thumbnails[capture.thumbnail.handle],
+                            tileSpinnerVisible(browser.loading, thumbnailsLoading, transfer.busy)
+                        )
                         if (isSelected) {
                             Box(
                                 Modifier.fillMaxSize()
@@ -473,3 +480,24 @@ internal fun PhotoTransferStatus(transfer: WifiImageTransferState) {
         WifiImageTransferStatus.Idle -> Unit
     }
 }
+
+/**
+ * The top progress bar covers catalog pages and the thumbnail loader, but an
+ * active transfer takes precedence — during it the loader is held and its
+ * "loading" flag is a paused wait, not progress.
+ */
+internal fun browserProgressVisible(
+    browserLoading: Boolean,
+    thumbnailsLoading: Boolean,
+    transferBusy: Boolean,
+): Boolean = !transferBusy && (browserLoading || thumbnailsLoading)
+
+/**
+ * A tile shows the in-progress spinner for catalog/thumbnail loading only; while
+ * a transfer holds the loader, pending tiles sit silent instead.
+ */
+internal fun tileSpinnerVisible(
+    browserLoading: Boolean,
+    thumbnailsLoading: Boolean,
+    transferBusy: Boolean,
+): Boolean = browserLoading || (thumbnailsLoading && !transferBusy)
