@@ -239,6 +239,7 @@ class AppExitGateTest {
                 assertEquals(listOf("teardown", "afterwards"), firstCalls)
 
                 g.cancelPendingExit() // background connect, no new activity
+                g.cancelPendingExit() // repeat connect command: retire must be idempotent
 
                 val secondCalls = mutableListOf<String>()
                 g.scheduleExit(
@@ -250,6 +251,42 @@ class AppExitGateTest {
                     "the first real task removal after a completed flow was retired must still disconnect",
                     listOf("teardown", "afterwards"),
                     secondCalls,
+                )
+            }
+        }
+
+    @Test
+    fun `retiring a completed flow twice keeps the in-flight snapshot for a pending flow`() =
+        runBlocking {
+            // Companion of the idempotence fix: a flow still in flight when retired
+            // must keep exitFlowCompletedAtRetire == false across a second
+            // cancelPendingExit (whose exitJob is null), so its own removal's
+            // late unowned delivery stays rejected.
+            withTimeout(10_000) {
+                val g = gate()
+                val activity = Any()
+                g.beginSession(activity)
+
+                val inTeardown = CompletableDeferred<Unit>()
+                g.scheduleExit(
+                    owner = activity,
+                    teardown = { inTeardown.complete(Unit); hang() },
+                    afterwards = {},
+                )
+                inTeardown.await()
+
+                g.cancelPendingExit() // connect retires the in-flight flow
+                g.cancelPendingExit() // repeat connect must not "upgrade" the snapshot
+
+                val calls = mutableListOf<String>()
+                g.scheduleExit(
+                    owner = null,
+                    teardown = { calls += "teardown" },
+                    afterwards = { calls += "afterwards" },
+                )
+                assertTrue(
+                    "the same removal's late onTaskRemoved must stay rejected after a repeat connect",
+                    calls.isEmpty(),
                 )
             }
         }
@@ -315,16 +352,27 @@ class AppExitGateTest {
             // retirement (connect) suppresses the late second entry; making
             // teardown exactly-once across unretired double entries is left
             // as-is deliberately (the real teardowns are idempotent).
+            //
+            // The first teardown blocks on a *releasable* gate (not an eternal
+            // hang): after the second entry replaced it, releasing the gate
+            // proves the first flow was genuinely cancelled — neither its
+            // teardown tail nor its afterwards ever runs.
             withTimeout(10_000) {
                 val g = gate()
                 val activity = Any()
                 g.beginSession(activity)
 
                 val inFirstTeardown = CompletableDeferred<Unit>()
+                val firstGate = CompletableDeferred<Unit>()
+                var firstTeardownTailRan = false
                 var firstAfterwardsRan = false
                 g.scheduleExit(
                     owner = activity,
-                    teardown = { inFirstTeardown.complete(Unit); hang() },
+                    teardown = {
+                        inFirstTeardown.complete(Unit)
+                        firstGate.await()
+                        firstTeardownTailRan = true
+                    },
                     afterwards = { firstAfterwardsRan = true },
                 )
                 inFirstTeardown.await()
@@ -335,8 +383,15 @@ class AppExitGateTest {
                     teardown = { secondCalls += "teardown" },
                     afterwards = { secondCalls += "afterwards" },
                 )
-                assertFalse(firstAfterwardsRan) // first flow was cancelled mid-teardown
                 assertEquals(listOf("teardown", "afterwards"), secondCalls)
+
+                // Releasing the gate can only matter if the first job was really
+                // cancelled: an uncancelled Unconfined job would run its tail and
+                // afterwards synchronously on release.
+                firstGate.complete(Unit)
+                kotlinx.coroutines.delay(100)
+                assertFalse("cancelled flow must not run its teardown tail", firstTeardownTailRan)
+                assertFalse("cancelled flow must not run afterwards", firstAfterwardsRan)
             }
         }
 
