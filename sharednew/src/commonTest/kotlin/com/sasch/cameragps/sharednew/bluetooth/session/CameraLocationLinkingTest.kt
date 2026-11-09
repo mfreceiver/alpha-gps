@@ -1012,6 +1012,7 @@ class CameraLocationLinkingTest {
         override suspend fun isDeviceEnabled(address: String) = true
         override suspend fun findDeviceEnabled(address: String): Boolean? = true
         override suspend fun getAlwaysOnEnabledDeviceCount() = 0
+        override suspend fun getEnabledDeviceCount() = 0
         override suspend fun setRemoteControlEnabled(deviceId: String, enabled: Boolean) = 0
         override suspend fun isRemoteControlEnabled(address: String) = remoteEnabled
     }

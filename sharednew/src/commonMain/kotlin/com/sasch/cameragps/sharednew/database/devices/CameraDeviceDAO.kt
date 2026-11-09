@@ -55,6 +55,10 @@ interface CameraDeviceDAO {
     @Query("SELECT count(1) FROM camera_devices WHERE alwaysOnEnabled = 1")
     suspend fun getAlwaysOnEnabledDeviceCount(): Int
 
+    /** Saved devices eligible for automatic reconnection (BOOT / package replacement). */
+    @Query("SELECT count(1) FROM camera_devices WHERE deviceEnabled = 1")
+    suspend fun getEnabledDeviceCount(): Int
+
     @Query("UPDATE camera_devices SET remoteControlEnabled = :enabled WHERE mac = UPPER(:deviceId)")
     suspend fun setRemoteControlEnabled(deviceId: String, enabled: Boolean): Int
 

@@ -66,9 +66,10 @@ class LocationSenderService : LifecycleService() {
     private val presenceCoordinator by lazy {
         ServicePresenceCoordinator(
             hasConnectedDevices = { transport.connectedCount() > 0 },
-            hasAlwaysOnDevices = { services.deviceDao.getAlwaysOnEnabledDeviceCount() > 0 },
+            // Saved devices keep the service alive for automatic reconnection.
+            hasAlwaysOnDevices = { services.deviceDao.getEnabledDeviceCount() > 0 },
             onShutdownRequested = {
-                Timber.i("No connected or always-on cameras remain after presence loss; stopping service")
+                Timber.i("No connected or saved cameras remain after presence loss; stopping service")
                 requestShutdown(lastHandledStartId)
             },
         )

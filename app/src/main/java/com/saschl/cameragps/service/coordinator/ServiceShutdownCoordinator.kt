@@ -11,17 +11,23 @@ class ServiceShutdownCoordinator(
     private val transport: AndroidBleTransport,
     private val onShutdownRequested: (Int?) -> Unit,
 ) {
+    /**
+     * No explicit address: triggered by BOOT_COMPLETED / MY_PACKAGE_REPLACED.
+     * Every saved, enabled device qualifies for automatic reconnection. The
+     * legacy alwaysOnEnabled flag is deliberately not consulted: the Android
+     * detail page no longer exposes it, and re-normalizing it there must not
+     * silently revoke the accepted "connect after boot" behavior.
+     */
     @SuppressLint("MissingPermission")
     suspend fun handleNoAddress(startId: Int) {
-        if (deviceDao.getAlwaysOnEnabledDeviceCount() == 0) {
-            Timber.i("No always-on devices found, shutting down service")
+        if (deviceDao.getEnabledDeviceCount() == 0) {
+            Timber.i("No saved devices found, shutting down service")
             onShutdownRequested(startId)
             return
         }
 
         runCatching {
-            deviceDao.getAllCameraDevices()
-                .filter { it.alwaysOnEnabled }
+            bootReconnectTargets(deviceDao.getAllCameraDevices())
                 .forEach { device ->
                     runCatching {
                         transport.connect(device.mac)
@@ -44,24 +50,26 @@ class ServiceShutdownCoordinator(
             return
         }
 
-        // Always-on devices retain their connection until the setting is disabled.
-        if (!deviceDao.isDeviceAlwaysOnEnabled(address)) {
-            transport.pauseDevice(address)
-        }
-        if (transport.connectedCount() == 0 && deviceDao.getAlwaysOnEnabledDeviceCount() == 0) {
-            Timber.d("No connected or always on cameras remaining, shutting down service")
+        // Explicit stop requests are user actions; saved devices are paused too.
+        transport.pauseDevice(address)
+        if (transport.connectedCount() == 0 && deviceDao.getEnabledDeviceCount() == 0) {
+            Timber.d("No connected or saved cameras remaining, shutting down service")
             onShutdownRequested(startId)
         }
     }
 
     @SuppressLint("MissingPermission")
     private suspend fun handleShutdownAllDevices(startId: Int) {
-        if (deviceDao.getAlwaysOnEnabledDeviceCount() == 0) {
-            Timber.i("No always-on devices found, disconnecting all cameras and shutting down service")
+        if (deviceDao.getEnabledDeviceCount() == 0) {
+            Timber.i("No saved devices found, disconnecting all cameras and shutting down service")
             transport.disconnectAll()
             onShutdownRequested(startId)
         } else {
-            Timber.i("At least one always-on device found, not shutting down service")
+            Timber.i("At least one saved device found, not shutting down service")
         }
     }
 }
+
+/** Devices eligible for automatic reconnection after BOOT / package replacement. */
+internal fun bootReconnectTargets(devices: List<CameraDevice>): List<CameraDevice> =
+    devices.filter { it.deviceEnabled }
