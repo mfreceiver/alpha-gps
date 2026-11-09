@@ -141,8 +141,16 @@ PY
     [[ "$vsize" != "-1" && "$vsize" == "$lsize" ]] \
       || fail "资产强校验：$vname 远端 size($vsize) ≠ 本地字节数($lsize)（fail-closed）"
     log "远端未回传 sha256，改用 size + 全量下载重算哈希: $vname"
+    # 同源硬校验（fail-closed）：下载 URL 必须与 PRIMARY_HOST/PRIMARY_REPO/TAG_NAME/资产名
+    # 精确同源（见 scripts/release_lib.sh assert_asset_url_trusted），防止资产表被
+    # 篡改后带凭据 curl 指向任意主机。
+    assert_asset_url_trusted "$vdurl" "$PRIMARY_HOST" "$PRIMARY_REPO" "$TAG_NAME" "$vname" \
+      || fail "资产 URL 未通过同源校验: $vname → $vdurl（fail-closed）"
     RC=0
-    HTTP_CODE="$(curl_config | curl -K - -sS -m 300 -o "$dl" -w '%{http_code}' "$vdurl")" || RC=$?
+    # 不加 -L：不跟随重定向（3xx 在此表现为非 200 → fail-closed）；--proto 双保险
+    # 确保即使被重定向也只允许 https。Primary forge browser_download_url 直接返回附件字节，
+    # 无 302 到对象存储的场景，无需跟随。
+    HTTP_CODE="$(curl_config | curl -K - -sS -m 300 --proto '=https' --proto-redir '=https' -o "$dl" -w '%{http_code}' "$vdurl")" || RC=$?
     [[ "$RC" -eq 0 && "$HTTP_CODE" == "200" ]] \
       || { rm -f "$dl"; fail "资产强校验：$vname 下载失败 HTTP ${HTTP_CODE:-n/a}（fail-closed）"; }
     dsha="$(sha256sum "$dl" | awk '{print $1}')"
