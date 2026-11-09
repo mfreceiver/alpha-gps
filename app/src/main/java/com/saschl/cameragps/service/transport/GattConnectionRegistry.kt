@@ -11,11 +11,12 @@ import java.util.WeakHashMap
  * update verifies, atomically and before touching any state, that its handle is neither retired
  * nor replaced by a newer handle owning the address. A late callback of an old handle therefore
  * returns null and can never corrupt the connection that owns the address now (no flipping the
- * new one inactive, no MTU reset to 23, no stale events attributed to it). Mutations that emit
- * transport events do so inside their [update] block, so a synthetic event is atomic with its
- * registry mutation and can never interleave with a racing callback of the same handle. Ordering
- * between separate synthetic events (e.g. the Disconnected of one manual disconnect vs. the
- * Connected of a later connect) is not guaranteed by this monitor alone: it relies on
+ * new one inactive, no MTU reset to 23, no stale events attributed to it). Events emitted inside
+ * an [update] block are atomic with that update; the synthetic events of
+ * [AndroidBleTransport.disconnectDevice]/[AndroidBleTransport.pauseDevice]/
+ * [AndroidBleTransport.retireParkedHandle] are sent only after the registry mutation returned
+ * and the monitor was released, so their ordering relative to separate mutations and other
+ * synthetic events is not guaranteed by this monitor alone: it relies on
  * [AndroidBleTransport] confining those emissions to the main thread.
  *
  * Pure JVM (no Android types) so the interleavings are unit-testable; [AndroidBleTransport]
@@ -27,6 +28,14 @@ internal class GattConnectionRegistry<G : Any> {
     class Entry<T : Any>(val gatt: T) {
         var isActive = false
         var mtu = 23
+
+        /**
+         * `true` once this handle already produced a Disconnected — the real GATT callback or
+         * the synthetic event of a pause. A handle retired while this is still false (a connect
+         * that never got a single connection-state callback) owes its owner a synthetic
+         * Disconnected, so the session above does not stay `Connecting` forever.
+         */
+        var disconnectedReported = false
     }
 
     private val lock = Any()
@@ -82,12 +91,14 @@ internal class GattConnectionRegistry<G : Any> {
 
     /**
      * Marks the address's handle inactive (keep the GATT for autoConnect). True when it was
-     * active, i.e. the caller owes a synthetic Disconnected event.
+     * active, i.e. the caller owes a synthetic Disconnected event; that synthetic event also
+     * counts as the handle's reported disconnect ([Entry.disconnectedReported]).
      */
     fun pause(address: String): Boolean = synchronized(lock) {
         val entry = connections[address] ?: return false
         if (!entry.isActive) return false
         entry.isActive = false
+        entry.disconnectedReported = true
         true
     }
 

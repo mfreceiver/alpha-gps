@@ -156,4 +156,29 @@ class GattConnectionRegistryTest {
             assertNull(registry.update(gatt, "A$index") { it.isActive = true })
         }
     }
+
+    @Test
+    fun `a pending handle owes a disconnected report until a callback or pause delivers one`() {
+        val registry = GattConnectionRegistry<FakeGatt>()
+
+        // Fresh registration: connect still pending, nothing reported — a retire owes a
+        // synthetic Disconnected or the session above stays Connecting forever.
+        val pending = FakeGatt(1)
+        registry.register("AA", pending)
+        assertFalse(registry.entry("AA")!!.disconnectedReported)
+
+        // The real GATT Disconnected callback marks the handle as reported.
+        registry.update(pending, "AA") {
+            it.isActive = false
+            it.disconnectedReported = true
+        }
+        assertTrue(registry.entry("AA")!!.disconnectedReported)
+
+        // pause() emits a synthetic Disconnected itself, so it counts as reported too.
+        val active = FakeGatt(2)
+        registry.register("BB", active)
+        registry.update(active, "BB") { it.isActive = true }
+        assertTrue(registry.pause("BB"))
+        assertTrue(registry.entry("BB")!!.disconnectedReported)
+    }
 }

@@ -20,7 +20,11 @@ class ServicePresenceCoordinator(
     private val isHandleParked: (String) -> Boolean,
     /** `true` when the device's own "keep active" switch is on. */
     private val isDeviceKeepActive: suspend (String) -> Boolean,
-    /** Closes (retires) the device's parked handle; a no-op when the handle is active or gone. */
+    /**
+     * Closes (retires) the device's parked handle; a no-op when the handle is active or gone.
+     * A handle whose link never got a single connection-state callback still owes the session
+     * above a synthetic Disconnected — retiring it ends that `Connecting` session too.
+     */
     private val retireParkedHandle: (String) -> Unit,
     private val onShutdownRequested: () -> Unit,
 ) {
