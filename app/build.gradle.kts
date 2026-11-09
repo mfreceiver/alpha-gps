@@ -53,7 +53,7 @@ android {
         minSdk = 26
         targetSdk = 37
         versionCode = providers.gradleProperty("alphagps.versionCode").get().toInt()
-        versionName = "0.1.2"
+        versionName = "0.1.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
