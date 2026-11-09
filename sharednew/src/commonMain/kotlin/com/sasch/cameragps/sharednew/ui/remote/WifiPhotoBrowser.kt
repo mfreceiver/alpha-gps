@@ -107,6 +107,11 @@ import cameragps.sharednew.generated.resources.wifi_remote_storage_permission
 import cameragps.sharednew.generated.resources.wifi_remote_transfer_cancel
 import cameragps.sharednew.generated.resources.wifi_remote_transfer_cancelled
 import cameragps.sharednew.generated.resources.wifi_remote_transfer_failed
+import cameragps.sharednew.generated.resources.wifi_remote_transfer_failed_catalog_changed
+import cameragps.sharednew.generated.resources.wifi_remote_transfer_failed_protocol
+import cameragps.sharednew.generated.resources.wifi_remote_transfer_failed_redownload_copy
+import cameragps.sharednew.generated.resources.wifi_remote_transfer_failed_storage
+import cameragps.sharednew.generated.resources.wifi_remote_transfer_failed_timeout
 import cameragps.sharednew.generated.resources.wifi_remote_transfer_progress
 import cameragps.sharednew.generated.resources.wifi_remote_transfer_saved
 import com.sasch.cameragps.sharednew.remote.wifi.SonyImageTransfer
@@ -116,6 +121,7 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownloadFormat
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
+import com.sasch.cameragps.sharednew.remote.wifi.WifiTransferFailureReason
 import com.sasch.cameragps.sharednew.remote.wifi.WifiDetailPlan
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatBadge
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
@@ -693,7 +699,29 @@ internal fun PhotoTransferStatus(transfer: WifiImageTransferState) {
         }
         WifiImageTransferStatus.ConversionFailed -> Text(stringResource(Res.string.wifi_remote_conversion_failed))
         WifiImageTransferStatus.Saved -> Text(stringResource(Res.string.wifi_remote_transfer_saved, transfer.filename))
-        WifiImageTransferStatus.Failed -> Text(stringResource(Res.string.wifi_remote_transfer_failed))
+        WifiImageTransferStatus.Failed -> Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                stringResource(
+                    when (transfer.failureReason) {
+                        WifiTransferFailureReason.CatalogChanged -> Res.string.wifi_remote_transfer_failed_catalog_changed
+                        WifiTransferFailureReason.Timeout -> Res.string.wifi_remote_transfer_failed_timeout
+                        WifiTransferFailureReason.Storage -> Res.string.wifi_remote_transfer_failed_storage
+                        WifiTransferFailureReason.Protocol -> Res.string.wifi_remote_transfer_failed_protocol
+                        null, WifiTransferFailureReason.Unknown -> Res.string.wifi_remote_transfer_failed
+                    }
+                )
+            )
+            // Already-saved files are session-memory only: re-downloading after a reconnect
+            // duplicates them, so connection-related failures warn about that explicitly.
+            if (transfer.failureReason == WifiTransferFailureReason.Timeout ||
+                transfer.failureReason == WifiTransferFailureReason.Protocol
+            ) {
+                Text(
+                    stringResource(Res.string.wifi_remote_transfer_failed_redownload_copy),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
         WifiImageTransferStatus.Cancelled -> Text(stringResource(Res.string.wifi_remote_transfer_cancelled))
         WifiImageTransferStatus.PermissionDenied -> Text(stringResource(Res.string.wifi_remote_storage_permission))
         WifiImageTransferStatus.Idle -> Unit

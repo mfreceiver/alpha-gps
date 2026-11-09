@@ -443,6 +443,11 @@
     <string name="wifi_remote_transfer_progress">Saving %1$s…</string>
     <string name="wifi_remote_transfer_saved">Saved %1$s to your photo library.</string>
     <string name="wifi_remote_transfer_failed">Download failed. Any incomplete file was removed. You can retry the download.</string>
+    <string name="wifi_remote_transfer_failed_catalog_changed">The photos on the camera changed or the memory card was swapped. Refresh the photo list and try again.</string>
+    <string name="wifi_remote_transfer_failed_timeout">The camera stopped responding. Check the Wi-Fi connection and try again.</string>
+    <string name="wifi_remote_transfer_failed_storage">Could not save to this phone. Check the free storage space and try again.</string>
+    <string name="wifi_remote_transfer_failed_protocol">Communication with the camera was interrupted. Reconnect the camera and try again.</string>
+    <string name="wifi_remote_transfer_failed_redownload_copy">Downloading an already saved photo again after reconnecting creates a duplicate copy; check your photo library first.</string>
     <string name="wifi_remote_transfer_cancelled">Download cancelled. Any incomplete file was removed.</string>
     <string name="wifi_remote_transfer_cancel">Cancel</string>
     <string name="wifi_remote_storage_permission">Allow storage access to save photos to your phone.</string>
