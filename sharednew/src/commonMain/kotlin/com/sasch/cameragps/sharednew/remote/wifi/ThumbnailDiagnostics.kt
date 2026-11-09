@@ -28,6 +28,14 @@ internal fun thumbnailPageSummary(page: Int, expected: Int, samples: List<Thumbn
             "bytesTotal=$bytesTotal bitmapEstBytes=$bitmapEstBytes"
 }
 
+/**
+ * One loader batch: [fetched] of [requested] thumbnails arrived, [requestMs] is the summed camera
+ * request time, [wallMs] the batch wall-clock time (includes pauses while a transfer ran).
+ */
+internal fun thumbnailBatchLine(
+    page: Int, batch: Int, fetched: Int, requested: Int, requestMs: Long, wallMs: Long, bytes: Long,
+): String = "page=$page batch=$batch n=$fetched/$requested reqMs=$requestMs wallMs=$wallMs bytes=$bytes"
+
 internal fun thumbnailCancelledLine(page: Int, completed: Int, expected: Int): String =
     "page=$page cancelled after $completed/$expected thumbnails"
 
