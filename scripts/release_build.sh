@@ -392,6 +392,36 @@ restore_gradle() {
 bash "$VERSION_INJECT" inject "$BUILD_GRADLE" "$EMBED_NAME" || fail "版本注入失败（源文件已还原或未改动；父层不接管残留备份）"
 trap restore_gradle EXIT
 
+# ─── compose 资源生成残留清理（构建前；只删生成/中间产物，绝不碰源码目录）────
+# 增量构建会把已删除语言的 Compose 资源（values-de 等 .cvr）残留在下列生成/中间
+# 目录里并再次打进 APK。逐个 realpath 校验位于对应模块 build/ 内且存在才删，
+# 空/防误删双保险（${REPO_ROOT:?} 防空变量）。产物侧由 release_assert_apk.sh 的
+# 语言断言（rl_check_apk_lang）兜底。
+clean_compose_residue() {
+  local base=${REPO_ROOT:?} d rp cleaned=0
+  for d in \
+    "$base/sharednew/build/generated/compose" \
+    "$base/sharednew/build/generated/assets/copyAndroidMainComposeResourcesToAndroidAssets" \
+    "$base/sharednew/build/generated/supportedLanguages" \
+    "$base/sharednew/build/intermediates/assets" \
+    "$base/app/build/intermediates/assets" \
+    "$base/app/build/intermediates/compressed_assets" \
+  ; do
+    [[ -n "${d:?}" ]] || { fail "compose 残留清理：目标路径为空（fail-closed）"; }
+    [[ -e "$d" ]] || continue
+    rp=$(realpath -- "$d") || { fail "compose 残留清理：realpath 失败: $d"; }
+    case "$rp" in
+      "$base/sharednew/build/generated/"*|"$base/sharednew/build/intermediates/"*|"$base/app/build/intermediates/"*) ;;
+      *) fail "compose 残留清理：realpath 越界（不在 sharednew/build 或 app/build 生成/中间目录内）: $rp"; ;;
+    esac
+    rm -rf -- "$rp" || fail "compose 残留清理：rm 失败: $rp"
+    log "清理 compose 资源生成残留: ${rp#"$base"/}"
+    cleaned=$((cleaned+1))
+  done
+  pass "compose 资源生成残留清理完成（清理 $cleaned 个目录；构建将以全新资源重新生成）"
+}
+clean_compose_residue
+
 # ─── 构建 ────────────────────────────────────────────────────────────────
 log "构建 :app:assembleFossRelease（versionName=$EMBED_NAME）"
 export SIGNING_KEYSTORE_PATH SIGNING_KEY_ALIAS

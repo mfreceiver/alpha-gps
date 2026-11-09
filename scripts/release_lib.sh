@@ -37,6 +37,40 @@ else:
 PY
 }
 
+# rl_check_apk_lang <apk路径>
+#   APK composeResources 语言检查（纯函数，zipfile 只读）：assets/composeResources/*/values*
+#   下的语言目录集合必须 ⊆ {values, values-zh-rCN}（语言资源纪律：仅 en 基线 + zh-rCN），
+#   且至少含 values（en 基线缺失 = 资源生成异常，fail-closed）。drawable 等其它资源目录
+#   与 zip 纯目录条目（name 以 '/' 结尾）不参与判定。
+#   输出到 stdout: OK <语言目录列表> / BAD_LANG <多余目录样本> / NO_VALUES /
+#   OPEN_FAIL <原因>（均 rc=0，由调用方按输出分支 fail-closed）。
+rl_check_apk_lang() {
+  python3 - "${1:-}" <<'PY'
+import sys, zipfile
+try:
+    z = zipfile.ZipFile(sys.argv[1])
+    names = z.namelist()
+except Exception as e:
+    print(f"OPEN_FAIL {e}"); sys.exit(0)
+allowed = {"values", "values-zh-rCN"}
+langs = set()
+for n in names:
+    if n.endswith("/") or not n.startswith("assets/composeResources/"):
+        continue
+    parts = n.split("/")
+    # assets/composeResources/<pkg>/<langdir>/<file...>（至少 4 段才算语言目录内文件）
+    if len(parts) >= 4 and parts[3].startswith("values"):
+        langs.add(parts[3])
+bad = sorted(l for l in langs if l not in allowed)
+if bad:
+    print("BAD_LANG " + ",".join(bad[:5]))
+elif "values" not in langs:
+    print("NO_VALUES")
+else:
+    print("OK " + ",".join(sorted(langs)))
+PY
+}
+
 # assert_asset_url_trusted <url> <host[:port]> <owner/repo> <tag> <asset文件名>
 #   Primary forge 资产下载 URL 同源校验（纯函数、无网络），全部用 python3 urllib.parse
 #   解析（不用正则猜），fail-closed：

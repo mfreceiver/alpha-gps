@@ -313,22 +313,29 @@ setup_wiring_sandbox() { # $1=沙箱根
   cat > "$SB/gradlew" <<'GW'
 #!/usr/bin/env bash
 mkdir -p app/build/outputs/apk/foss/release
-# 生成真实 zip 形态的 fake APK（供 release_assert_apk.sh 的 python3 zipfile ABI 检查）。
+# 生成真实 zip 形态的 fake APK（供 release_assert_apk.sh 的 python3 zipfile ABI/语言检查）。
 # APK_ABI_MODE: good=仅 lib/arm64-v8a（含 .so）/ bad=混入 armeabi-v7a / none=无 lib 条目
+# APK_LANG_MODE: good=composeResources 仅 values+values-zh-rCN / de=额外残留 values-de
 python3 - <<'PZ'
 import os, zipfile
 p = "app/build/outputs/apk/foss/release/app-foss-release.apk"
-mode = os.environ.get("APK_ABI_MODE", "good")
+abi = os.environ.get("APK_ABI_MODE", "good")
+lang = os.environ.get("APK_LANG_MODE", "good")
 with zipfile.ZipFile(p, "w") as z:
     z.writestr("AndroidManifest.xml", "")
-    if mode == "good":
+    if abi == "good":
         z.writestr("lib/arm64-v8a/libsqliteJni.so", b"\x7fELF-arm64")
         z.writestr("lib/arm64-v8a/libalpha_heif.so", b"\x7fELF-arm64")
-    elif mode == "bad":
+    elif abi == "bad":
         z.writestr("lib/arm64-v8a/libsqliteJni.so", b"\x7fELF-arm64")
         z.writestr("lib/armeabi-v7a/libsqliteJni.so", b"\x7fELF-armv7")
-    elif mode == "none":
+    elif abi == "none":
         z.writestr("classes.dex", b"x")
+    cr = "assets/composeResources/cameragps.sharednew.generated.resources"
+    z.writestr(f"{cr}/values/strings.cvr", b"en")
+    z.writestr(f"{cr}/values-zh-rCN/strings.cvr", b"zh")
+    if lang == "de":
+        z.writestr(f"{cr}/values-de/strings.cvr", b"de")
 PZ
 exit 0
 GW
@@ -363,7 +370,7 @@ AAPT
 run_wiring() { # $1=SB $2=AAPT_CODE $3=输出log；APK_ABI_MODE 经 env 透传（默认 good）
   ( cd "$1" && PATH="$1/home/jdk/bin:$PATH" HOME="$1/home" JAVA_HOME="$1/home/jdk" \
       DSH_KEYSTORE_PASSWORD=x DSH_KEY_PASSWORD=x \
-      AAPT_CODE="$2" AAPT_VNAME=0.1.3 APK_ABI_MODE="${APK_ABI_MODE:-good}" \
+      AAPT_CODE="$2" AAPT_VNAME=0.1.3 APK_ABI_MODE="${APK_ABI_MODE:-good}" APK_LANG_MODE="${APK_LANG_MODE:-good}" \
       timeout 30 bash scripts/release_build.sh 0.1.3 --allow-dirty ) > "$3" 2>&1
 }
 
@@ -389,7 +396,8 @@ SB3=$TMP/wire3; setup_wiring_sandbox "$SB3"
 # v0.1.1（LEGACY=2，早期提交）+ v0.1.2（HEAD）；归档 0.1.2 并让 fake aapt 报 code=3
 ( cd "$SB3" && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m pre && git tag v0.1.1 )
 mkdir -p "$SB3/release"
-python3 -c 'import zipfile; z=zipfile.ZipFile("'"$SB3"'/release/alpha-gps-0.1.2.apk","w"); z.writestr("AndroidManifest.xml",""); z.writestr("lib/arm64-v8a/libsqliteJni.so",b"\x7fELF")'
+CR3="assets/composeResources/cameragps.sharednew.generated.resources"
+python3 -c 'import zipfile; z=zipfile.ZipFile("'"$SB3"'/release/alpha-gps-0.1.2.apk","w"); z.writestr("AndroidManifest.xml",""); z.writestr("lib/arm64-v8a/libsqliteJni.so",b"\x7fELF"); z.writestr("'"$CR3"'/values/strings.cvr",b"en"); z.writestr("'"$CR3"'/values-zh-rCN/strings.cvr",b"zh")'
 ( cd "$SB3" && sha256sum release/alpha-gps-0.1.2.apk > release/SHA256SUMS \
   && git add -A && git -c user.email=t@t -c user.name=t commit -qm archive && git tag v0.1.2 )
 ( cd "$SB3" && PATH="$SB3/home/jdk/bin:$PATH" HOME="$SB3/home" JAVA_HOME="$SB3/home/jdk" \
@@ -507,6 +515,36 @@ check "release_build.sh 非零退出" test "$RC" -ne 0 -a "$RC" -ne 124
 check "日志含『没有任何 .so』" grep -q "没有任何 .so" "$TMP/wire6.log"
 
 # 场景 22 的 good 模式即 ABI 正例：仅 arm64-v8a 且含 .so → 全链通过（已覆盖）
+
+echo "== 场景 30: wiring — composeResources 残留 values-de → 语言断言拦截（仅 en+zh-rCN） =="
+SB7=$TMP/wire7; setup_wiring_sandbox "$SB7"
+( cd "$SB7" && PATH="$SB7/home/jdk/bin:$PATH" HOME="$SB7/home" JAVA_HOME="$SB7/home/jdk" \
+    DSH_KEYSTORE_PASSWORD=x DSH_KEY_PASSWORD=x \
+    AAPT_CODE="$FIXTURE_CODE" AAPT_VNAME=0.1.3 APK_ABI_MODE=good APK_LANG_MODE=de \
+    timeout 30 bash scripts/release_build.sh 0.1.3 --allow-dirty ) > "$TMP/wire7.log" 2>&1; RC=$?
+check "release_build.sh 非零退出" test "$RC" -ne 0 -a "$RC" -ne 124
+check "日志含『已移除语言的资源目录』" grep -q "已移除语言的资源目录" "$TMP/wire7.log"
+check "日志点名 values-de" grep -q "values-de" "$TMP/wire7.log"
+
+echo "== 场景 31: wiring — 构建前清理确实执行（stale 残留被删，日志说明清了什么） =="
+SB8=$TMP/wire8; setup_wiring_sandbox "$SB8"
+mkdir -p "$SB8/sharednew/build/generated/compose" "$SB8/sharednew/build/intermediates/assets" \
+         "$SB8/app/build/intermediates/assets" "$SB8/app/build/intermediates/compressed_assets"
+printf 'stale' > "$SB8/sharednew/build/generated/compose/stale"
+printf 'stale' > "$SB8/sharednew/build/intermediates/assets/stale-marker"
+printf 'stale' > "$SB8/app/build/intermediates/assets/stale-marker"
+printf 'stale' > "$SB8/app/build/intermediates/compressed_assets/stale-marker"
+( cd "$SB8" && PATH="$SB8/home/jdk/bin:$PATH" HOME="$SB8/home" JAVA_HOME="$SB8/home/jdk" \
+    DSH_KEYSTORE_PASSWORD=x DSH_KEY_PASSWORD=x \
+    AAPT_CODE="$FIXTURE_CODE" AAPT_VNAME=0.1.3 APK_ABI_MODE=good \
+    timeout 30 bash scripts/release_build.sh 0.1.3 --allow-dirty ) > "$TMP/wire8.log" 2>&1; RC=$?
+check "release_build.sh 退出码 0（清理不破坏全链）" test "$RC" -eq 0
+check "sharednew/build/generated/compose/stale 已在构建前删除" test ! -e "$SB8/sharednew/build/generated/compose/stale"
+check "sharednew/build/intermediates/assets/stale-marker 已删除" test ! -e "$SB8/sharednew/build/intermediates/assets/stale-marker"
+check "app/build/intermediates/assets/stale-marker 已删除" test ! -e "$SB8/app/build/intermediates/assets/stale-marker"
+check "app/build/intermediates/compressed_assets/stale-marker 已删除" test ! -e "$SB8/app/build/intermediates/compressed_assets/stale-marker"
+check "日志说明清理了 generated/compose" grep -q "清理 compose 资源生成残留: sharednew/build/generated/compose" "$TMP/wire8.log"
+check "日志说明清理了 app merged assets" grep -q "清理 compose 资源生成残留: app/build/intermediates/assets" "$TMP/wire8.log"
 
 echo
 SCENARIOS=$(grep -c '^echo "== 场景' -- "$0")
