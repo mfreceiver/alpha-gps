@@ -8,9 +8,9 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,13 +25,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
@@ -56,9 +56,6 @@ import cameragps.sharednew.generated.resources.check_24px
 import cameragps.sharednew.generated.resources.search_24px
 import cameragps.sharednew.generated.resources.wifi_remote_browser_empty
 import cameragps.sharednew.generated.resources.wifi_remote_browser_failed
-import cameragps.sharednew.generated.resources.wifi_remote_browser_next
-import cameragps.sharednew.generated.resources.wifi_remote_browser_page
-import cameragps.sharednew.generated.resources.wifi_remote_browser_previous
 import cameragps.sharednew.generated.resources.wifi_remote_batch_skip_hint
 import cameragps.sharednew.generated.resources.wifi_remote_batch_summary
 import cameragps.sharednew.generated.resources.wifi_remote_batch_summary_no_skip
@@ -87,7 +84,6 @@ import cameragps.sharednew.generated.resources.wifi_remote_transfer_failed_stora
 import cameragps.sharednew.generated.resources.wifi_remote_transfer_failed_timeout
 import cameragps.sharednew.generated.resources.wifi_remote_transfer_progress
 import cameragps.sharednew.generated.resources.wifi_remote_transfer_saved
-import com.sasch.cameragps.sharednew.remote.wifi.SonyImageTransfer
 import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
@@ -117,6 +113,7 @@ internal fun WifiPhotoBrowser(
     val browser = state.photoBrowser
     val policy = WifiFormatPolicy.of(defaultDownloadFormatJpeg)
     val thumbnails by controller.thumbnails.collectAsState()
+    val thumbnailsLoading by controller.thumbnailsLoading.collectAsState()
     val captures = remember(browser.photos) { groupCameraPhotos(browser.photos) }
     val transfer = state.imageTransfer
     val busy = browser.loading || transfer.busy
@@ -128,6 +125,14 @@ internal fun WifiPhotoBrowser(
         if (gridOffset != browser.offset) {
             gridState.scrollToItem(0)
             gridOffset = browser.offset
+        }
+    }
+    // The grid reports where the user is looking so the thumbnail loader serves that area first.
+    // A header item (error/empty text) shifts the capture indices by one.
+    val headerItems = if (browser.failed || captures.isEmpty()) 1 else 0
+    LaunchedEffect(gridState, headerItems, browser.browserGeneration) {
+        snapshotFlow { gridState.firstVisibleItemIndex }.collect { first ->
+            controller.focusThumbnails(identifier, (first - headerItems).coerceAtLeast(0))
         }
     }
     // JPG-only: the batch is the selection's JPGs; RAW-only/saved/oversize captures are skipped.
@@ -161,16 +166,20 @@ internal fun WifiPhotoBrowser(
         if (busy) TextButton(onClick = { controller.cancelPhotoOperation(identifier) }) {
             Text(stringResource(Res.string.wifi_remote_transfer_cancel))
         }
+        // One progress indicator for everything that is loading: a catalog page or the thumbnails.
+        Box(Modifier.fillMaxWidth().height(4.dp)) {
+            if (browser.loading || thumbnailsLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
         LazyVerticalGrid(
             state = gridState,
-            columns = GridCells.Fixed(3), modifier = Modifier.weight(1f),
+            // As many columns as fit the width (4 on a 360 dp phone, more on wider screens).
+            columns = GridCells.Adaptive(minSize = TileMinSize), modifier = Modifier.weight(1f),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            if (browser.loading || browser.failed || captures.isEmpty()) {
+            if (headerItems > 0) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (browser.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
                         if (browser.failed) Text(
                             stringResource(Res.string.wifi_remote_browser_failed),
                             color = MaterialTheme.colorScheme.error
@@ -211,7 +220,7 @@ internal fun WifiPhotoBrowser(
                             if (selecting) selected = isSelected
                         },
                     ) {
-                        PhotoTile(thumbnails[capture.thumbnail.handle], browser.loading)
+                        PhotoTile(thumbnails[capture.thumbnail.handle], browser.loading || thumbnailsLoading)
                         if (isSelected) {
                             Box(
                                 Modifier.fillMaxSize()
@@ -266,50 +275,23 @@ internal fun WifiPhotoBrowser(
                     ) {
                         // Square, with a smaller fill than the touch target around it.
                         Box(
-                            Modifier.size(26.dp)
+                            Modifier.size(24.dp)
                                 .background(Color.Black.copy(alpha = 0.55f), SquareBadgeShape),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 painterResource(Res.drawable.search_24px), contentDescription = null,
-                                tint = Color.White, modifier = Modifier.size(18.dp)
+                                tint = Color.White, modifier = Modifier.size(16.dp)
                             )
                         }
                     }
                 }
             }
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                Row(
-                    Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    OutlinedButton(
-                        onClick = {
-                            controller.browsePhotos(
-                                identifier,
-                                maxOf(0, browser.offset - SonyImageTransfer.PAGE_SIZE)
-                            )
-                        },
-                        enabled = !busy && browser.offset > 0
-                    ) { Text(stringResource(Res.string.wifi_remote_browser_previous)) }
-                    if (browser.totalObjects > 0) Text(
-                        stringResource(
-                            Res.string.wifi_remote_browser_page,
-                            browser.offset / SonyImageTransfer.PAGE_SIZE + 1
-                        )
-                    )
-                    OutlinedButton(
-                        onClick = {
-                            controller.browsePhotos(
-                                identifier,
-                                browser.offset + SonyImageTransfer.PAGE_SIZE
-                            )
-                        },
-                        enabled = !busy && browser.hasMore
-                    ) { Text(stringResource(Res.string.wifi_remote_browser_next)) }
-                }
-            }
         }
+        WifiPhotoPagerBar(
+            browser = browser, enabled = !busy,
+            onPage = { offset -> controller.browsePhotos(identifier, offset) },
+        )
     }
     if (viewModel.showBatchOptions && selecting && policy == WifiFormatPolicy.Original) {
         PhotoBatchDownloadSheet(
@@ -338,8 +320,11 @@ private fun skipReasonsText(skipped: Map<WifiSkipReason, Int>): String =
         )
     }.joinToString(" · ")
 
+/** Minimum tile width: the grid fits as many columns as the screen width allows. */
+private val TileMinSize = 80.dp
+
 /** Touch target of the checkbox / preview overlays on a grid tile. */
-private val TileActionSize = 44.dp
+private val TileActionSize = 40.dp
 
 /** Small corner radius: the overlays read as squares, not circles. */
 private val SquareBadgeShape = RoundedCornerShape(3.dp)
@@ -361,17 +346,20 @@ internal fun SelectionCheck(selected: Boolean, modifier: Modifier = Modifier) {
     }
 }
 
-/** Grid thumbnail: fills the square tile, centre-cropped (bitmaps are already upright). */
+/**
+ * Grid thumbnail: scaled to fit the square tile so the whole picture is visible (never cropped);
+ * the tile background shows around the shorter side. Bitmaps are already upright.
+ */
 @Composable
 private fun PhotoTile(image: ImageBitmap?, loading: Boolean) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         if (image != null) {
-            Image(image, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            Image(image, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
         } else if (loading) {
             CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
         } else {
             Text(stringResource(Res.string.wifi_remote_preview_unavailable),
-                style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(8.dp))
+                style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(4.dp))
         }
     }
 }
