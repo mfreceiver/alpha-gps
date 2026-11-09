@@ -59,6 +59,21 @@ class WifiSingleDownloadTest {
     }
 
     @Test
+    fun anUnsavedOversizeFileIsNotDownloadableInsteadOfSaved() {
+        val tooBigOnly = options(photo(1, "image/jpeg", downloadable = false))
+        assertEquals(WifiSingleDownloadAction.NotDownloadable, singleDownloadAction(tooBigOnly))
+    }
+
+    @Test
+    fun savedPlusOversizeIsStillReportedAsNotDownloadable() {
+        val mixed = options(
+            photo(1, "image/jpeg"), photo(2, "image/x-sony-arw", downloadable = false),
+            saved = setOf(WifiPhotoDownload(1)),
+        )
+        assertEquals(WifiSingleDownloadAction.NotDownloadable, singleDownloadAction(mixed))
+    }
+
+    @Test
     fun optionsKnowTheirDownloadRequest() {
         val copy = options(heif, convert = true)[1]
         assertEquals(WifiPhotoDownload(3, WifiPhotoDownloadFormat.Jpeg), copy.download)

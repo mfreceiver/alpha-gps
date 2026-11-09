@@ -35,8 +35,11 @@ internal fun WifiCameraCapture.downloadOptions(
 
 /** What tapping the viewer's Download button does for a capture. */
 internal sealed interface WifiSingleDownloadAction {
-    /** Nothing left to download (all saved / over the limit). */
+    /** Nothing left to download: every file is already saved. */
     data object Unavailable : WifiSingleDownloadAction
+
+    /** Nothing downloadable: some file is unsaved but over the download limit. */
+    data object NotDownloadable : WifiSingleDownloadAction
 
     /** Exactly one downloadable choice: download it right away, no extra step. */
     data class Direct(val option: WifiDownloadOption) : WifiSingleDownloadAction
@@ -48,7 +51,11 @@ internal sealed interface WifiSingleDownloadAction {
 internal fun singleDownloadAction(options: List<WifiDownloadOption>): WifiSingleDownloadAction {
     val enabled = options.filter { it.enabled }
     return when (enabled.size) {
-        0 -> WifiSingleDownloadAction.Unavailable
+        0 -> if (options.any { !it.saved && !it.file.downloadable }) {
+            WifiSingleDownloadAction.NotDownloadable
+        } else {
+            WifiSingleDownloadAction.Unavailable
+        }
         1 -> WifiSingleDownloadAction.Direct(enabled.single())
         else -> WifiSingleDownloadAction.Choose(options)
     }

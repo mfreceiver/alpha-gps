@@ -321,16 +321,23 @@ private fun ViewerDownloadButton(
             when (action) {
                 is WifiSingleDownloadAction.Direct -> onDownload(action.option.download)
                 is WifiSingleDownloadAction.Choose -> choosing = true
-                WifiSingleDownloadAction.Unavailable -> Unit
+                WifiSingleDownloadAction.Unavailable,
+                WifiSingleDownloadAction.NotDownloadable -> Unit
             }
         },
-        enabled = capture != null && idle && action != WifiSingleDownloadAction.Unavailable,
+        enabled = capture != null && idle &&
+                (action is WifiSingleDownloadAction.Direct || action is WifiSingleDownloadAction.Choose),
         modifier = modifier.fillMaxWidth(),
     ) {
         Text(
             stringResource(
-                if (capture != null && action == WifiSingleDownloadAction.Unavailable) Res.string.wifi_remote_download_saved
-                else Res.string.wifi_remote_download
+                when {
+                    capture != null && action == WifiSingleDownloadAction.Unavailable ->
+                        Res.string.wifi_remote_download_saved
+                    capture != null && action == WifiSingleDownloadAction.NotDownloadable ->
+                        Res.string.wifi_remote_download_too_large
+                    else -> Res.string.wifi_remote_download
+                }
             )
         )
     }
