@@ -9,6 +9,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -18,11 +19,13 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -46,6 +49,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         override var canConvertHeif = true
         var browsing = false
         var downloads = 0
+        var failDownloadWith: Exception? = null
         var photos = listOf(WifiCameraPhoto(42L, "DSC.JPG", 100L, "image/jpeg", ""))
         val thumbnailRequests = mutableListOf<Long>()
         var thumbnailImage: ImageBitmap? = null
@@ -98,6 +102,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             onProgress: (WifiImageTransferState) -> Unit
         ): WifiImageTransferState {
             downloads++
+            failDownloadWith?.let { throw it }
             downloadedHandles += handle
             downloadedFormats += format
             return try {
@@ -2151,5 +2156,84 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         assertFalse(registry.get("camera")!!.wifiRemote.hasLiveView)
         controller.closeAndJoin()
     }
+
+    @Test
+    fun expiredBatchReportsCatalogChangedAndDownloadsNothing() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = pagedConnection()
+        connection.downloadResults = Channel(Channel.UNLIMITED)
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(0)))
+        // A refreshed photo list bumps the generation while the batch is queued.
+        registry.updateWifiRemote(
+            "camera",
+            registry.get("camera")!!.wifiRemote.copy(
+                photoBrowser = registry.get("camera")!!.wifiRemote.photoBrowser.copy(
+                    browserGeneration = registry.get("camera")!!.wifiRemote.photoBrowser.browserGeneration + 1
+                )
+            )
+        )
+        runCurrent()
+        val transfer = registry.get("camera")!!.wifiRemote.imageTransfer
+        assertEquals(WifiImageTransferStatus.Failed, transfer.status)
+        assertEquals(WifiTransferFailureReason.CatalogChanged, transfer.failureReason)
+        assertTrue(connection.downloadedHandles.isEmpty())
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun batchPhotoTimeoutReportsTimeoutReason() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = pagedConnection()
+        connection.failDownloadWith = timeoutException()
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(0)))
+        runCurrent()
+        val transfer = registry.get("camera")!!.wifiRemote.imageTransfer
+        assertEquals(WifiImageTransferStatus.Failed, transfer.status)
+        assertEquals(WifiTransferFailureReason.Timeout, transfer.failureReason)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun batchPhotoCrashReportsUnknownReason() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = pagedConnection()
+        connection.failDownloadWith = IllegalStateException("boom")
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(0), WifiPhotoDownload(2)))
+        runCurrent()
+        val state = registry.get("camera")!!.wifiRemote
+        assertEquals(WifiImageTransferStatus.Failed, state.imageTransfer.status)
+        assertEquals(WifiTransferFailureReason.Unknown, state.imageTransfer.failureReason)
+        assertTrue(state.photoBrowser.failed)
+        // Stop-at-first-failure: the second selected photo was never attempted.
+        assertEquals(1, connection.downloads)
+        assertTrue(connection.downloadedHandles.isEmpty())
+        controller.closeAndJoin()
+    }
+
+    private suspend fun timeoutException(): TimeoutCancellationException =
+        try {
+            withTimeout(1.milliseconds) { awaitCancellation() }
+            error("unreachable")
+        } catch (exception: TimeoutCancellationException) {
+            exception
+        }
 
 }

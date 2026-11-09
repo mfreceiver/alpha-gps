@@ -38,6 +38,9 @@ enum class WifiShutdownStatus { NotRequested, Requested, Unavailable, Unconfirme
 
 enum class WifiImageTransferStatus { Idle, Downloading, Converting, Saved, Cancelled, Failed, ConversionFailed, PermissionDenied }
 
+/** Actionable cause of a [WifiImageTransferStatus.Failed] transfer. */
+enum class WifiTransferFailureReason { CatalogChanged, Timeout, Storage, Protocol, Unknown }
+
 enum class WifiPhotoDownloadFormat { Original, Jpeg }
 
 data class WifiPhotoDownload(val handle: Long, val format: WifiPhotoDownloadFormat = WifiPhotoDownloadFormat.Original)
@@ -49,6 +52,8 @@ data class WifiImageTransferState(
     val totalBytes: Long = 0,
     val completedFiles: Int = 0,
     val totalFiles: Int = 0,
+    /** Set only for Failed results; null keeps the generic failure text. */
+    val failureReason: WifiTransferFailureReason? = null,
 ) {
     val busy: Boolean get() = status == WifiImageTransferStatus.Downloading || status == WifiImageTransferStatus.Converting
 }
