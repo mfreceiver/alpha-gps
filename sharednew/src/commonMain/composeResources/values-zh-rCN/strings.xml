@@ -383,7 +383,11 @@
     <string name="wifi_remote_browser_refresh">刷新</string>
     <string name="wifi_remote_browser_previous">上一页</string>
     <string name="wifi_remote_browser_next">下一页</string>
-    <string name="wifi_remote_browser_page">第 %1$d 页</string>
+    <string name="wifi_remote_browser_first">第一页</string>
+    <string name="wifi_remote_browser_page_of">第 %1$d / %2$d 页</string>
+    <string name="wifi_remote_browser_jump_title">跳转到页</string>
+    <string name="wifi_remote_browser_jump_label">页码（1–%1$d）</string>
+    <string name="wifi_remote_browser_jump_go">跳转</string>
     <string name="wifi_remote_photo_size">%1$d KB</string>
     <string name="wifi_remote_download">下载</string>
     <string name="wifi_remote_download_saved">已保存</string>
