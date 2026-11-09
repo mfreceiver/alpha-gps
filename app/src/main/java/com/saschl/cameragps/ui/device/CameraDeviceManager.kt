@@ -63,6 +63,7 @@ import com.saschl.cameragps.AppServices
 import com.saschl.cameragps.service.AssociatedDeviceCompat
 import com.saschl.cameragps.service.BluetoothStateBroadcastReceiver
 import com.saschl.cameragps.service.LocationSenderService
+import com.saschl.cameragps.service.coordinator.DeviceRemovalCoordinator
 import com.saschl.cameragps.service.getAssociatedDevices
 import com.saschl.cameragps.ui.EnhancedLocationPermissionBox
 import com.saschl.cameragps.ui.pairing.startDevicePresenceObservation
@@ -286,20 +287,20 @@ fun CameraDeviceManager(
                             deviceManager.disassociate(foundDevice.address)
                         }
 
-                        val serviceIntent = Intent(
-                            context.applicationContext,
-                            LocationSenderService::class.java
-                        ).apply {
-                            action =
-                                com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants.ACTION_REQUEST_SHUTDOWN
-                        }
-                        serviceIntent.putExtra(
-                            "address",
-                            foundDevice.address.uppercase()
-                        )
-                        context.startService(serviceIntent)
-
-                        devicesDao.deleteDevice(CameraDevice(foundDevice.address.uppercase()))
+                        // Delete must commit before the shutdown request: the service
+                        // judges from the enabled-device count and must not see the
+                        // removed device anymore (DeviceRemovalCoordinator serializes this).
+                        DeviceRemovalCoordinator(devicesDao) { address ->
+                            val serviceIntent = Intent(
+                                context.applicationContext,
+                                LocationSenderService::class.java
+                            ).apply {
+                                action =
+                                    com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants.ACTION_REQUEST_SHUTDOWN
+                            }
+                            serviceIntent.putExtra("address", address)
+                            context.startService(serviceIntent)
+                        }.remove(CameraDevice(foundDevice.address.uppercase()))
 
                         associatedDevices =
                             deviceManager.getAssociatedDevices(adapter)
