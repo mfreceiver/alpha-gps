@@ -150,6 +150,69 @@ class AppExitGateTest {
         }
 
     @Test
+    fun `a late unowned onTaskRemoved after its owned exit was cancelled by a connect is rejected`() =
+        runBlocking {
+            // Counterexample this pins down: beginSession(A) → A.onDestroy (owned exit)
+            // hangs in the Wi-Fi close → a connect command cancels it (retired, session
+            // still A) → the SAME task removal's late onTaskRemoved must not rebuild
+            // the teardown / run afterwards, which would kill the connection the
+            // connect just made.
+            withTimeout(10_000) {
+                val g = gate()
+                val activity = Any()
+                g.beginSession(activity)
+
+                val inTeardown = CompletableDeferred<Unit>()
+                g.scheduleExit(
+                    owner = activity,
+                    teardown = { inTeardown.complete(Unit); hang() },
+                    afterwards = {},
+                )
+                inTeardown.await()
+
+                g.cancelPendingExit() // the connect command
+
+                val calls = mutableListOf<String>()
+                g.scheduleExit(
+                    owner = null,
+                    teardown = { calls += "teardown" },
+                    afterwards = { calls += "afterwards" },
+                )
+                assertTrue(
+                    "the same task removal's late onTaskRemoved must not rebuild the teardown",
+                    calls.isEmpty(),
+                )
+            }
+        }
+
+    @Test
+    fun `a late callback after a completed exit was retired by a connect is rejected`() =
+        runBlocking {
+            // The flow completed *before* the connect arrived; a late second
+            // callback of it would equally kill the brand-new connection.
+            withTimeout(10_000) {
+                val g = gate()
+                val activity = Any()
+                g.beginSession(activity)
+
+                val calls = mutableListOf<String>()
+                g.scheduleExit(
+                    owner = activity,
+                    teardown = { calls += "teardown" },
+                    afterwards = { calls += "afterwards" },
+                )
+                assertEquals(listOf("teardown", "afterwards"), calls)
+
+                g.cancelPendingExit() // connect retires even a completed flow
+
+                var ran = false
+                g.scheduleExit(owner = activity, teardown = { ran = true }, afterwards = { ran = true })
+                g.scheduleExit(owner = null, teardown = { ran = true }, afterwards = { ran = true })
+                assertFalse("late callbacks of a retired completed flow must not run", ran)
+            }
+        }
+
+    @Test
     fun `a retired generation does not block the next session's exits`() = runBlocking {
         // The retired exit generation must not leak into a new activity session.
         withTimeout(10_000) {

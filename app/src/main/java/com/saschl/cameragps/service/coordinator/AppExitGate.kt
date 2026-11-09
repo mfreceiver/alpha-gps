@@ -20,27 +20,40 @@ import kotlinx.coroutines.launch
  * pending/running exit without deposing the current owner, and [scheduleExit]
  * from a stale owner is rejected outright.
  *
- * A cancelled exit also *retires* its exit generation. An exit teardown and
- * the late callbacks of the same exit flow (the unowned onTaskRemoved entry
- * and the owned Activity onDestroy entry are two entry points of one flow)
- * share a generation; once a connect command cancelled that generation's
- * teardown, every further callback of it is a late duplicate that must not
- * rebuild the teardown and kill the connection the connect just made. Only
- * [beginSession] — a new foreground activity — opens the next generation.
+ * Exit-flow epochs: one task removal reaches the app through *two* entry
+ * points — the owned Activity onDestroy and the unowned onTaskRemoved — and
+ * either may arrive first or lag behind the other. Each accepted
+ * [scheduleExit] opens a new exit flow and records its entry kind; a connect
+ * that cancels (or finds a just-completed) flow retires that flow's epoch.
+ * Late callbacks of a retired flow are then rejected *in both directions*:
+ *  - an owned callback is always a late duplicate (the owner already entered
+ *    the retired flow), and
+ *  - an unowned callback after an *owned*-entered flow is the same task
+ *    removal's late onTaskRemoved (the removal destroyed the activity first).
+ * An unowned callback after an *unowned*-entered retired flow, however, is a
+ * genuinely new task removal: onTaskRemoved fires once per removal, so a
+ * second delivery cannot belong to the flow that already used it. That keeps
+ * the "a real later swipe still disconnects" semantics intact. Only
+ * [beginSession] — a new foreground activity — clears a retired epoch, so a
+ * relaunch always exits freely again.
  */
 class AppExitGate(private val scope: CoroutineScope) {
 
     private var session: Any = Any()
     private var exitJob: Job? = null
 
-    /** True while the current session's exit generation was cancelled by a connect. */
-    private var exitGenerationRetired = false
+    /** Entry kind of the current exit flow: owned (activity), unowned (task removed), or none yet. */
+    private var exitFlowEnteredOwned: Boolean? = null
+
+    /** True while a connect retired the current exit flow (pending, running or just completed). */
+    private var exitFlowRetired = false
 
     /** A new foreground session starts; any pending exit from an older one is void. */
     fun beginSession(owner: Any) {
         exitJob?.cancel()
         exitJob = null
-        exitGenerationRetired = false
+        exitFlowEnteredOwned = null
+        exitFlowRetired = false
         session = owner
     }
 
@@ -51,14 +64,16 @@ class AppExitGate(private val scope: CoroutineScope) {
      * disconnect). Only [beginSession] — a new foreground activity — supersedes
      * an owner.
      *
-     * If a teardown was actually cancelled, its exit generation is retired:
-     * late duplicate callbacks of that same exit flow (the flow that already
-     * entered exit and was cancelled) are rejected, while the still-alive
-     * owner's *first real* exit afterwards stays honoured — it is a new exit,
-     * not a callback of the cancelled one.
+     * If an exit flow of the current epoch existed — still pending, running,
+     * or even just completed — it is retired: late duplicate callbacks of
+     * that same flow (the other entry point of the same task removal) are
+     * rejected, so they cannot rebuild a teardown that kills the connection
+     * the connect just made. A flow that completed *before* the connect is
+     * retired too: a late second callback of it would equally tear down the
+     * brand-new connection.
      */
     fun cancelPendingExit() {
-        if (exitJob != null) exitGenerationRetired = true
+        if (exitFlowEnteredOwned != null) exitFlowRetired = true
         exitJob?.cancel()
         exitJob = null
     }
@@ -68,12 +83,13 @@ class AppExitGate(private val scope: CoroutineScope) {
      * incoming connection superseded [owner]. A null owner (task removed)
      * always belongs to the current session.
      *
-     * An owned exit is rejected while the session's exit generation is
-     * retired: the owner already entered the cancelled exit flow, so its
-     * further callbacks are late duplicates of it. An unowned exit is never
-     * blocked — onTaskRemoved fires once per real task removal, so it is
-     * always a fresh, genuine exit signal (blocking it would leak a
-     * connection the cancelled exit never tore down).
+     * Late callbacks of a retired exit flow are rejected in both directions:
+     * an owned callback, because its owner already entered the retired flow,
+     * and an unowned callback after an owned-entered flow, because it is the
+     * same task removal's late onTaskRemoved. An unowned callback after an
+     * unowned-entered retired flow is a genuinely new task removal and stays
+     * honoured (onTaskRemoved fires once per removal, so it is never a late
+     * duplicate of a flow that already entered through it).
      */
     fun scheduleExit(
         owner: Any? = null,
@@ -81,7 +97,10 @@ class AppExitGate(private val scope: CoroutineScope) {
         afterwards: () -> Unit,
     ) {
         if (owner != null && owner !== session) return
-        if (owner != null && exitGenerationRetired) return
+        if (owner != null && exitFlowRetired) return
+        if (owner == null && exitFlowRetired && exitFlowEnteredOwned == true) return
+        exitFlowEnteredOwned = owner != null
+        exitFlowRetired = false
         exitJob?.cancel()
         exitJob = scope.launch {
             teardown()
