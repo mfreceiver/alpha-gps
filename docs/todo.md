@@ -26,11 +26,6 @@
 
 ## P3
 
-### 5. browse-only 下 busy 时 Back 无反馈
-- 做什么：传输进行中按返回无任何反馈（取消按钮可用）。加提示或确认“结束连接并取消传输？”。
-- 验收：忙时 Back 有明确反馈；补一条 Controller/VM 层测试。
-- 依据：v0.1.0 发版知情清单。
-
 ### 6. 补测：队列 Closed → download 报 Protocol
 - 做什么：在 `SonyImageTransferTest.kt` 增加用例：openBrowser 后 `queue.close()`，再 `download`，断言 `failureReason == Protocol`。
 - 验收：用例通过；去掉 `ensureResponded` 对 Closed 的映射时该用例必须失败。

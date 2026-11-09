@@ -184,8 +184,48 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
             }
             controller.clearPhotoTransferResult(identifier)
             viewedPhotoIndex = index
-            controller.browsePhotos(identifier, offset, preferredPhotoIndex = index)
+            val dateKey = browser.dateKey
+            if (browser.grouped && dateKey != null) {
+                // Same day, neighbouring page: bound to this view so a late page can't replace it.
+                controller.browseDate(
+                    identifier, dateKey, offset, preferredPhotoIndex = index,
+                    expectedRevision = browser.pageRevision
+                )
+            } else {
+                controller.browsePhotos(identifier, offset, preferredPhotoIndex = index)
+            }
         }
+    }
+
+    /**
+     * Opens one day of the date list. Purely a view change on the same catalog generation: the
+     * selection, saved markers and any finished batch summary survive. Refused while a load or
+     * transfer is running.
+     */
+    fun openDate(dateKey: String) {
+        val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return
+        val browser = state.photoBrowser
+        if (!browser.open || !browser.grouped || browser.dateKey != null) return
+        if (browser.loading || state.imageTransfer.busy) return
+        noteBatchCompletion()
+        controller.browseDate(identifier, dateKey, expectedRevision = browser.pageRevision)
+    }
+
+    /** Page change inside the open day, bound to the view it was issued from. */
+    fun openDatePage(offset: Int) {
+        val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return
+        val browser = state.photoBrowser
+        val dateKey = browser.dateKey ?: return
+        if (!browser.grouped || browser.loading || state.imageTransfer.busy) return
+        controller.browseDate(identifier, dateKey, offset, expectedRevision = browser.pageRevision)
+    }
+
+    /** Set when Back was pressed while a load or transfer made leaving impossible; auto-dismissed by the UI. */
+    var backBlockedNotice by mutableStateOf(false)
+        private set
+
+    fun dismissBackBlockedNotice() {
+        backBlockedNotice = false
     }
 
     fun togglePhotoSelection(captureId: String) {
@@ -368,24 +408,40 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         }
         if (!browseOnly || autoEnteredBrowser || state.photoBrowser.open || !state.canTransferImages) return
         autoEnteredBrowser = true
-        controller.browsePhotos(identifier)
+        controller.browseDates(identifier)
     }
 
+    /**
+     * Back: viewer -> grid; a day's grid -> the day list (local, no camera traffic, selection kept);
+     * a remaining selection -> cleared; then the existing exit. While a load or transfer runs the screen cannot
+     * be left, and that is now said out loud ([backBlockedNotice]) instead of ignoring the press.
+     */
     fun navigateBack(onClose: () -> Unit) {
+        val browser = controller.sessions.value[identifier.uppercase()]?.wifiRemote?.photoBrowser
         when {
             viewedPhotoIndex != null -> closePhoto()
-            selectedPhotoIds.isNotEmpty() -> clearPhotoSelection()
-            controller.sessions.value[identifier.uppercase()]?.wifiRemote?.photoBrowser?.open == true -> {
+            // A day's grid goes back to the day list with the selection kept (that is how a
+            // selection spans days); the X in the top bar is the explicit way to clear it.
+            browser?.open == true && browser.grouped && browser.dateKey != null -> {
                 val state = controller.sessions.value[identifier.uppercase()]!!.wifiRemote
+                if (browser.loading || state.imageTransfer.busy) backBlockedNotice = true
+                else controller.showDates(identifier)
+            }
+            selectedPhotoIds.isNotEmpty() -> clearPhotoSelection()
+            browser?.open == true -> {
+                val state = controller.sessions.value[identifier.uppercase()]!!.wifiRemote
+                val busy = state.photoBrowser.loading || state.imageTransfer.busy
                 if (browseOnly) {
                     // Browse-only has no remote-shooting screen to go "back" to: leaving
                     // the browser means ending the session and returning to the caller
                     // (the device screen) — not to a "connect" page the user would have to
                     // click through again. While a transfer or catalog load is in flight
                     // the controllers would ignore it anyway — wait.
-                    if (!state.photoBrowser.loading && !state.imageTransfer.busy) {
+                    if (!busy) {
                         controller.disconnect(identifier)
                         onClose()
+                    } else {
+                        backBlockedNotice = true
                     }
                 } else {
                     controller.leavePhotoBrowser(identifier)
@@ -589,7 +645,7 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
                     if (ready) {
                         Text(stringResource(Res.string.wifi_remote_connected, state.cameraName))
                         if (state.canTransferImages) OutlinedButton(
-                            onClick = { controller.browsePhotos(id) }
+                            onClick = { controller.browseDates(id) }
                         ) {
                             Text(stringResource(Res.string.wifi_remote_browse))
                         } else Text(stringResource(Res.string.wifi_remote_browse_unsupported))

@@ -233,6 +233,9 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         assertEquals(listOf(1L, 2L), browser.photos.map { it.handle })
         assertEquals(1, browser.totalObjects)
         assertEquals(generation, browser.browserGeneration)
+        assertTrue(connection.thumbnailRequests.isEmpty(), "A day page waits for the viewport")
+        controller.requestThumbnails("camera", browser.pageRevision, listOf("a"), emptyList())
+        runCurrent()
         assertEquals(listOf(2L), connection.thumbnailRequests, "The RAW file is the capture's thumbnail")
         // The saved marker and the handle index outlive switching days (cross-date selection/download).
         connection.downloadResult.complete(WifiImageTransferState(WifiImageTransferStatus.Saved))
@@ -2620,6 +2623,257 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         runCurrent()
         assertEquals(pageSize, connection.thumbnailRequests.size)
         assertEquals(pageSize, controller.thumbnails.value.size)
+        controller.closeAndJoin()
+    }
+
+    // ---- Viewport-driven thumbnails of a date page ----
+
+    private fun photoIds(range: IntRange) = range.map { "photo:$it" }
+
+    /** A controller already showing page 0 of the (single, "unknown") day of [pagedConnection]. */
+    private suspend fun kotlinx.coroutines.test.TestScope.dayController(
+        connection: Connection, registry: CameraSessionRegistry = CameraSessionRegistry()
+    ): WifiRemoteController {
+        connection.thumbnailImage = PreviewBitmap(160, 120)
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browseDates("camera")
+        runCurrent()
+        controller.browseDate("camera", UNKNOWN_DATE_KEY)
+        runCurrent()
+        return controller
+    }
+
+    private fun CameraSessionRegistry.revision() = get("camera")!!.wifiRemote.photoBrowser.pageRevision
+
+    @Test
+    fun aDayPageFetchesNothingUntilTheViewportIsReportedThenVisibleBeforeMargin() = runTest {
+        val connection = pagedConnection()
+        val registry = CameraSessionRegistry()
+        val controller = dayController(connection, registry)
+        assertTrue(connection.thumbnailRequests.isEmpty(), "no demand, no camera traffic")
+        assertFalse(controller.thumbnailsLoading.value)
+        controller.requestThumbnails("camera", registry.revision(), photoIds(5..8), photoIds(9..25) + photoIds(0..4))
+        runCurrent()
+        assertEquals(
+            (5..25).map(::thumbHandle) + (0..4).map(::thumbHandle), connection.thumbnailRequests,
+            "visible first, then the margin; nothing outside the demand"
+        )
+        assertFalse(controller.thumbnailsLoading.value, "idle again once the demand is served")
+        assertEquals(26, controller.thumbnails.value.size)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun demandForAnotherPageRevisionIsIgnored() = runTest {
+        val connection = pagedConnection()
+        val registry = CameraSessionRegistry()
+        val controller = dayController(connection, registry)
+        controller.requestThumbnails("camera", registry.revision() - 1, photoIds(0..3), emptyList())
+        runCurrent()
+        assertTrue(connection.thumbnailRequests.isEmpty(), "a late layout of an earlier page cannot steer this one")
+        controller.requestThumbnails("camera", registry.revision(), photoIds(0..1), emptyList())
+        runCurrent()
+        assertEquals(listOf(thumbHandle(0), thumbHandle(1)), connection.thumbnailRequests)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun scrollingAwayDropsUnstartedTargetsButNeverCancelsTheRequestInFlight() = runTest {
+        val connection = pagedConnection()
+        val registry = CameraSessionRegistry()
+        val stall = CompletableDeferred<Unit>()
+        connection.thumbnailHook = { handle -> if (handle == thumbHandle(2)) stall.await() }
+        val controller = dayController(connection, registry)
+        controller.requestThumbnails("camera", registry.revision(), photoIds(0..2), photoIds(3..20))
+        runCurrent()
+        assertTrue(controller.thumbnailsLoading.value, "the current demand has pending work")
+        assertEquals(listOf(0, 1, 2).map(::thumbHandle), connection.thumbnailRequests)
+        controller.requestThumbnails("camera", registry.revision(), photoIds(50..51), emptyList())
+        runCurrent()
+        assertEquals(3, connection.thumbnailRequests.size, "the in-flight request is left alone")
+        stall.complete(Unit)
+        runCurrent()
+        assertEquals(
+            listOf(0, 1, 2, 50, 51).map(::thumbHandle), connection.thumbnailRequests,
+            "the rest of the old batch is no longer wanted"
+        )
+        assertTrue(thumbHandle(2) in controller.thumbnails.value, "what was in flight still arrives")
+        assertFalse(controller.thumbnailsLoading.value)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun cachedThumbnailsAreNotRefetchedAndFailuresAreNotRetriedUntilTheNextLoad() = runTest {
+        val connection = pagedConnection()
+        val registry = CameraSessionRegistry()
+        connection.throwingThumbnails += thumbHandle(1)
+        val controller = dayController(connection, registry)
+        controller.requestThumbnails("camera", registry.revision(), photoIds(0..2), emptyList())
+        runCurrent()
+        assertEquals(listOf(0, 1, 2).map(::thumbHandle), connection.thumbnailRequests)
+        // The same viewport again, and a viewport that overlaps it: only genuinely new captures are asked for.
+        controller.requestThumbnails("camera", registry.revision(), photoIds(0..2), emptyList())
+        controller.requestThumbnails("camera", registry.revision(), photoIds(0..3), emptyList())
+        runCurrent()
+        assertEquals(listOf(0, 1, 2, 3).map(::thumbHandle), connection.thumbnailRequests)
+        assertFalse(thumbHandle(1) in controller.thumbnails.value)
+        assertFalse(registry.get("camera")!!.wifiRemote.photoBrowser.failed, "a thumbnail problem is not a page failure")
+        assertFalse(controller.thumbnailsLoading.value, "no hot loop on the failed one")
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun aDownloadPausesDemandLoadingAndItResumes() = runTest {
+        val connection = pagedConnection()
+        val registry = CameraSessionRegistry()
+        val controller = dayController(connection, registry)
+        controller.downloadPhoto("camera", 0L)
+        runCurrent()
+        controller.requestThumbnails("camera", registry.revision(), photoIds(0..2), emptyList())
+        runCurrent()
+        assertTrue(connection.thumbnailRequests.isEmpty(), "no thumbnail competes with the running download")
+        connection.downloadResult.complete(WifiImageTransferState(WifiImageTransferStatus.Saved))
+        runCurrent()
+        assertEquals(listOf(0, 1, 2).map(::thumbHandle), connection.thumbnailRequests)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun switchingPageOrDayStopsTheOldLoaderAndDropsItsDemand() = runTest {
+        val connection = pagedConnection()
+        val registry = CameraSessionRegistry()
+        val controller = dayController(connection, registry)
+        val oldRevision = registry.revision()
+        controller.requestThumbnails("camera", oldRevision, photoIds(0..1), emptyList())
+        runCurrent()
+        assertEquals(2, connection.thumbnailRequests.size)
+        controller.browseDate("camera", UNKNOWN_DATE_KEY, pageSize, expectedRevision = oldRevision)
+        runCurrent()
+        assertTrue(registry.revision() > oldRevision)
+        controller.requestThumbnails("camera", oldRevision, photoIds(2..5), emptyList())
+        runCurrent()
+        assertEquals(2, connection.thumbnailRequests.size, "the old page's demand is dead")
+        controller.requestThumbnails("camera", registry.revision(), photoIds(pageSize..pageSize), emptyList())
+        runCurrent()
+        assertEquals(thumbHandle(pageSize), connection.thumbnailRequests.last())
+        // A page change issued from an earlier view (A -> B -> A) is refused instead of replacing this one.
+        val before = connection.datePageRequests.size
+        controller.browseDate("camera", UNKNOWN_DATE_KEY, 0, expectedRevision = oldRevision)
+        runCurrent()
+        assertEquals(before, connection.datePageRequests.size)
+        // Going back to the day list ends the loader; late layouts of the grid cause no traffic.
+        val requests = connection.thumbnailRequests.size
+        controller.showDates("camera")
+        controller.requestThumbnails("camera", registry.revision() - 1, photoIds(pageSize..pageSize + 1), emptyList())
+        runCurrent()
+        assertEquals(requests, connection.thumbnailRequests.size)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun theViewerCrossingIntoANewPageNamesTheCaptureItShowsFirst() = runTest {
+        val connection = pagedConnection()
+        val registry = CameraSessionRegistry()
+        val controller = dayController(connection, registry)
+        controller.browseDate("camera", UNKNOWN_DATE_KEY, pageSize, preferredPhotoIndex = pageSize + 1)
+        runCurrent()
+        assertEquals(listOf(thumbHandle(pageSize + 1)), connection.thumbnailRequests)
+        controller.closeAndJoin()
+    }
+
+    // ---- Date navigation through the ViewModel ----
+
+    @Test
+    fun backWalksGridToDatesToExitLocallyAndKeepsTheSelectionAcrossDays() = runTest {
+        val connection = datedConnection()
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller).apply { browseOnly = true }
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        model.maybeAutoEnterBrowser()
+        runCurrent()
+        var browser = registry.get("camera")!!.wifiRemote.photoBrowser
+        assertTrue(browser.grouped && browser.dateKey == null, "browse-only opens the day list, not a page")
+        model.openDate("2024-05-01")
+        runCurrent()
+        model.togglePhotoSelection("a")
+        assertEquals(setOf("a"), model.selectedPhotoIds)
+        val generation = registry.get("camera")!!.wifiRemote.photoBrowser.browserGeneration
+        var exited = false
+        model.navigateBack { exited = true }
+        browser = registry.get("camera")!!.wifiRemote.photoBrowser
+        assertNull(browser.dateKey, "Back from a day's grid shows the day list")
+        assertEquals(setOf("a"), model.selectedPhotoIds, "the selection survives going back to the day list")
+        assertFalse(exited)
+        assertEquals(1, connection.catalogOpens, "no re-enumeration")
+        model.openDate("2024-05-02")
+        runCurrent()
+        model.togglePhotoSelection("b")
+        assertEquals(setOf("a", "b"), model.selectedPhotoIds, "selection spans days")
+        model.reconcilePhotoSelection()
+        assertEquals(setOf("a", "b"), model.selectedPhotoIds, "a day switch is not a new generation")
+        assertEquals(generation, registry.get("camera")!!.wifiRemote.photoBrowser.browserGeneration)
+        model.navigateBack { exited = true }
+        model.navigateBack { exited = true } // day list with a selection: clears it first
+        assertTrue(model.selectedPhotoIds.isEmpty())
+        assertFalse(exited)
+        model.navigateBack { exited = true }
+        runCurrent()
+        assertTrue(exited, "the day list keeps the existing browse-only exit")
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun backWhileBusyIsExplainedInsteadOfIgnored() = runTest {
+        val connection = datedConnection()
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller).apply { browseOnly = true }
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        model.maybeAutoEnterBrowser()
+        runCurrent()
+        model.openDate("2024-05-01")
+        runCurrent()
+        controller.downloadPhoto("camera", 1L) // stays busy: the download is never completed
+        runCurrent()
+        var exited = false
+        model.navigateBack { exited = true }
+        assertTrue(model.backBlockedNotice)
+        assertEquals("2024-05-01", registry.get("camera")!!.wifiRemote.photoBrowser.dateKey)
+        assertFalse(exited)
+        model.dismissBackBlockedNotice()
+        controller.cancelPhotoOperation("camera")
+        runCurrent()
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun switchingDaysKeepsTheFinishedBatchSummaryAndViewerPagesStayInTheDay() = runTest {
+        val connection = pagedConnection()
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browseDates("camera")
+        runCurrent()
+        model.openDate(UNKNOWN_DATE_KEY)
+        runCurrent()
+        model.recordBatchSummary(WifiBatchSummary(downloaded = 1, skipped = emptyMap()))
+        model.openPhoto("photo:${pageSize - 1}")
+        runCurrent()
+        model.viewPhotoAt(pageSize) // next page of the same day
+        runCurrent()
+        val browser = registry.get("camera")!!.wifiRemote.photoBrowser
+        assertEquals(listOf(UNKNOWN_DATE_KEY to 0, UNKNOWN_DATE_KEY to pageSize), connection.datePageRequests)
+        assertEquals(pageSize, browser.offset)
+        assertTrue(connection.pageRequests.isEmpty(), "grouped mode never uses the flat page API")
+        assertEquals(1, connection.catalogOpens)
+        assertTrue(model.batchSummary != null, "paging inside a day does not drop the batch summary")
         controller.closeAndJoin()
     }
 }
