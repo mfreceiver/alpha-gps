@@ -26,6 +26,7 @@ import com.saschl.cameragps.notification.NotificationsHelper
 import com.saschl.cameragps.service.coordinator.ServicePresenceCoordinator
 import com.saschl.cameragps.service.coordinator.ServiceShutdownCoordinator
 import com.saschl.cameragps.service.transport.AndroidBleTransport
+import com.saschl.cameragps.utils.PreferencesManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -58,9 +59,12 @@ class LocationSenderService : LifecycleService() {
     private val bluetoothManager get() = services.bluetoothManager
 
     private val shutdownCoordinator by lazy {
-        ServiceShutdownCoordinator(services.deviceDao, services.transport) { startId ->
-            requestShutdown(startId)
-        }
+        ServiceShutdownCoordinator(
+            deviceDao = services.deviceDao,
+            transport = services.transport,
+            onShutdownRequested = { startId -> requestShutdown(startId) },
+            isAppEnabled = { PreferencesManager.isAppEnabled(this) },
+        )
     }
 
     private val presenceCoordinator by lazy {
