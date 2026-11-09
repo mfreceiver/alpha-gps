@@ -10,6 +10,12 @@ class ServiceShutdownCoordinator(
     private val deviceDao: CameraDeviceDAO,
     private val transport: AndroidBleTransport,
     private val onShutdownRequested: (Int?) -> Unit,
+    /**
+     * The app master switch. Automatic (no-address) entry points must not
+     * connect or keep the foreground service alive while the app is off —
+     * the same guard the activity and CDM entry points already apply.
+     */
+    private val isAppEnabled: () -> Boolean = { true },
 ) {
     /**
      * No explicit address: triggered by BOOT_COMPLETED / MY_PACKAGE_REPLACED.
@@ -20,6 +26,11 @@ class ServiceShutdownCoordinator(
      */
     @SuppressLint("MissingPermission")
     suspend fun handleNoAddress(startId: Int) {
+        if (!isAppEnabled()) {
+            Timber.i("App master switch is off, not reconnecting and shutting down service")
+            onShutdownRequested(startId)
+            return
+        }
         if (deviceDao.getEnabledDeviceCount() == 0) {
             Timber.i("No saved devices found, shutting down service")
             onShutdownRequested(startId)
