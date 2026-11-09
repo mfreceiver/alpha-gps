@@ -94,5 +94,18 @@ case "$ABI_OUT" in
   *)         fail "APK ABI 检查输出异常: $ABI_OUT" ;;
 esac
 
+# ─── 4. 语言断言（composeResources 仅 values + values-zh-rCN；语言资源纪律）──
+# assets/composeResources/*/values* 的语言目录集合必须 ⊆ {values, values-zh-rCN}
+# 且至少含 values（en 基线）；drawable 等其它目录与纯目录条目不参与判定。
+# 见 rl_check_apk_lang。增量构建会把已删除语言的 .cvr 残留进 APK，此断言兜底拦截。
+LANG_OUT=$(rl_check_apk_lang "$APK_PATH") || fail "APK 语言检查：zipfile 打开/读取失败（非有效 zip/APK）"
+case "$LANG_OUT" in
+  OK\ *) pass "APK composeResources 语言 ⊆ {values, values-zh-rCN}（${LANG_OUT#OK }）" ;;
+  OPEN_FAIL*) fail "APK 无法作为 zip 打开（语言检查）: $LANG_OUT" ;;
+  BAD_LANG*)  fail "APK composeResources 含已移除语言的资源目录（必须仅 values + values-zh-rCN）: $LANG_OUT" ;;
+  NO_VALUES)  fail "APK composeResources 缺少 values（en 基线）目录" ;;
+  *)          fail "APK 语言检查输出异常: $LANG_OUT" ;;
+esac
+
 echo
 echo "${C_GRN}全部断言通过${C_RST}: $(basename "$APK_PATH")"
