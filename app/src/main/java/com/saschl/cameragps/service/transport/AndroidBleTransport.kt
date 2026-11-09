@@ -176,6 +176,16 @@ class AndroidBleTransport(
     }
 
     /**
+     * Number of registered GATT handles, whatever their state: active links, connects still
+     * pending and handles parked on `autoConnect` waiting for the camera to reappear. This is
+     * the number shutdown eligibility must look at — counting only active links would stop the
+     * whole service (and kill every GATT) while another camera is still connecting.
+     */
+    fun connectionCount(): Int = synchronized(connections) {
+        connections.size
+    }
+
+    /**
      * Drop back to the default connection parameters once the handshake is done —
      * the periodic location writes do not need the short interval, and holding it
      * costs battery on both the phone and the camera.

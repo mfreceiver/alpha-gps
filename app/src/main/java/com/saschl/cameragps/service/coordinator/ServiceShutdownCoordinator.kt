@@ -63,7 +63,9 @@ class ServiceShutdownCoordinator(
 
         // Explicit stop requests are user actions; saved devices are paused too.
         transport.pauseDevice(address)
-        if (transport.connectedCount() == 0 && deviceDao.getEnabledDeviceCount() == 0) {
+        // connectionCount(): a still-pending or autoConnect-reconnecting GATT of another
+        // camera must keep the service (and that handle) alive.
+        if (transport.connectionCount() == 0 && deviceDao.getEnabledDeviceCount() == 0) {
             Timber.d("No connected or saved cameras remaining, shutting down service")
             onShutdownRequested(startId)
         }

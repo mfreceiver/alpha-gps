@@ -23,6 +23,7 @@ import com.sasch.cameragps.sharednew.notification.TransmissionNotificationCoordi
 import com.saschl.cameragps.AppServices
 import com.saschl.cameragps.notification.AndroidTransmissionNotificationPublisher
 import com.saschl.cameragps.notification.NotificationsHelper
+import com.saschl.cameragps.service.coordinator.ConnectionDemandGate
 import com.saschl.cameragps.service.coordinator.DeviceDisconnectCoordinator
 import com.saschl.cameragps.service.coordinator.ServicePresenceCoordinator
 import com.saschl.cameragps.service.coordinator.isConnectAllowed
@@ -69,6 +70,17 @@ class LocationSenderService : LifecycleService() {
         )
     }
 
+    /**
+     * Single source of truth for "may the whole service end after a single-device exit"
+     * (manual disconnect, refused legacy connect, presence loss). See [ConnectionDemandGate].
+     */
+    private val connectionDemandGate by lazy {
+        ConnectionDemandGate(
+            hasConnectionDemand = { transport.connectionCount() > 0 },
+            hasKeepActiveDevices = { services.deviceDao.getKeepActiveDeviceCount() > 0 },
+        )
+    }
+
     private val disconnectCoordinator by lazy {
         DeviceDisconnectCoordinator(
             closeWifi = { address -> services.wifiRemote.closeAndJoin(address) },
@@ -78,7 +90,10 @@ class LocationSenderService : LifecycleService() {
 
     private val presenceCoordinator by lazy {
         ServicePresenceCoordinator(
-            hasConnectedDevices = { transport.connectedCount() > 0 },
+            // Any live GATT handle counts — active links as well as connects still pending or
+            // parked on autoConnect (which start out inactive) — so a reconnecting camera is
+            // never mistaken for "no one connected".
+            hasConnectedDevices = { transport.connectionCount() > 0 },
             // Only cameras whose "keep active" switch is on keep the service alive while away.
             hasAlwaysOnDevices = { services.deviceDao.getKeepActiveDeviceCount() > 0 },
             onShutdownRequested = {
@@ -304,8 +319,7 @@ class LocationSenderService : LifecycleService() {
                 }
                 Timber.i("Manual disconnect of ${command.address}")
                 disconnectCoordinator.disconnect(command.address)
-                // Nothing connected and no camera asking to be kept alive: let the service end.
-                if (transport.connectedCount() == 0 && services.deviceDao.getKeepActiveDeviceCount() == 0) {
+                if (connectionDemandGate.mayStopService()) {
                     requestShutdown(startId)
                 }
             }
@@ -316,7 +330,7 @@ class LocationSenderService : LifecycleService() {
                 // explicit Connect queued before the disconnect) until they connect it again.
                 if (!isConnectAllowed(services.deviceDao.findDeviceEnabled(command.address))) {
                     Timber.i("Ignoring connect for ${command.address}: the device is disabled")
-                    if (transport.connectedCount() == 0 && services.deviceDao.getKeepActiveDeviceCount() == 0) {
+                    if (connectionDemandGate.mayStopService()) {
                         requestShutdown(startId)
                     }
                     return
