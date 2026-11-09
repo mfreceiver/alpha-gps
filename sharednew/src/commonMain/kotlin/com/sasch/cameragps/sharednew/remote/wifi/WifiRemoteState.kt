@@ -79,6 +79,17 @@ data class WifiPhotoBrowserState(
     val totalObjects: Int = 0,
     val hasMore: Boolean = false,
     val savedDownloads: Set<WifiPhotoDownload> = emptySet(),
+    /** True once the card was enumerated by day (see [dates]); the flat paged browser leaves it false. */
+    val grouped: Boolean = false,
+    /** Days of the enumerated card, newest first with the unknown-date group last. */
+    val dates: List<DateGroup> = emptyList(),
+    /** Day whose captures [photos] pages through; null while the day list is what is shown. */
+    val dateKey: String? = null,
+    /**
+     * Bumps with every published page or day list. With [browserGeneration], [dateKey] and [offset] it
+     * identifies a view, so a late result of an earlier navigation cannot be mistaken for the current one.
+     */
+    val pageRevision: Long = 0,
 )
 
 data class WifiRemoteState(

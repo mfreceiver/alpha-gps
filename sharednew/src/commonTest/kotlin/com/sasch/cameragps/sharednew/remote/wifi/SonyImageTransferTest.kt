@@ -497,6 +497,58 @@ class SonyImageTransferTest : WifiLoggingTest() {
         queue.close()
     }
 
+    private fun infoAt(size: Long, name: String, format: Int, date: String): ByteArray =
+        number(1, 4) + number(format.toLong(), 2) + number(0, 2) + number(size, 4) +
+                ByteArray(40) + string(name) + string(date) + byteArrayOf(0, 0)
+
+    @Test
+    fun legacyDateCatalogEnumeratesOnceAndOnlyADatePageMakesItsHandlesAddressable() = runTest {
+        val transport = Transport().apply {
+            objectCount = 4
+            metadata = mapOf(
+                1L to infoAt(size.toLong(), "A.JPG", 0x3801, "20240501T100000"),
+                2L to infoAt(size.toLong(), "A.ARW", 0xb101, "20240501T100000"),
+                3L to infoAt(size.toLong(), "B.JPG", 0x3801, "20240502T090000"),
+                4L to infoAt(size.toLong(), "C.JPG", 0x3801, "")
+            )
+        }
+        val queue = PtpIpCommandQueue(transport, backgroundScope)
+        val withThumbnails = ready().let {
+            it.copy(deviceInfo = PtpDeviceInfo(it.deviceInfo.supportedOperations + 0x100a))
+        }
+        val transfer = SonyImageTransfer(queue, withThumbnails) { Destination() }
+        assertEquals(
+            listOf(
+                DateGroup("2024-05-02", 1), DateGroup("2024-05-01", 1), DateGroup(UNKNOWN_DATE_KEY, 1)
+            ), transfer.openCatalog(),
+            "A JPG+RAW pair counts as one capture"
+        )
+        val enumerated = transport.operations.size
+        // No page is displayed yet: nothing is addressable, and nothing is sent to the camera.
+        assertEquals(null, transfer.thumbnail(3L))
+        assertEquals(null, transfer.preview(3L))
+        assertEquals(enumerated, transport.operations.size)
+        val pair = transfer.datePage("2024-05-01", 0)
+        assertEquals(setOf(1L, 2L), pair.photos.map { it.handle }.toSet())
+        assertEquals(1, pair.totalObjects)
+        assertEquals(false, pair.hasMore)
+        assertEquals(enumerated, transport.operations.size, "Date paging is local")
+        // The page written back is the one the handle guard checks: other days stay refused.
+        transfer.thumbnail(3L)
+        assertEquals(enumerated, transport.operations.size)
+        transfer.thumbnail(1L)
+        assertTrue(transport.operations.any { it.first == 0x100a && it.second == listOf(1L) })
+        // Downloads still resolve against the whole catalog, not just the displayed day.
+        assertEquals(WifiImageTransferStatus.Saved, transfer.download(3L) {}.status)
+        assertEquals(listOf(3L), transfer.datePage("2024-05-02", 0).photos.map { it.handle })
+        assertEquals(listOf(4L), transfer.datePage(UNKNOWN_DATE_KEY, 0).photos.map { it.handle })
+        assertFailsWith<IllegalArgumentException> { transfer.datePage("2024-05-03", 0) }
+        // Re-enumerating replaces the snapshot and forgets the displayed page.
+        transfer.openCatalog()
+        assertEquals(null, transfer.preview(4L))
+        queue.close()
+    }
+
     @Test
     fun rejectsMalformedHandleLists() {
         assertFailsWith<IllegalArgumentException> {

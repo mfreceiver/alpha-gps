@@ -117,6 +117,12 @@ internal class SonyContentCatalog(
     private var captures = emptyList<WifiCameraCapture>()
 
     suspend fun open(): CameraPhotoPage {
+        enumerate()
+        return page(0)
+    }
+
+    /** Reads the whole card catalog (100 entries per request) and returns its captures, newest first. */
+    suspend fun enumerate(): List<WifiCameraCapture> {
         if (!enabled) {
             requested = true
             control(true)
@@ -139,7 +145,7 @@ internal class SonyContentCatalog(
                 if (last == batch.timestamps.first() || files.size == previousCount) last + 1 else last
         }
         captures = groupCameraPhotos(files.values.sortedByDescending { it.created }.map { it.photo })
-        return page(0)
+        return captures
     }
 
     fun page(offset: Int): CameraPhotoPage {

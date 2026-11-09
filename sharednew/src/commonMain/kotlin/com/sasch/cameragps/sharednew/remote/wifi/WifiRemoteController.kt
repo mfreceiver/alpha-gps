@@ -37,6 +37,17 @@ internal interface WifiRemoteConnection {
     val photoHandlesSurviveModeSwitch: Boolean get() = true
     suspend fun openPhotoBrowser(): CameraPhotoPage = error("Photo browsing unavailable")
     suspend fun photoPage(offset: Int): CameraPhotoPage = error("Photo browsing unavailable")
+
+    /**
+     * Enumerates the whole card and returns its days (newest first, unknown last) without showing any
+     * page: nothing is addressable until [datePage].
+     */
+    suspend fun openCatalog(): List<DateGroup> = error("Photo browsing unavailable")
+
+    /** One page of a single day from the enumerated catalog; becomes the displayed page. */
+    suspend fun datePage(dateKey: String, offset: Int): CameraPhotoPage =
+        error("Photo browsing unavailable")
+
     suspend fun photoThumbnail(handle: Long, stats: ThumbnailStatsSink? = null): ImageBitmap? = null
     suspend fun photoPreview(handle: Long): ImageBitmap? = null
     suspend fun downloadPhoto(
@@ -256,7 +267,8 @@ class WifiRemoteController internal constructor(
                     browserGeneration = if (offset == null) generation
                     else state.photoBrowser.browserGeneration,
                     photos = if (offset == null) emptyList() else state.photoBrowser.photos,
-                    savedDownloads = if (offset == null) emptySet() else state.photoBrowser.savedDownloads
+                    savedDownloads = if (offset == null) emptySet() else state.photoBrowser.savedDownloads,
+                    grouped = false, dates = emptyList(), dateKey = null
                 )
             )
         }) { id, connection ->
@@ -281,7 +293,8 @@ class WifiRemoteController internal constructor(
                         photos = page.photos,
                         offset = page.offset,
                         totalObjects = page.totalObjects,
-                        hasMore = page.hasMore
+                        hasMore = page.hasMore,
+                        pageRevision = it.photoBrowser.pageRevision + 1
                     )
                 )
             }
@@ -291,6 +304,111 @@ class WifiRemoteController internal constructor(
             // The catalog is on screen now: `loading` ends with this work, and the thumbnails
             // arrive in small batches afterwards (paused while a transfer/preview runs).
             thumbJob = sessionScope?.launch { loadThumbnails(connection, page.offset, captures) }
+        }
+    }
+
+    /**
+     * Date-grouped entry (a new catalog generation, like a refresh): enumerates the whole card and
+     * publishes its days. No page is shown and no thumbnail is requested until [browseDate]; a failure
+     * leaves `failed` set so the same call can simply be retried.
+     */
+    fun browseDates(identifier: String) {
+        val generation = ++browserGeneration
+        photoWork(identifier, { state ->
+            state.copy(
+                photoBrowser = state.photoBrowser.copy(
+                    open = true, loading = true, failed = false, browserGeneration = generation,
+                    photos = emptyList(), offset = 0, totalObjects = 0, hasMore = false,
+                    savedDownloads = emptySet(), grouped = true, dates = emptyList(), dateKey = null
+                )
+            )
+        }) { id, connection ->
+            clearPhotoPreview(id)
+            previewJob?.cancelAndJoin()
+            previewJob = null
+            _image.value = null
+            thumbJob?.cancelAndJoin()
+            thumbJob = null
+            photoCatalog = emptyMap()
+            _thumbnails.value = emptyMap()
+            updateReady(id) { it.copy(hasLiveView = false) }
+            val dates = connection.openCatalog()
+            updateReady(id) {
+                it.copy(
+                    photoBrowser = it.photoBrowser.copy(
+                        dates = dates, totalObjects = dates.sumOf { group -> group.count },
+                        pageRevision = it.photoBrowser.pageRevision + 1
+                    )
+                )
+            }
+        }
+    }
+
+    /**
+     * Shows one page of [dateKey] from the already enumerated catalog. Never opens a new generation:
+     * selections, saved markers and the handle index survive switching days and turning pages, and the
+     * camera is not asked to enumerate again.
+     */
+    fun browseDate(identifier: String, dateKey: String, offset: Int = 0, preferredPhotoIndex: Int? = null) {
+        val browser = registry.get(identifier.uppercase())?.wifiRemote?.photoBrowser ?: return
+        if (!browser.open || !browser.grouped || browser.dates.none { it.key == dateKey }) return
+        photoWork(identifier, { state ->
+            state.copy(
+                photoBrowser = state.photoBrowser.copy(
+                    loading = true, failed = false,
+                    photos = if (state.photoBrowser.dateKey == dateKey) state.photoBrowser.photos
+                    else emptyList()
+                )
+            )
+        }) { id, connection ->
+            clearPhotoPreview(id)
+            previewJob?.cancelAndJoin()
+            previewJob = null
+            _image.value = null
+            thumbJob?.cancelAndJoin()
+            thumbJob = null
+            val page = connection.datePage(dateKey, offset)
+            _thumbnails.value = emptyMap()
+            photoCatalog += page.photos.associateBy { it.handle }
+            updateReady(id) {
+                it.copy(
+                    photoBrowser = it.photoBrowser.copy(
+                        photos = page.photos, offset = page.offset, totalObjects = page.totalObjects,
+                        hasMore = page.hasMore, dateKey = dateKey,
+                        pageRevision = it.photoBrowser.pageRevision + 1
+                    )
+                )
+            }
+            val captures = groupCameraPhotos(page.photos)
+            thumbFocus = preferredPhotoIndex?.minus(page.offset)
+                ?.coerceIn(0, (captures.size - 1).coerceAtLeast(0)) ?: 0
+            thumbJob = sessionScope?.launch { loadThumbnails(connection, page.offset, captures) }
+        }
+    }
+
+    /**
+     * Back from a day to the day list. Purely local: it neither talks to the camera nor opens a new
+     * generation, so selections and saved markers are kept. Ignored while a load or transfer runs.
+     */
+    fun showDates(identifier: String) {
+        val id = identifier.uppercase()
+        val state = registry.get(id)?.wifiRemote ?: return
+        val browser = state.photoBrowser
+        if (_owner.value != id || state.phase != WifiRemotePhase.Ready || !browser.open ||
+            !browser.grouped || browser.dateKey == null || browser.loading || photoJob != null ||
+            state.imageTransfer.busy
+        ) return
+        clearPhotoPreview(id)
+        thumbJob?.cancel()
+        _thumbnails.value = emptyMap()
+        updateReady(id) {
+            it.copy(
+                photoBrowser = it.photoBrowser.copy(
+                    photos = emptyList(), offset = 0, hasMore = false, dateKey = null,
+                    totalObjects = it.photoBrowser.dates.sumOf { group -> group.count },
+                    pageRevision = it.photoBrowser.pageRevision + 1
+                )
+            )
         }
     }
 

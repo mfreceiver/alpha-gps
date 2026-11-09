@@ -126,12 +126,24 @@ private class SonyWifiConnection(
         } == true
     override val lost: Flow<Unit> = merge(networkLost, disconnected.filter { it }.map { })
 
-    override suspend fun openPhotoBrowser(): CameraPhotoPage {
+    private suspend fun enterTransferMode() {
         if (separateTransfer && current?.ready?.purpose != SonySessionPurpose.ImageTransfer) {
             replaceSession(SonySessionPurpose.ImageTransfer)
         }
+    }
+
+    override suspend fun openPhotoBrowser(): CameraPhotoPage {
+        enterTransferMode()
         return checkNotNull(current).transfer.openBrowser()
     }
+
+    override suspend fun openCatalog(): List<DateGroup> {
+        enterTransferMode()
+        return checkNotNull(current).transfer.openCatalog()
+    }
+
+    override suspend fun datePage(dateKey: String, offset: Int) =
+        checkNotNull(current).transfer.datePage(dateKey, offset)
 
     override suspend fun photoPage(offset: Int) = checkNotNull(current).transfer.page(offset)
     override suspend fun photoThumbnail(handle: Long, stats: ThumbnailStatsSink?) =

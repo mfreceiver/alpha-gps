@@ -86,6 +86,22 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             return cameraPhotoPage(groupCameraPhotos(photos), offset)
         }
 
+        var catalogOpens = 0
+        val datePageRequests = mutableListOf<Pair<String, Int>>()
+        var failCatalog = false
+        override suspend fun openCatalog(): List<DateGroup> {
+            catalogOpens++
+            check(!failCatalog)
+            browsing = true
+            cleanup += "browse"
+            return CatalogSnapshot.of(groupCameraPhotos(photos)).dates
+        }
+
+        override suspend fun datePage(dateKey: String, offset: Int): CameraPhotoPage {
+            datePageRequests += dateKey to offset
+            return CatalogSnapshot.of(groupCameraPhotos(photos)).page(dateKey, offset)
+        }
+
         override suspend fun photoThumbnail(handle: Long, stats: ThumbnailStatsSink?): ImageBitmap? {
             thumbnailRequests += handle
             thumbnailHook?.invoke(handle)
@@ -181,6 +197,103 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
                 ),
             )
         }
+    }
+
+    private fun datedConnection() = Connection().apply {
+        photos = listOf(
+            WifiCameraPhoto(1L, "A.JPG", 100, "image/jpeg", "20240501T100000", captureId = "a"),
+            WifiCameraPhoto(2L, "A.ARW", 100, "image/x-sony-arw", "20240501T100000", captureId = "a"),
+            WifiCameraPhoto(3L, "B.JPG", 100, "image/jpeg", "20240502T100000", captureId = "b"),
+        )
+    }
+
+    @Test
+    fun dateBrowsingKeepsOneGenerationAndNeverReEnumeratesTheCard() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = datedConnection()
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browseDates("camera")
+        runCurrent()
+        var browser = registry.get("camera")!!.wifiRemote.photoBrowser
+        assertTrue(browser.open && browser.grouped)
+        assertFalse(browser.loading)
+        assertEquals(listOf(DateGroup("2024-05-02", 1), DateGroup("2024-05-01", 1)), browser.dates)
+        assertEquals(2, browser.totalObjects)
+        assertNull(browser.dateKey)
+        assertTrue(browser.photos.isEmpty())
+        assertTrue(connection.thumbnailRequests.isEmpty(), "The day list starts no thumbnails")
+        val generation = browser.browserGeneration
+        controller.browseDate("camera", "2024-05-01")
+        runCurrent()
+        browser = registry.get("camera")!!.wifiRemote.photoBrowser
+        assertEquals("2024-05-01", browser.dateKey)
+        assertEquals(listOf(1L, 2L), browser.photos.map { it.handle })
+        assertEquals(1, browser.totalObjects)
+        assertEquals(generation, browser.browserGeneration)
+        assertEquals(listOf(2L), connection.thumbnailRequests, "The RAW file is the capture's thumbnail")
+        // The saved marker and the handle index outlive switching days (cross-date selection/download).
+        connection.downloadResult.complete(WifiImageTransferState(WifiImageTransferStatus.Saved))
+        controller.downloadPhoto("camera", 1L)
+        runCurrent()
+        controller.browseDate("camera", "2024-05-02")
+        runCurrent()
+        controller.showDates("camera")
+        browser = registry.get("camera")!!.wifiRemote.photoBrowser
+        assertNull(browser.dateKey)
+        assertTrue(browser.photos.isEmpty())
+        assertEquals(generation, browser.browserGeneration)
+        assertEquals(setOf(WifiPhotoDownload(1L)), browser.savedDownloads)
+        controller.downloadPhoto("camera", 3L)
+        runCurrent()
+        assertEquals(listOf(1L, 3L), connection.downloadedHandles)
+        controller.browseDate("camera", "2023-01-01")
+        runCurrent()
+        assertNull(registry.get("camera")!!.wifiRemote.photoBrowser.dateKey, "Unknown days are ignored")
+        assertEquals(1, connection.catalogOpens)
+        assertEquals(
+            listOf("2024-05-01" to 0, "2024-05-02" to 0), connection.datePageRequests
+        )
+        // An explicit refresh is the only thing that opens a new generation and re-reads the card.
+        controller.browseDates("camera")
+        runCurrent()
+        browser = registry.get("camera")!!.wifiRemote.photoBrowser
+        assertTrue(browser.browserGeneration > generation)
+        assertTrue(browser.savedDownloads.isEmpty())
+        assertEquals(2, connection.catalogOpens)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun failedDayListCanBeRetriedAndFlatBrowsingLeavesGroupedMode() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = datedConnection().apply { failCatalog = true }
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browseDates("camera")
+        runCurrent()
+        var browser = registry.get("camera")!!.wifiRemote.photoBrowser
+        assertTrue(browser.failed)
+        assertFalse(browser.loading)
+        assertTrue(browser.dates.isEmpty())
+        connection.failCatalog = false
+        controller.browseDates("camera")
+        runCurrent()
+        browser = registry.get("camera")!!.wifiRemote.photoBrowser
+        assertFalse(browser.failed)
+        assertEquals(2, browser.dates.size)
+        controller.browsePhotos("camera")
+        runCurrent()
+        browser = registry.get("camera")!!.wifiRemote.photoBrowser
+        assertFalse(browser.grouped)
+        assertTrue(browser.dates.isEmpty())
+        assertNull(browser.dateKey)
+        assertEquals(3, browser.photos.size)
+        controller.closeAndJoin()
     }
 
     @Test

@@ -116,12 +116,40 @@ internal class SonyImageTransfer(
             )) &&
             capabilities.extendedInfo.supportsProperty(TRANSFER_ENABLED)
     private var modeRequested = false
-    private var captures = emptyList<WifiCameraCapture>()
+    private var snapshot = CatalogSnapshot.EMPTY
     private var pagePhotos = emptyList<WifiCameraPhoto>()
 
+    /** Unfiltered browser: enumerates the card, then shows the first page of everything. */
     suspend fun openBrowser(): CameraPhotoPage {
+        enumerate()
+        return page(0)
+    }
+
+    /**
+     * Date-grouped browser: enumerates the whole card (the only camera traffic needed to know the
+     * days) and returns the days. No page is displayed, so no photo is addressable until [datePage].
+     */
+    suspend fun openCatalog(): List<DateGroup> {
+        enumerate()
+        pagePhotos = emptyList()
+        return snapshot.dates
+    }
+
+    /**
+     * One page of a single day, served from the local snapshot. The result is also recorded as the
+     * displayed page: thumbnails and previews only answer for handles of that page.
+     */
+    fun datePage(dateKey: String, offset: Int): CameraPhotoPage =
+        snapshot.page(dateKey, offset).also { pagePhotos = it.photos }
+
+    private suspend fun enumerate() {
         check(supported)
-        catalog?.let { return it.open().also { page -> pagePhotos = page.photos } }
+        catalog?.let {
+            snapshot = CatalogSnapshot.EMPTY
+            pagePhotos = emptyList()
+            snapshot = CatalogSnapshot.of(it.enumerate())
+            return
+        }
         if (!modeRequested) {
             modeRequested = true
             accepted(commands.executeNoData(SET_TRANSFER_MODE, listOf(2L, 1L, 0L)))
@@ -152,14 +180,14 @@ internal class SonyImageTransfer(
                 info.size in 1..MAX_IMAGE_BYTES, info.captureId
             )
         }
-        captures = groupCameraPhotos(photos.sortedByDescending { it.capturedAt })
-        return page(0)
+        snapshot = CatalogSnapshot.of(groupCameraPhotos(photos.sortedByDescending { it.capturedAt }))
+        pagePhotos = emptyList()
     }
 
     suspend fun page(offset: Int): CameraPhotoPage {
         catalog?.let { return it.page(offset).also { page -> pagePhotos = page.photos } }
         check(modeRequested)
-        return cameraPhotoPage(captures, offset).also { pagePhotos = it.photos }
+        return cameraPhotoPage(snapshot.captures, offset).also { pagePhotos = it.photos }
     }
 
     suspend fun thumbnail(handle: Long, stats: ThumbnailStatsSink? = null): ImageBitmap? {
@@ -232,7 +260,7 @@ internal class SonyImageTransfer(
     ): WifiImageTransferState {
         // Downloads may target any file from the opened catalog, not only the current page.
         val photo = (catalog?.file(handle)
-            ?: captures.asSequence().flatMap { it.files }.singleOrNull { it.handle == handle })
+            ?: snapshot.captures.asSequence().flatMap { it.files }.singleOrNull { it.handle == handle })
             ?.takeIf { it.downloadable }
             ?: return WifiImageTransferState(
                 WifiImageTransferStatus.Failed,
@@ -372,7 +400,7 @@ internal class SonyImageTransfer(
         // A failed exit must not restart shutter/live view while the camera is still in transfer mode.
         accepted(commands.executeNoData(SET_TRANSFER_MODE, listOf(2L, 0L, 0L)))
         modeRequested = false
-        captures = emptyList()
+        snapshot = CatalogSnapshot.EMPTY
         pagePhotos = emptyList()
     }
 
