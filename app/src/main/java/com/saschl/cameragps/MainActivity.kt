@@ -54,8 +54,9 @@ class MainActivity : AppCompatActivity() {
         installSplashScreen()
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        // A relaunch right after exit must not be undone by the previous exit's late teardown.
-        AppServices.from(this).cancelPendingExit()
+        // A relaunch right after exit must not be undone by the previous exit's late
+        // teardown — including one the old activity instance schedules after this point.
+        AppServices.from(this).beginAppSession(this)
 
         setContent {
             CameraGpsTheme {
@@ -74,7 +75,7 @@ class MainActivity : AppCompatActivity() {
         if (isFinishing && !isChangingConfigurations) {
             Timber.i("MainActivity finishing; disconnecting cameras")
             val appContext = applicationContext
-            AppServices.from(appContext).disconnectAllOnExit {
+            AppServices.from(appContext).disconnectAllOnExit(owner = this) {
                 appContext.stopService(Intent(appContext, LocationSenderService::class.java))
             }
         }
