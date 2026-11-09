@@ -356,7 +356,7 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
      * JPEGs right away (remembering the skip counts for the result line); Original opens the
      * confirmation sheet. A plan with nothing to download never submits an empty download: it records
      * a local, already-settled "downloaded 0, skipped N" summary so the tap is not silent. Nothing
-     * happens for an empty selection.
+     * happens for an empty selection or while a transfer is still busy.
      */
     internal fun requestBatchDownload(
         policy: WifiFormatPolicy,
@@ -364,9 +364,18 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         onDownload: (List<WifiPhotoDownload>) -> Unit,
     ) {
         if (selectedPhotos.isEmpty()) return
+        if (state.imageTransfer.busy) return
         val plan = batchPlan(policy, state)
         when {
-            plan.files.isEmpty() -> recordBatchSummary(plan.toSummary())
+            plan.files.isEmpty() -> {
+                // A local no-op result must be visible even when the previous transfer ended
+                // Failed or Cancelled: that terminal line would otherwise keep masking the fresh
+                // "downloaded 0, skipped N" summary (only Idle/Saved results are shown alongside
+                // one). Clearing resets to Idle; busy is already excluded above and no Saved is
+                // faked for the plan itself.
+                controller.clearPhotoTransferResult(identifier)
+                recordBatchSummary(plan.toSummary())
+            }
             policy == WifiFormatPolicy.JpegOnly -> {
                 recordBatchSummary(plan.toSummary())
                 onDownload(plan.downloads)

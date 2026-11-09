@@ -3049,6 +3049,44 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     }
 
     @Test
+    fun aNoOpBatchAfterAFailedTransferClearsTheStaleTerminalAndShowsItsOwnSummary() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = plannerConnection()
+        val downloadResults = Channel<WifiImageTransferState>(Channel.UNLIMITED)
+        connection.downloadResults = downloadResults
+        // A previous transfer ended Failed with its reason; the terminal line is still up.
+        downloadResults.trySend(
+            WifiImageTransferState(
+                WifiImageTransferStatus.Failed,
+                failureReason = WifiTransferFailureReason.Timeout
+            )
+        )
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(2)))
+        runCurrent()
+        assertEquals(WifiImageTransferStatus.Failed, registry.get("camera")!!.wifiRemote.imageTransfer.status)
+
+        model.togglePhotoSelection("h")
+        model.requestBatchDownload(WifiFormatPolicy.JpegOnly, registry.get("camera")!!.wifiRemote) {}
+
+        assertEquals(WifiBatchSummary(0, mapOf(WifiSkipReason.NoJpeg to 1)), model.batchSummary)
+        assertTrue(model.batchSummarySettled(), "the no-op result settles locally")
+        val transfer = registry.get("camera")!!.wifiRemote.imageTransfer
+        assertEquals(WifiImageTransferStatus.Idle, transfer.status, "the stale Failed terminal is cleared")
+        assertTrue(
+            shouldShowBatchSummary(model.batchSummarySettled(), transfer),
+            "the fresh downloaded-0/skipped-N summary is no longer masked",
+        )
+        controller.closeAndJoin()
+    }
+
+    @Test
     fun originalBatchWithNothingLeftIsALocalSummaryNotAnEmptySheet() = runTest {
         val registry = CameraSessionRegistry()
         val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> plannerConnection() }, {}, {})
