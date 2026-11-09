@@ -85,9 +85,17 @@ class AppExitGate(private val scope: CoroutineScope) {
      * state at retirement is recorded, because it decides whether a later
      * unowned callback is the same removal's late entry (flow still in
      * flight → reject) or a genuinely new removal (flow completed → allow).
+     *
+     * Retirement freezes that snapshot: every legal onStartCommand calls
+     * this unconditionally before its GATT check, so a same-address repeat
+     * connect hits a retire with `exitJob == null` already. A second retire
+     * must not overwrite the frozen snapshot (a completed flow must not
+     * degrade back to "in flight", which would reject the first real new
+     * removal). Only [beginSession] — or accepting a new flow in
+     * [scheduleExit] — clears the retirement.
      */
     fun cancelPendingExit() {
-        if (exitFlowEnteredOwned != null) {
+        if (exitFlowEnteredOwned != null && !exitFlowRetired) {
             exitFlowRetired = true
             exitFlowCompletedAtRetire = exitJob?.isCompleted == true
         }
