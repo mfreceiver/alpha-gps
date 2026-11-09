@@ -92,10 +92,15 @@ class LocationSenderService : LifecycleService() {
         ServicePresenceCoordinator(
             // Any live GATT handle counts — active links as well as connects still pending or
             // parked on autoConnect (which start out inactive) — so a reconnecting camera is
-            // never mistaken for "no one connected".
+            // never mistaken for "no one connected". The coordinator retires the parked handle
+            // of a camera that is absent with "keep active" off, so such a handle does not
+            // count as demand forever (see ServicePresenceCoordinator).
             hasConnectedDevices = { transport.connectionCount() > 0 },
             // Only cameras whose "keep active" switch is on keep the service alive while away.
             hasAlwaysOnDevices = { services.deviceDao.getKeepActiveDeviceCount() > 0 },
+            isHandleParked = { transport.isHandleParked(it) },
+            isDeviceKeepActive = { services.deviceDao.isDeviceAlwaysOnEnabled(it) },
+            retireParkedHandle = { transport.retireParkedHandle(it) },
             onShutdownRequested = {
                 Timber.i("No connected or saved cameras remain after presence loss; stopping service")
                 requestShutdown(lastHandledStartId)

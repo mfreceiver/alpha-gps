@@ -120,6 +120,29 @@ class GattConnectionRegistryTest {
     }
 
     @Test
+    fun `retireIfParked removes only inactive handles and rejects their late callbacks`() {
+        val registry = GattConnectionRegistry<FakeGatt>()
+        val parked = FakeGatt(1)
+        val live = FakeGatt(2)
+        registry.register("AA", parked)
+        registry.register("BB", live)
+        registry.update(live, "BB") { it.isActive = true }
+
+        // A live link is never retired by the parked-handle path.
+        assertNull(registry.retireIfParked("BB"))
+        assertSame(live, registry.entry("BB")?.gatt)
+
+        val retired = registry.retireIfParked("AA")
+        assertSame(parked, retired?.gatt)
+        assertEquals(1, registry.size)
+        assertNull(registry.entry("AA"))
+        // Unknown address: nothing to retire.
+        assertNull(registry.retireIfParked("CC"))
+        // Late callback of the parked handle must not reach the event channel.
+        assertNull(registry.update(parked, "AA") { it.isActive = true })
+    }
+
+    @Test
     fun `retireAll retires every handle so late callbacks are all rejected`() {
         val registry = GattConnectionRegistry<FakeGatt>()
         val gatts = listOf(FakeGatt(1), FakeGatt(2))
