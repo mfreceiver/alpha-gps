@@ -229,9 +229,28 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         backBlockedNotice = false
     }
 
+    /**
+     * Lifecycle token of the one live drag gesture. Every new begin — and every manual selection
+     * change (toggle / select all / clear) plus the gesture's own end — retires the previous one,
+     * so a stale update of an older gesture (two overlapping long-presses, or a manual change made
+     * mid-drag) can never rebuild the selection from its outdated initial state.
+     */
+    private var selectionGestureToken = 0L
+
+    /**
+     * The session that currently owns the selection. A newer begin first undoes the retired
+     * gesture's applied anchor by restoring its [RangeSelectionSession.initial], so only the
+     * newest gesture's result is ever visible. Null once the gesture ends or a manual change
+     * takes over the selection.
+     */
+    private var liveSelectionSession: RangeSelectionSession? = null
+
     fun togglePhotoSelection(captureId: String) {
         val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return
         if (!state.photoBrowser.open || state.photoBrowser.loading || state.imageTransfer.busy) return
+        // A manual toggle ends any running drag's authority over the selection.
+        selectionGestureToken++
+        liveSelectionSession = null
         // Only captures visible on the current page can be (de)selected, but the selection
         // itself survives paging and is only cleared explicitly or on catalog changes.
         val capture = groupCameraPhotos(state.photoBrowser.photos).firstOrNull { it.id == captureId }
@@ -244,6 +263,8 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     fun selectAllPhotos() {
         val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return
         if (!state.photoBrowser.open || state.photoBrowser.loading || state.imageTransfer.busy) return
+        selectionGestureToken++
+        liveSelectionSession = null
         // "Select all on this page" unions with selections kept from other pages.
         recordBatchSummary(null)
         selectedPhotos = selectedPhotos +
@@ -266,13 +287,20 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         val captures = groupCameraPhotos(browser.photos)
         val anchor = captures.indexOfFirst { it.id == anchorId }
         if (anchor < 0) return null
+        // Beginning a new gesture retires any older one: overlapping long-presses leave only the
+        // newest session with authority over the selection, and the retired gesture's applied
+        // anchor is rolled back to its initial selection first.
+        liveSelectionSession?.let { retired -> selectedPhotos = retired.initial }
+        val token = ++selectionGestureToken
         val session = RangeSelectionSession(
             page = browser.identity(),
             pageIds = captures.map { it.id },
             anchorIndex = anchor,
             select = anchorId !in selectedPhotos,
             initial = selectedPhotos,
+            token = token,
         )
+        liveSelectionSession = session
         recordBatchSummary(null)
         selectedPhotos = rangeSelectionResult(session.initial, captures, anchor, anchor, session.select)
         return session
@@ -280,11 +308,13 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
 
     /**
      * Moves the gesture's end to capture [endIndex] and sets or unsets the whole closed range against
-     * the selection from before the gesture. Returns false when the gesture is stale — another page,
-     * day or catalog generation, a load/transfer started, or the viewer opened — and the caller must
-     * end it; a stale gesture never writes into the selection.
+     * the selection from before the gesture. Returns false when the gesture is stale — a newer gesture
+     * or a manual selection change retired its token, another page, day or catalog generation, a
+     * load/transfer started, or the viewer opened — and the caller must end it; a stale gesture never
+     * writes into the selection.
      */
     internal fun updateRangeSelection(session: RangeSelectionSession, endIndex: Int): Boolean {
+        if (session.token != selectionGestureToken) return false
         val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return false
         val browser = state.photoBrowser
         if (!browser.open || browser.loading || state.imageTransfer.busy || viewedPhotoIndex != null) return false
@@ -296,7 +326,15 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         return true
     }
 
+    /** The drag ended (finger lifted or the gesture was cancelled): it loses its token for good. */
+    internal fun endRangeSelection() {
+        selectionGestureToken++
+        liveSelectionSession = null
+    }
+
     fun clearPhotoSelection() {
+        selectionGestureToken++
+        liveSelectionSession = null
         selectedPhotos = emptyMap()
         showBatchOptions = false
         recordBatchSummary(null)
