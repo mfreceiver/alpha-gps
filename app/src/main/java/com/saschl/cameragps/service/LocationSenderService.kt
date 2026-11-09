@@ -127,6 +127,18 @@ class LocationSenderService : LifecycleService() {
         return true
     }
 
+    /**
+     * The user swiped the app away: that is "exit", so actively disconnect the camera
+     * (Wi-Fi, then BLE/GATT) and stop instead of lingering as a background service.
+     * Backgrounding (Home) never reaches here. Boot / notification / CDM-presence
+     * starts are unaffected and simply start a new session.
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        Timber.i("Task removed; disconnecting cameras and stopping service")
+        services.disconnectAllOnExit { stopSelf() }
+    }
+
     @SuppressLint("MissingPermission")
     override fun onDestroy() {
         isRunning = false
