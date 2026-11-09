@@ -15,8 +15,9 @@
 #   场景 12 错误 tag 路径 → 拒绝
 #   场景 13 空白 / 反斜杠 / 查询串 / fragment / 前缀拼接 host → 拒绝
 #   场景 14 大小写 host（HTTPS://forge.example.com:443/..）→ 拒绝（netloc 精确比较）
-#   场景 15 变异验证：放宽 netloc 比较为后缀匹配的 mutant 库必须放行 '@' 旁过
-#           用例（证明该用例确能捕获弱实现）
+#   场景 15 变异验证：弱实现（netloc 后缀匹配 / path 前缀匹配）必须被子域 host、
+#           path 前缀拼接等用例区分——这些输入不含 '@'，能穿过其余守卫，
+#           仅被“精确 netloc/path 匹配”拦截
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)
@@ -110,13 +111,23 @@ echo "== 场景 14: host 大小写 → 拒绝（netloc 精确比较） =="
 reject "大写 host" "https://forge.example.com:443$P"
 reject "大写 scheme" "HTTPS://$H$P"
 
-echo "== 场景 15: 变异验证——弱实现（netloc 后缀匹配）必须被 '@' 旁过用例捕获 =="
+echo "== 场景 15: 变异验证——仅被精确 netloc/path 匹配拦截的输入 =="
+# 子域 / 后缀拼接 host 与 path 前缀拼接：不含 '@'、无控制字符、scheme 正确，
+# 穿过其余所有守卫，只能靠精确相等拦截。
+reject "子域 host evil.forge.example.com:443" "https://evil.forge.example.com:443$P"
+reject "后缀拼接 host forge.example.com:443.evil.com" "https://forge.example.com:443.evil.com$P"
+reject "path 前缀拼接（资产名后接 /x）" "https://$H$P/x"
 MUTLIB=$TMP/release_lib_weak.sh
-# 把精确比较 `p.netloc != host` 放宽为后缀匹配（@evil.com 旁路的典型弱实现）
+# mutant A：netloc 精确比较 → 后缀匹配（子域旁路的典型弱实现）。
+# 该 mutant 必须放行子域用例（rc=0），才能证明此用例能捕获弱实现。
 sed 's/if p\.netloc != host:/if not p.netloc.endswith(host):/' "$LIB" > "$MUTLIB"
-out=$(bash -c "source '$MUTLIB'; assert_asset_url_trusted 'https://forge.example.com:443@evil.com$P' '$H' '$RP' '$TAG' '$ASSET'" 2>/dev/null); rc=$?
-check "变异（后缀匹配）对 '@' 旁过用例意外放行（rc≠0 才证明用例有效）" test "$rc" -ne 0
-# 反向：弱实现仍拒绝合法 URL？不应影响本用例判定，但确认合法 URL 在真实库通过（重复锚点）
+out=$(bash -c "source '$MUTLIB'; assert_asset_url_trusted 'https://evil.forge.example.com:443$P' '$H' '$RP' '$TAG' '$ASSET'" 2>/dev/null); rc=$?
+check "变异A（netloc 后缀匹配）放行子域用例（rc=0 才证明用例有效）" test "$rc" -eq 0
+# mutant B：path 精确相等 → 前缀匹配（路径拼接旁路的典型弱实现）。
+sed 's/if p\.path != expected_path:/if not p.path.startswith(expected_path):/' "$LIB" > "$MUTLIB"
+out=$(bash -c "source '$MUTLIB'; assert_asset_url_trusted 'https://$H$P/x' '$H' '$RP' '$TAG' '$ASSET'" 2>/dev/null); rc=$?
+check "变异B（path 前缀匹配）放行前缀拼接用例（rc=0 才证明用例有效）" test "$rc" -eq 0
+# 反向锚点：真实库仍放行合法 URL。
 accept "真实库再次放行合法 URL" "https://$H$P"
 
 echo
