@@ -137,7 +137,11 @@ class LocationSenderService : LifecycleService() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         Timber.i("Task removed; disconnecting cameras and stopping service")
-        services.disconnectAllOnExit { stopSelf() }
+        services.disconnectAllOnExit {
+            // Only stop for our own last start: a start command that arrived during
+            // the teardown window (and cancelled it) must keep the service alive.
+            if (lastHandledStartId > 0) stopSelf(lastHandledStartId) else stopSelf()
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -165,6 +169,12 @@ class LocationSenderService : LifecycleService() {
         super.onStartCommand(intent, flags, startId)
 
         val command = commandRouter.route(intent)
+        // A valid connection request starts a new session: any exit teardown that is
+        // still pending or running (e.g. within the 3s Wi-Fi close window of a task
+        // removal) must not tear this connection down afterwards.
+        if (command is ServiceCommand.Connect) {
+            services.cancelPendingExit()
+        }
         // A stop-related startService intent can create a new instance. There is no
         // foreground session to shut down in that case, so don't promote it.
         if ((command is ServiceCommand.Shutdown || command is ServiceCommand.DeviceDisappeared)
