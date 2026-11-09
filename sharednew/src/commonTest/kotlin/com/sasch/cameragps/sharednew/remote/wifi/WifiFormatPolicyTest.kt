@@ -3,7 +3,6 @@ package com.sasch.cameragps.sharednew.remote.wifi
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -27,36 +26,79 @@ class WifiFormatPolicyTest {
         "multi", file(10, rawMime), file(11, heifMime), file(12, jpegMime, 800)
     )
 
-    // --- JPG target -----------------------------------------------------------------
+    // --- planner ---------------------------------------------------------------------
+
+    private val jpegOnly = WifiFormatPolicy.JpegOnly
+    private val original = WifiFormatPolicy.Original
+
+    private fun handles(plan: WifiDownloadPlan) = plan.files.map { it.handle }
 
     @Test
-    fun jpegTargetPicksTheJpegFileAndNeverTheRaw() {
-        assertEquals(WifiPhotoDownload(1), jpgRaw.jpegTarget(false)?.download)
-        assertEquals(WifiPhotoDownload(4), rawJpg.jpegTarget(true)?.download)
-        assertEquals(WifiPhotoDownload(12), multi.jpegTarget(true)?.download, "A real JPEG beats a HEIF conversion")
-        assertEquals(2000L, jpgRaw.jpegTarget(false)?.knownSize)
-        assertNull(rawOnly.jpegTarget(true))
-        assertNull(rawOnly.jpegTarget(false))
+    fun jpegOnlyDownloadsOnlyTheExistingJpegBytesInSelectionOrder() {
+        val plan = planDownloads(listOf(jpgRaw, rawOnly, rawJpg, jpgOnly), jpegOnly, emptySet())
+        assertEquals(listOf(1L, 4L, 6L), handles(plan), "Selection order, JPEG files only — never a RAW")
+        assertTrue(plan.downloads.all { it.format == WifiPhotoDownloadFormat.Original }, "never a transcode")
+        assertEquals(2000L + 500 + 1500, plan.totalBytes)
+        assertEquals(mapOf(WifiSkipReason.NoJpeg to 1), plan.skipped)
+        assertEquals(WifiBatchSummary(3, mapOf(WifiSkipReason.NoJpeg to 1)), plan.toSummary())
     }
 
     @Test
-    fun heifOnlyCapturesUseTheJpegTranscodeOnlyWhenThePlatformCanConvert() {
-        val converted = heifOnly.jpegTarget(true)
-        assertEquals(WifiPhotoDownload(7, WifiPhotoDownloadFormat.Jpeg), converted?.download)
-        assertTrue(converted!!.converted)
-        assertNull(converted.knownSize, "The transcoded size is unknown")
-        assertNull(heifOnly.jpegTarget(false))
-        assertNull(heifRaw.jpegTarget(false))
+    fun jpegOnlySkipsHeifOnlyAndHeifRawCapturesAsNoJpegWithoutTranscodeOrFallback() {
+        val plan = planDownloads(listOf(heifOnly, heifRaw, rawOnly), jpegOnly, emptySet())
+        assertTrue(plan.files.isEmpty())
+        assertEquals(mapOf(WifiSkipReason.NoJpeg to 3), plan.skipped)
+        assertEquals(WifiSkipReason.NoJpeg, plan.mainSkipReason)
+        // A real JPEG next to a HEIF still downloads the JPEG file itself.
+        assertEquals(listOf(12L), handles(planDownloads(listOf(multi), jpegOnly, emptySet())))
     }
 
     @Test
-    fun jpegTargetPrefersADownloadableJpegButStillReportsAnOversizedOne() {
+    fun jpegOnlyPrefersADownloadableJpegAndCountsSavedOversizedAndDuplicates() {
         val big = file(20, jpegMime, 600_000_000, downloadable = false)
         val small = file(21, jpegMime, 10)
-        assertEquals(21L, capture("a", big, small).jpegTarget(false)?.file?.handle)
-        val only = capture("b", big).jpegTarget(false)
-        assertEquals(20L, only?.file?.handle)
-        assertFalse(only!!.file.downloadable)
+        assertEquals(listOf(21L), handles(planDownloads(listOf(capture("a", big, small)), jpegOnly, emptySet())))
+        val tooBig = planDownloads(listOf(capture("b", big, file(22, rawMime))), jpegOnly, emptySet())
+        assertTrue(tooBig.files.isEmpty())
+        assertEquals(mapOf(WifiSkipReason.TooLarge to 1), tooBig.skipped)
+        val plan = planDownloads(
+            listOf(jpgRaw, jpgRaw, jpgOnly, rawOnly, heifOnly),
+            jpegOnly, saved = setOf(WifiPhotoDownload(6)),
+        )
+        assertEquals(listOf(1L), handles(plan), "A repeated capture counts once")
+        assertEquals(mapOf(WifiSkipReason.AlreadySaved to 1, WifiSkipReason.NoJpeg to 2), plan.skipped.filterValues { it > 0 })
+        assertEquals(3, plan.skippedCount)
+    }
+
+    @Test
+    fun originalDownloadsEveryOriginalFileOfEveryCapture() {
+        val plan = planDownloads(listOf(jpgRaw, heifRaw, rawOnly), original, emptySet())
+        assertEquals(listOf(1L, 2L, 8L, 9L, 5L), handles(plan), "JPG+RAW and HEIF+RAW both come down, no picker")
+        assertTrue(plan.downloads.all { it.format == WifiPhotoDownloadFormat.Original })
+        assertEquals(2000L + 30000 + 900 + 1000 + 40000, plan.totalBytes)
+        assertEquals(0, plan.skippedCount)
+    }
+
+    @Test
+    fun originalSkipsSavedAndOversizedFilesOneByOne() {
+        val big = file(30, jpegMime, 600_000_000, downloadable = false)
+        val plan = planDownloads(
+            listOf(jpgRaw, capture("big", big, file(31, rawMime)), jpgRaw),
+            original, saved = setOf(WifiPhotoDownload(2)),
+        )
+        assertEquals(listOf(1L, 31L), handles(plan), "the saved RAW and the oversized JPG are skipped, the rest stays")
+        assertEquals(mapOf(WifiSkipReason.AlreadySaved to 2, WifiSkipReason.TooLarge to 1), plan.skipped)
+    }
+
+    @Test
+    fun anEmptyPlanSaysWhyAndTheSamePlanServesASingleCapture() {
+        assertTrue(planDownloads(emptyList(), original, emptySet()).files.isEmpty())
+        assertNull(planDownloads(emptyList(), original, emptySet()).mainSkipReason)
+        val saved = setOf(WifiPhotoDownload(6))
+        val single = planDownloads(listOf(jpgOnly), jpegOnly, saved)
+        assertTrue(single.files.isEmpty())
+        assertEquals(WifiSkipReason.AlreadySaved, single.mainSkipReason)
+        assertEquals(listOf(1L, 2L), handles(planDownloads(listOf(jpgRaw), original, saved)))
     }
 
     // --- grid badge -----------------------------------------------------------------
@@ -79,114 +121,6 @@ class WifiFormatPolicyTest {
         assertEquals("JPG", capture("y", file(31, jpegMime), file(32, "application/octet-stream")).formatBadge())
     }
 
-    // --- details page ---------------------------------------------------------------
-
-    @Test
-    fun originalDetailsKeepTheFormatChooser() {
-        listOf(jpgRaw, rawOnly, heifOnly, multi).forEach {
-            assertEquals(WifiDetailPlan.ChooseFormat, it.detailPlan(WifiFormatPolicy.Original, true))
-        }
-    }
-
-    @Test
-    fun jpegOnlyDetailsOfferOneJpegDownload() {
-        val plan = jpgRaw.detailPlan(WifiFormatPolicy.JpegOnly, true)
-        assertIs<WifiDetailPlan.DownloadJpeg>(plan)
-        assertEquals(WifiPhotoDownload(1), plan.target.download)
-        assertEquals(WifiPhotoDownload(12), (multi.detailPlan(WifiFormatPolicy.JpegOnly, true) as WifiDetailPlan.DownloadJpeg).target.download)
-        assertEquals(
-            WifiPhotoDownload(7, WifiPhotoDownloadFormat.Jpeg),
-            (heifOnly.detailPlan(WifiFormatPolicy.JpegOnly, true) as WifiDetailPlan.DownloadJpeg).target.download
-        )
-    }
-
-    @Test
-    fun jpegOnlyDetailsOfRawOnlyPhotosSaySoAndOfferTheRawByHand() {
-        val plan = rawOnly.detailPlan(WifiFormatPolicy.JpegOnly, true)
-        assertIs<WifiDetailPlan.NoJpeg>(plan)
-        assertEquals(5L, plan.fallback?.handle)
-        // HEIF the platform cannot convert: no JPG either; the manual choice prefers a RAW.
-        val heif = heifRaw.detailPlan(WifiFormatPolicy.JpegOnly, false)
-        assertIs<WifiDetailPlan.NoJpeg>(heif)
-        assertEquals(9L, heif.fallback?.handle)
-        assertEquals(7L, (heifOnly.detailPlan(WifiFormatPolicy.JpegOnly, false) as WifiDetailPlan.NoJpeg).fallback?.handle)
-    }
-
-    @Test
-    fun singlePhotoDefaultNeverAutoSelectsAJpegOnlyRawEither() {
-        // Both modes go through the plan: JpegOnly never reaches the radio list, so the
-        // default handle only matters for Original (first downloadable file).
-        assertEquals(1L, defaultSelectedPhotoHandle(jpgRaw.files))
-        assertEquals(3L, defaultSelectedPhotoHandle(rawJpg.files))
-    }
-
-    // --- batch plan -----------------------------------------------------------------
-
-    @Test
-    fun jpegOnlyBatchDownloadsOneJpegPerCaptureAndSkipsRawOnlyPhotos() {
-        val plan = jpegOnlyBatchPlan(listOf(jpgRaw, rawOnly, rawJpg, jpgOnly), emptySet(), true)
-        assertEquals(
-            listOf(WifiPhotoDownload(1), WifiPhotoDownload(4), WifiPhotoDownload(6)),
-            plan.downloads, "Selection order, JPGs only — never a RAW"
-        )
-        assertEquals(2000L + 500 + 1500, plan.totalBytes)
-        assertEquals(mapOf(WifiSkipReason.NoJpeg to 1), plan.skipped)
-        assertEquals(1, plan.skippedCount)
-        assertEquals(WifiBatchSummary(3, mapOf(WifiSkipReason.NoJpeg to 1)), plan.toSummary())
-    }
-
-    @Test
-    fun jpegOnlyBatchSkipsSavedAndOversizedAndDuplicates() {
-        val big = capture("big", file(30, jpegMime, 600_000_000, downloadable = false), file(31, rawMime))
-        val plan = jpegOnlyBatchPlan(
-            listOf(jpgRaw, jpgRaw, jpgOnly, rawOnly, big, heifOnly),
-            saved = setOf(WifiPhotoDownload(6)),
-            canConvertHeif = false,
-        )
-        assertEquals(listOf(WifiPhotoDownload(1)), plan.downloads, "A repeated capture counts once")
-        assertEquals(
-            mapOf(WifiSkipReason.AlreadySaved to 1, WifiSkipReason.NoJpeg to 2, WifiSkipReason.TooLarge to 1),
-            plan.skipped
-        )
-        assertEquals(4, plan.skippedCount)
-    }
-
-    @Test
-    fun jpegOnlyBatchTranscodesHeifOnlyCapturesWhenSupported() {
-        val plan = jpegOnlyBatchPlan(listOf(heifOnly, heifRaw), emptySet(), true)
-        assertEquals(
-            listOf(
-                WifiPhotoDownload(7, WifiPhotoDownloadFormat.Jpeg),
-                WifiPhotoDownload(8, WifiPhotoDownloadFormat.Jpeg)
-            ), plan.downloads
-        )
-        // A saved original HEIF does not suppress the JPEG copy.
-        assertEquals(
-            2,
-            jpegOnlyBatchPlan(listOf(heifOnly, heifRaw), setOf(WifiPhotoDownload(7)), true).downloads.size
-        )
-        assertTrue(jpegOnlyBatchPlan(listOf(heifOnly), emptySet(), false).downloads.isEmpty())
-    }
-
-    @Test
-    fun jpegOnlyBatchOfOnlyRawPhotosIsEmpty() {
-        val plan = jpegOnlyBatchPlan(listOf(rawOnly), emptySet(), true)
-        assertTrue(plan.downloads.isEmpty())
-        assertEquals(0L, plan.totalBytes)
-        assertEquals(1, plan.skippedCount)
-        assertTrue(jpegOnlyBatchPlan(emptyList(), emptySet(), true).downloads.isEmpty())
-    }
-
-    @Test
-    fun jpegOnlyPlanAgreesWithWhatTheControllerWouldAccept() {
-        // Every planned download must be a file the original-format batch logic would also
-        // pick from the same selection, so the plan can never promise more than it can send.
-        val captures = listOf(jpgRaw, rawJpg, jpgOnly, multi)
-        val planned = jpegOnlyBatchPlan(captures, emptySet(), true).downloads.toSet()
-        val allowed = photoBatchDownloads(captures, setOf(WifiPhotoBatchFormat.Jpeg), emptySet(), true).toSet()
-        assertEquals(allowed, planned)
-    }
-
     // --- batch result summary -------------------------------------------------------
 
     @Test
@@ -202,7 +136,10 @@ class WifiFormatPolicyTest {
         assertFalse(summary.isComplete(saved.copy(status = WifiImageTransferStatus.Cancelled, completedFiles = 1)))
         // A different transfer (e.g. a single download from the viewer) is not this batch.
         assertFalse(summary.isComplete(saved.copy(completedFiles = 1, totalFiles = 1)))
-        assertFalse(WifiBatchSummary(0, mapOf(WifiSkipReason.NoJpeg to 1)).isComplete(WifiImageTransferState()))
+        // Nothing submitted (everything skipped) is a local result: settled without any transfer.
+        val none = WifiBatchSummary(0, mapOf(WifiSkipReason.NoJpeg to 1))
+        assertTrue(none.isComplete(WifiImageTransferState()))
+        assertTrue(none.isComplete(saved.copy(status = WifiImageTransferStatus.Failed)))
     }
 
     @Test

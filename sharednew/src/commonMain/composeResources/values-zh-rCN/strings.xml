@@ -369,15 +369,9 @@
     <string name="wifi_remote_dates_unknown">未知日期</string>
     <string name="wifi_remote_dates_count">%1$d 张</string>
     <string name="wifi_remote_back_busy">请等待当前操作完成或取消后再返回。</string>
-    <string name="wifi_remote_batch_formats">选择下载格式</string>
-    <string name="wifi_remote_batch_formats_hint">选择要下载的格式。已保存或超过大小限制的照片会被跳过。</string>
-    <string name="wifi_remote_batch_file_count">%1$d 个文件</string>
-    <string name="wifi_remote_batch_download">下载 %1$d 个文件</string>
     <string name="wifi_remote_batch_progress">已保存 %1$d / %2$d 个文件</string>
-    <string name="wifi_remote_batch_nothing_to_download">没有可下载的文件。文件可能已保存，或超出下载大小限制。</string>
     <string name="wifi_remote_preview_unavailable">无法预览</string>
     <string name="wifi_remote_photo_captured">已拍摄：%1$s</string>
-    <string name="wifi_remote_photo_format">选择下载格式</string>
     <string name="wifi_remote_download_format">下载 %1$s</string>
     <string name="wifi_remote_photo_download_hint">文件保存到手机相册，相机上的文件会保留。下载完成前请保持此页面打开。</string>
     <string name="wifi_remote_photo_close">关闭</string>
@@ -393,7 +387,6 @@
     <string name="wifi_remote_browser_jump_title">跳转到页</string>
     <string name="wifi_remote_browser_jump_label">页码（1–%1$d）</string>
     <string name="wifi_remote_browser_jump_go">跳转</string>
-    <string name="wifi_remote_photo_size">%1$d KB</string>
     <string name="wifi_remote_download">下载</string>
     <string name="wifi_remote_download_saved">已保存</string>
     <string name="wifi_remote_download_too_large">图像超过 512 MB 的下载大小限制。</string>
@@ -412,8 +405,6 @@
     <string name="wifi_remote_default_download_format">默认下载格式</string>
     <string name="wifi_remote_default_download_format_jpeg">仅 JPG</string>
     <string name="wifi_remote_default_download_format_original">原片</string>
-    <string name="wifi_remote_jpeg_copy">JPEG 副本（由 HEIF 转换）</string>
-    <string name="wifi_remote_jpeg_copy_hint">下载 HEIF 文件，并在此手机上保存一份全分辨率 JPEG 副本。HDR 信息及部分元数据可能无法保留。</string>
     <string name="wifi_remote_converting_jpeg">正在转换为 JPEG…</string>
     <string name="wifi_remote_conversion_failed">无法创建 JPEG 副本。此手机可能不支持 HEIF 格式，或内存、存储空间不足。您仍可下载原始 HEIF 文件。</string>
     <string name="wifi_remote_ios_settings">应用权限</string>
@@ -430,17 +421,19 @@
     <string name="wifi_remote_download_format_size">下载 %1$s（%2$s）</string>
     <string name="wifi_remote_photo_no_jpg">此照片没有 JPG。</string>
     <string name="wifi_remote_batch_download_jpg">下载 %1$d 张 JPG（%2$s）</string>
-    <string name="wifi_remote_batch_download_jpg_none">没有可下载的 JPG</string>
-    <string name="wifi_remote_skip_no_jpg">%1$d 张无 JPG</string>
-    <string name="wifi_remote_skip_saved">%1$d 张已保存</string>
-    <string name="wifi_remote_skip_too_large">%1$d 张超出大小限制</string>
-    <string name="wifi_remote_batch_summary">已下载 %1$d 张，跳过 %2$d 张（%3$s）</string>
-    <string name="wifi_remote_batch_summary_no_skip">已下载 %1$d 张</string>
-    <string name="wifi_remote_batch_skip_hint">将跳过 %1$d 张（%2$s）</string>
+    <string name="wifi_remote_skip_no_jpg">%1$d 个无 JPG</string>
+    <string name="wifi_remote_skip_saved">%1$d 个已保存</string>
+    <string name="wifi_remote_skip_too_large">%1$d 个超出大小限制</string>
+    <string name="wifi_remote_batch_summary">已下载 %1$d 个，跳过 %2$d 个（%3$s）</string>
+    <string name="wifi_remote_batch_summary_no_skip">已下载 %1$d 个</string>
+    <string name="wifi_remote_batch_skip_hint">将跳过 %1$d 个（%2$s）</string>
     <string name="wifi_remote_preview_photo">预览</string>
     <string name="wifi_remote_viewer_select">选中此照片</string>
     <string name="wifi_remote_viewer_deselect">取消选中此照片</string>
     <string name="wifi_remote_viewer_previous_photo">上一张</string>
     <string name="wifi_remote_viewer_next_photo">下一张</string>
 
+    <string name="wifi_remote_batch_download_none">没有可下载的文件</string>
+    <string name="wifi_remote_batch_download_size">下载 %1$d 个文件（%2$s）</string>
+    <string name="wifi_remote_batch_original_hint">将下载所选照片的全部原始文件（例如 JPG 与 RAW 一并下载）。已保存或超出大小限制的文件会被跳过。</string>
 </resources>

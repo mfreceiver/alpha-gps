@@ -798,7 +798,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         // Magnifier preview of another capture, then a single download from the viewer.
         model.previewPhoto("photo:1")
         assertEquals(1, model.viewedPhotoIndex)
-        model.downloadSinglePhoto(WifiPhotoDownload(2)) { controller.downloadPhotos("camera", it) }
+        model.downloadSingleCapture(listOf(WifiPhotoDownload(2))) { controller.downloadPhotos("camera", it) }
         assertNull(model.batchSummary, "a single download must drop the batch summary")
         runCurrent()
         connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Saved))
@@ -838,7 +838,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         model.previewPhoto("photo:0")
         assertTrue(model.batchSummarySettled(), "opening the viewer must keep the settled summary")
         // From the viewer: a single download that blocks busy.
-        model.downloadSinglePhoto(WifiPhotoDownload(2)) { controller.downloadPhotos("camera", it) }
+        model.downloadSingleCapture(listOf(WifiPhotoDownload(2))) { controller.downloadPhotos("camera", it) }
         runCurrent()
         assertTrue(registry.get("camera")!!.wifiRemote.imageTransfer.busy)
         assertFalse(model.batchSummarySettled(), "a busy single download must hide the settled summary")
@@ -2961,6 +2961,84 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         assertNull(model.beginRangeSelection("photo:4"))
         controller.cancelPhotoOperation("camera")
         runCurrent()
+        controller.closeAndJoin()
+    }
+
+    // ---- Unified download planner through the ViewModel ----
+
+    private fun plannerConnection() = Connection().apply {
+        photos = listOf(
+            WifiCameraPhoto(1L, "H.HIF", 100, "image/heif", "20240501T100000", captureId = "h"),
+            WifiCameraPhoto(2L, "J.JPG", 100, "image/jpeg", "20240501T100001", captureId = "jr"),
+            WifiCameraPhoto(3L, "J.ARW", 100, "image/x-sony-arw", "20240501T100001", captureId = "jr"),
+            WifiCameraPhoto(4L, "BIG.JPG", 100, "image/jpeg", "20240501T100002", downloadable = false, captureId = "big"),
+        )
+    }
+
+    @Test
+    fun jpegOnlyBatchOfOnlyHeifIsASettledNoOpSummaryAndNeverStartsADownload() = runTest {
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> plannerConnection() }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        model.recordBatchSummary(WifiBatchSummary(5, emptyMap())) // an older summary must not survive
+        model.togglePhotoSelection("h")
+        val started = mutableListOf<List<WifiPhotoDownload>>()
+
+        model.requestBatchDownload(WifiFormatPolicy.JpegOnly, registry.get("camera")!!.wifiRemote) { started += it }
+
+        assertTrue(started.isEmpty(), "no empty download is submitted, no transcode fallback")
+        assertEquals(WifiBatchSummary(0, mapOf(WifiSkipReason.NoJpeg to 1)), model.batchSummary)
+        assertTrue(model.batchSummarySettled(), "a local no-op result is settled on its own")
+        assertEquals(WifiImageTransferStatus.Idle, registry.get("camera")!!.wifiRemote.imageTransfer.status)
+        assertFalse(model.showBatchOptions)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun originalBatchWithNothingLeftIsALocalSummaryNotAnEmptySheet() = runTest {
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> plannerConnection() }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        model.togglePhotoSelection("big")
+        var started = 0
+
+        model.requestBatchDownload(WifiFormatPolicy.Original, registry.get("camera")!!.wifiRemote) { started++ }
+
+        assertEquals(0, started)
+        assertFalse(model.showBatchOptions)
+        assertEquals(WifiBatchSummary(0, mapOf(WifiSkipReason.TooLarge to 1)), model.batchSummary)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun originalBatchPlanAndSingleCaptureDownloadBothTakeEveryOriginalFileInOneRequest() = runTest {
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> plannerConnection() }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        model.togglePhotoSelection("jr")
+        val state = registry.get("camera")!!.wifiRemote
+        assertEquals(listOf(WifiPhotoDownload(2), WifiPhotoDownload(3)), model.batchPlan(WifiFormatPolicy.Original, state).downloads)
+        assertEquals(listOf(WifiPhotoDownload(2)), model.batchPlan(WifiFormatPolicy.JpegOnly, state).downloads)
+
+        val started = mutableListOf<List<WifiPhotoDownload>>()
+        model.recordBatchSummary(WifiBatchSummary(1, emptyMap()))
+        model.downloadSingleCapture(listOf(WifiPhotoDownload(2), WifiPhotoDownload(3))) { started += it }
+        assertEquals(listOf(listOf(WifiPhotoDownload(2), WifiPhotoDownload(3))), started, "JPG+RAW at once, no format picker")
+        assertNull(model.batchSummary, "a single download drops an older batch summary")
+        model.downloadSingleCapture(emptyList()) { started += it }
+        assertEquals(1, started.size, "an empty plan never submits")
         controller.closeAndJoin()
     }
 }

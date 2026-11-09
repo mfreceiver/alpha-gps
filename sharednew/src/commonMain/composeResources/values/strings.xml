@@ -406,15 +406,9 @@
     <string name="wifi_remote_dates_unknown">Unknown date</string>
     <string name="wifi_remote_dates_count">%1$d photos</string>
     <string name="wifi_remote_back_busy">Wait for the current operation to finish, or cancel it, before going back.</string>
-    <string name="wifi_remote_batch_formats">Choose formats to download</string>
-    <string name="wifi_remote_batch_formats_hint">Choose which formats to download. Photos already saved or over the size limit are skipped.</string>
-    <string name="wifi_remote_batch_file_count">%1$d files</string>
-    <string name="wifi_remote_batch_download">Download %1$d files</string>
     <string name="wifi_remote_batch_progress">Saved %1$d of %2$d files</string>
-    <string name="wifi_remote_batch_nothing_to_download">No files available to download. They may already be saved or exceed the download limit.</string>
     <string name="wifi_remote_preview_unavailable">Preview unavailable</string>
     <string name="wifi_remote_photo_captured">Captured: %1$s</string>
-    <string name="wifi_remote_photo_format">Choose a format to download</string>
     <string name="wifi_remote_download_format">Download %1$s</string>
     <string name="wifi_remote_photo_download_hint">Saved to your photo library; the camera keeps its files. Keep this screen open until the download finishes.</string>
     <string name="wifi_remote_photo_close">Close</string>
@@ -430,7 +424,6 @@
     <string name="wifi_remote_browser_jump_title">Go to page</string>
     <string name="wifi_remote_browser_jump_label">Page number (1–%1$d)</string>
     <string name="wifi_remote_browser_jump_go">Go</string>
-    <string name="wifi_remote_photo_size">%1$d KB</string>
     <string name="wifi_remote_download">Download</string>
     <string name="wifi_remote_download_saved">Saved</string>
     <string name="wifi_remote_download_too_large">Image exceeds the 512 MB download limit.</string>
@@ -449,8 +442,6 @@
     <string name="wifi_remote_default_download_format">Default download format</string>
     <string name="wifi_remote_default_download_format_jpeg">JPG only</string>
     <string name="wifi_remote_default_download_format_original">Original</string>
-    <string name="wifi_remote_jpeg_copy">JPEG copy (from HEIF)</string>
-    <string name="wifi_remote_jpeg_copy_hint">Downloads the HEIF and saves a full-resolution JPEG copy on this phone. HDR and some metadata may not be preserved.</string>
     <string name="wifi_remote_converting_jpeg">Converting to JPEG…</string>
     <string name="wifi_remote_conversion_failed">Could not create a JPEG copy. This phone may not support the HEIF format or have enough memory or storage. You can download the original HEIF instead.</string>
     <string name="wifi_remote_ios_settings">App permissions</string>
@@ -461,7 +452,6 @@
     <string name="wifi_remote_download_format_size">Download %1$s (%2$s)</string>
     <string name="wifi_remote_photo_no_jpg">This photo has no JPG.</string>
     <string name="wifi_remote_batch_download_jpg">Download %1$d JPG (%2$s)</string>
-    <string name="wifi_remote_batch_download_jpg_none">No JPG to download</string>
     <string name="wifi_remote_skip_no_jpg">%1$d without JPG</string>
     <string name="wifi_remote_skip_saved">%1$d already saved</string>
     <string name="wifi_remote_skip_too_large">%1$d over the size limit</string>
@@ -474,4 +464,7 @@
     <string name="wifi_remote_viewer_previous_photo">Previous photo</string>
     <string name="wifi_remote_viewer_next_photo">Next photo</string>
 
+    <string name="wifi_remote_batch_download_none">Nothing to download</string>
+    <string name="wifi_remote_batch_download_size">Download %1$d files (%2$s)</string>
+    <string name="wifi_remote_batch_original_hint">Downloads every original file of the selected photos (for example JPG and RAW together). Files already saved or over the size limit are skipped.</string>
 </resources>

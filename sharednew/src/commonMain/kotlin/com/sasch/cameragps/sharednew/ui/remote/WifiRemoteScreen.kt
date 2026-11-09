@@ -78,7 +78,7 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiBatchSummary
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
 import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
-import com.sasch.cameragps.sharednew.remote.wifi.WifiJpegBatchPlan
+import com.sasch.cameragps.sharednew.remote.wifi.WifiDownloadPlan
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoBrowserState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteController
@@ -87,7 +87,7 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiRemotePhase
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiShutdownStatus
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
-import com.sasch.cameragps.sharednew.remote.wifi.jpegOnlyBatchPlan
+import com.sasch.cameragps.sharednew.remote.wifi.planDownloads
 import com.sasch.cameragps.sharednew.remote.wifi.toSummary
 import org.jetbrains.compose.resources.stringResource
 
@@ -309,16 +309,16 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         showBatchOptions = false
     }
 
-    /** JPG-only plan for the current cross-page selection; null in Original mode. */
-    internal fun jpegBatchPlan(policy: WifiFormatPolicy, state: WifiRemoteState): WifiJpegBatchPlan? =
-        if (policy == WifiFormatPolicy.JpegOnly) {
-            jpegOnlyBatchPlan(selectedPhotos.values.toList(), state.photoBrowser.savedDownloads, state.canConvertHeif)
-        } else null
+    /** The download plan of the current cross-page selection under [policy] (see [planDownloads]). */
+    internal fun batchPlan(policy: WifiFormatPolicy, state: WifiRemoteState): WifiDownloadPlan =
+        planDownloads(selectedPhotos.values.toList(), policy, state.photoBrowser.savedDownloads)
 
     /**
-     * The top bar's download action for the selection. JPG-only starts the download of the
-     * plan's JPGs right away (remembering the skip counts for the result line); Original
-     * opens the format sheet. Nothing happens for an empty selection or an empty plan.
+     * The top bar's download action for the selection. JPG-only starts the download of the plan's
+     * JPEGs right away (remembering the skip counts for the result line); Original opens the
+     * confirmation sheet. A plan with nothing to download never submits an empty download: it records
+     * a local, already-settled "downloaded 0, skipped N" summary so the tap is not silent. Nothing
+     * happens for an empty selection.
      */
     internal fun requestBatchDownload(
         policy: WifiFormatPolicy,
@@ -326,12 +326,14 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         onDownload: (List<WifiPhotoDownload>) -> Unit,
     ) {
         if (selectedPhotos.isEmpty()) return
-        val plan = jpegBatchPlan(policy, state)
-        if (plan == null) {
-            showBatchOptions = true
-        } else if (plan.downloads.isNotEmpty()) {
-            recordBatchSummary(plan.toSummary())
-            onDownload(plan.downloads)
+        val plan = batchPlan(policy, state)
+        when {
+            plan.files.isEmpty() -> recordBatchSummary(plan.toSummary())
+            policy == WifiFormatPolicy.JpegOnly -> {
+                recordBatchSummary(plan.toSummary())
+                onDownload(plan.downloads)
+            }
+            else -> showBatchOptions = true
         }
     }
 
@@ -370,17 +372,17 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
      * batch's own file was never saved). Batch downloads go through [recordBatchSummary]
      * plus the caller's batch button instead.
      */
-    internal fun downloadSinglePhoto(
-        download: WifiPhotoDownload,
+    internal fun downloadSingleCapture(
+        downloads: List<WifiPhotoDownload>,
         onDownload: (List<WifiPhotoDownload>) -> Unit,
     ) {
         recordBatchSummary(null)
-        onDownload(listOf(download))
+        if (downloads.isNotEmpty()) onDownload(downloads)
     }
 
     /**
      * Original-format batch download entry (the format sheet's confirm). Drops any batch
-     * summary first, exactly like [downloadSinglePhoto]: the summary describes a previous
+     * summary first, exactly like [downloadSingleCapture]: the summary describes a previous
      * JpegOnly batch, and a leftover one must neither re-show after this batch nor settle
      * off this batch's own Saved result.
      */

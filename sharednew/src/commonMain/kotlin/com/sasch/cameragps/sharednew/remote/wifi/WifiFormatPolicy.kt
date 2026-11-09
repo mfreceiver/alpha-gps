@@ -8,17 +8,12 @@ private const val MIME_HEIF = "image/heif"
 private const val MIME_RAW = "image/x-sony-arw"
 
 /**
- * The user's "default download format" setting as one policy that the grid badge, the
- * details page, the batch bar and the settings copy all derive from.
+ * The user's "default download format" setting as one policy that the download planner
+ * ([planDownloads]) and the settings copy derive from.
  *
- * - [Original]: every original format is shown and the user chooses before downloading.
- * - [JpegOnly]: lists, details and batches only talk about the JPG; one tap downloads it.
- *   A capture without any JPG (typically RAW-only) is never downloaded silently and never
- *   hidden from the grid: it is flagged, skipped by batches, and downloadable by hand
- *   from its details page.
- *
- * Note: [WifiPhotoDownloadFormat.Jpeg] is the HEIF→JPEG *transcode*, not "the JPG file".
- * It is only used here as the JPG source of a HEIF-only capture when the platform can convert.
+ * - [Original]: a download fetches all original files of the selected captures.
+ * - [JpegOnly]: a download fetches only the existing JPEG file; captures without one (RAW-only,
+ *   HEIF-only) are skipped and counted, never converted. The grid badge is independent of it.
  */
 internal enum class WifiFormatPolicy {
     Original,
@@ -28,41 +23,6 @@ internal enum class WifiFormatPolicy {
         fun of(jpegOnly: Boolean): WifiFormatPolicy = if (jpegOnly) JpegOnly else Original
     }
 }
-
-/** Where the JPG of a capture comes from and how it is requested. */
-internal data class WifiJpegTarget(val file: WifiCameraPhoto, val download: WifiPhotoDownload) {
-    /** True when the JPG is produced by transcoding a HEIF original (size is not known). */
-    val converted: Boolean get() = download.format == WifiPhotoDownloadFormat.Jpeg
-
-    /** Size of the JPG, or null when it is only produced by a conversion. */
-    val knownSize: Long? get() = if (converted) null else file.size
-}
-
-/**
- * The JPG of a capture: its JPEG file (preferring a downloadable one), else — when the
- * platform can transcode — its HEIF as a JPEG copy. Null when the capture has no JPG
- * (e.g. RAW-only).
- */
-internal fun WifiCameraCapture.jpegTarget(canConvertHeif: Boolean): WifiJpegTarget? {
-    val jpegs = files.filter { it.mimeType == MIME_JPEG }
-    (jpegs.firstOrNull { it.downloadable } ?: jpegs.firstOrNull())?.let {
-        return WifiJpegTarget(it, WifiPhotoDownload(it.handle))
-    }
-    if (canConvertHeif) {
-        val heifs = files.filter { it.mimeType == MIME_HEIF }
-        (heifs.firstOrNull { it.downloadable } ?: heifs.firstOrNull())?.let {
-            return WifiJpegTarget(it, WifiPhotoDownload(it.handle, WifiPhotoDownloadFormat.Jpeg))
-        }
-    }
-    return null
-}
-
-/**
- * What the JpegOnly details page offers by hand when a capture has no JPG: its RAW if it
- * has one, otherwise its first remaining original.
- */
-internal fun WifiCameraCapture.manualOriginal(): WifiCameraPhoto? =
-    files.firstOrNull { it.mimeType == MIME_RAW } ?: files.firstOrNull { it.downloadable } ?: files.firstOrNull()
 
 /**
  * Grid corner badge for one capture, decided purely by the MIME types of its files (never by the
@@ -85,75 +45,85 @@ internal fun WifiCameraCapture.formatBadge(): String? {
     }
 }
 
-/** How the details page of one capture behaves under a [WifiFormatPolicy]. */
-internal sealed interface WifiDetailPlan {
-    /** Original: the format list with radio selection stays. */
-    data object ChooseFormat : WifiDetailPlan
-
-    /** JpegOnly: a single "Download JPG (size)" button. */
-    data class DownloadJpeg(val target: WifiJpegTarget) : WifiDetailPlan
-
-    /** JpegOnly without a JPG: say so, offer [fallback] manually (null if nothing at all). */
-    data class NoJpeg(val fallback: WifiCameraPhoto?) : WifiDetailPlan
-}
-
-internal fun WifiCameraCapture.detailPlan(policy: WifiFormatPolicy, canConvertHeif: Boolean): WifiDetailPlan =
-    when (policy) {
-        Original -> WifiDetailPlan.ChooseFormat
-        JpegOnly -> jpegTarget(canConvertHeif)?.let { WifiDetailPlan.DownloadJpeg(it) }
-            ?: WifiDetailPlan.NoJpeg(manualOriginal())
-    }
-
-/** Why a selected capture contributes nothing to a JpegOnly batch. */
+/** Why a selected capture or file contributes nothing to a download. */
 internal enum class WifiSkipReason { NoJpeg, AlreadySaved, TooLarge }
 
-internal data class WifiJpegBatchPlan(
-    val downloads: List<WifiPhotoDownload>,
-    /** Sum of the source file sizes (a transcoded HEIF counts with its HEIF size). */
-    val totalBytes: Long,
+/**
+ * What one download action will fetch: the exact [files] (original bytes, never a transcode) and what
+ * was skipped and why. The same plan drives the grid's batch action, the viewer's download button and
+ * the details button, so all of them agree on files, sizes and skip counts.
+ */
+internal data class WifiDownloadPlan(
+    val files: List<WifiCameraPhoto>,
     val skipped: Map<WifiSkipReason, Int>,
 ) {
+    val downloads: List<WifiPhotoDownload> get() = files.map { WifiPhotoDownload(it.handle) }
+
+    /** Sum of the planned file sizes. */
+    val totalBytes: Long get() = files.sumOf { it.size }
     val skippedCount: Int get() = skipped.values.sum()
+
+    /** The biggest reason something was skipped, i.e. why an empty plan is empty. */
+    val mainSkipReason: WifiSkipReason? get() = skipped.entries.filter { it.value > 0 }.maxByOrNull { it.value }?.key
 }
 
 /**
- * JpegOnly batch: one JPG per capture in selection order. RAW-only captures are skipped
- * (never downloaded silently), as are JPGs saved earlier in this catalog generation and
- * JPGs over the download limit.
+ * The single download planner. Both policies download original bytes only — nothing is converted.
+ *
+ * - [Original]: every file of each capture (JPG+RAW downloads both). Files saved earlier in this
+ *   catalog generation or over the download limit are skipped.
+ * - [JpegOnly]: only the capture's JPEG file (MIME `image/jpeg`; a downloadable one preferred). A
+ *   capture without a JPEG — RAW-only or HEIF-only alike — is skipped as [WifiSkipReason.NoJpeg]; there
+ *   is no transcode and no fallback to another format.
+ *
+ * Files keep selection order and appear once even if the same capture is selected twice.
  */
-internal fun jpegOnlyBatchPlan(
+internal fun planDownloads(
     captures: List<WifiCameraCapture>,
+    policy: WifiFormatPolicy,
     saved: Set<WifiPhotoDownload>,
-    canConvertHeif: Boolean,
-): WifiJpegBatchPlan {
-    val downloads = LinkedHashMap<WifiPhotoDownload, Long>()
+): WifiDownloadPlan {
+    val files = LinkedHashMap<Long, WifiCameraPhoto>()
     val skipped = LinkedHashMap<WifiSkipReason, Int>()
     fun skip(reason: WifiSkipReason) {
         skipped[reason] = (skipped[reason] ?: 0) + 1
     }
-    for (capture in captures) {
-        val target = capture.jpegTarget(canConvertHeif)
+    fun consider(file: WifiCameraPhoto) {
         when {
-            target == null -> skip(WifiSkipReason.NoJpeg)
-            !target.file.downloadable -> skip(WifiSkipReason.TooLarge)
-            target.download in saved -> skip(WifiSkipReason.AlreadySaved)
-            else -> downloads.putIfAbsent(target.download, target.file.size)
+            !file.downloadable -> skip(WifiSkipReason.TooLarge)
+            WifiPhotoDownload(file.handle) in saved -> skip(WifiSkipReason.AlreadySaved)
+            else -> files.putIfAbsent(file.handle, file)
         }
     }
-    return WifiJpegBatchPlan(downloads.keys.toList(), downloads.values.sum(), skipped)
+    for (capture in captures) {
+        when (policy) {
+            Original -> capture.files.forEach(::consider)
+            JpegOnly -> {
+                val jpegs = capture.files.filter { it.mimeType == MIME_JPEG }
+                val jpeg = jpegs.firstOrNull { it.downloadable } ?: jpegs.firstOrNull()
+                if (jpeg == null) skip(WifiSkipReason.NoJpeg) else consider(jpeg)
+            }
+        }
+    }
+    return WifiDownloadPlan(files.values.toList(), skipped)
 }
 
-/** Result line shown after a JpegOnly batch: how many were downloaded, how many skipped. */
+/** Result line shown after a batch: how many files were downloaded, how many skipped. */
 internal data class WifiBatchSummary(val downloaded: Int, val skipped: Map<WifiSkipReason, Int>) {
     val skippedCount: Int get() = skipped.values.sum()
 
-    /** The batch ran to the end: every submitted file is saved (a failure stops it earlier). */
+    /**
+     * The batch is settled: either it ran to the end — every submitted file is saved (a failure stops
+     * it earlier) — or nothing was submitted at all (everything skipped), which is a local result that
+     * never waits for a transfer.
+     */
     fun isComplete(transfer: WifiImageTransferState): Boolean =
-        downloaded > 0 && transfer.status == WifiImageTransferStatus.Saved &&
+        if (downloaded == 0) true
+        else transfer.status == WifiImageTransferStatus.Saved &&
                 transfer.completedFiles == downloaded && transfer.totalFiles == downloaded
 }
 
-internal fun WifiJpegBatchPlan.toSummary() = WifiBatchSummary(downloads.size, skipped)
+internal fun WifiDownloadPlan.toSummary() = WifiBatchSummary(files.size, skipped)
 
 /**
  * Whether the settled batch summary line may replace the transfer status line on the

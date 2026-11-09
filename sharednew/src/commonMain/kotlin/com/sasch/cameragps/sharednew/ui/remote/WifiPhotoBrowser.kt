@@ -77,7 +77,7 @@ import cameragps.sharednew.generated.resources.wifi_remote_skip_saved
 import cameragps.sharednew.generated.resources.wifi_remote_skip_too_large
 import cameragps.sharednew.generated.resources.wifi_remote_conversion_failed
 import cameragps.sharednew.generated.resources.wifi_remote_converting_jpeg
-import cameragps.sharednew.generated.resources.wifi_remote_download_format
+import cameragps.sharednew.generated.resources.wifi_remote_download
 import cameragps.sharednew.generated.resources.wifi_remote_download_saved
 import cameragps.sharednew.generated.resources.wifi_remote_download_too_large
 import cameragps.sharednew.generated.resources.wifi_remote_preview_unavailable
@@ -95,10 +95,9 @@ import cameragps.sharednew.generated.resources.wifi_remote_transfer_saved
 import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
-import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownloadFormat
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiTransferFailureReason
-import com.sasch.cameragps.sharednew.remote.wifi.WifiDetailPlan
+import com.sasch.cameragps.sharednew.remote.wifi.WifiDownloadPlan
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
 import com.sasch.cameragps.sharednew.remote.wifi.WifiSkipReason
 import com.sasch.cameragps.sharednew.remote.wifi.formatBadge
@@ -211,12 +210,12 @@ internal fun WifiPhotoBrowser(
     // JPG-only: the batch is the selection's JPGs; RAW-only/saved/oversize captures are skipped.
     // The select/download actions live in the top bar (WifiPhotoBrowserTopBar); the plan is
     // shared through the ViewModel so both show the same numbers.
-    val jpegPlan = viewModel.jpegBatchPlan(policy, state)
+    val plan = viewModel.batchPlan(policy, state)
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (selecting && jpegPlan != null && jpegPlan.skippedCount > 0) Text(
+        if (selecting && plan.skippedCount > 0) Text(
             stringResource(
                 Res.string.wifi_remote_batch_skip_hint,
-                jpegPlan.skippedCount, skipReasonsText(jpegPlan.skipped)
+                plan.skippedCount, skipReasonsText(plan.skipped)
             ),
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(horizontal = 8.dp)
@@ -431,8 +430,8 @@ internal fun WifiPhotoBrowser(
     }
     if (viewModel.showBatchOptions && selecting && policy == WifiFormatPolicy.Original) {
         PhotoBatchDownloadSheet(
-            // The batch receives the whole cross-page selection snapshot, in selection order.
-            viewModel.selectedPhotos.values.toList(), state,
+            // The plan covers the whole cross-page selection snapshot, in selection order.
+            selectedIds.size, plan, state,
             onDismiss = viewModel::dismissBatchOptions,
             onDownload = { downloads ->
                 viewModel.dismissBatchOptions()
@@ -445,7 +444,7 @@ internal fun WifiPhotoBrowser(
 }
 
 @Composable
-private fun skipReasonsText(skipped: Map<WifiSkipReason, Int>): String =
+internal fun skipReasonsText(skipped: Map<WifiSkipReason, Int>): String =
     skipped.entries.filter { it.value > 0 }.map { (reason, count) ->
         stringResource(
             when (reason) {
@@ -520,57 +519,38 @@ private fun PhotoTile(image: ImageBitmap?, loading: Boolean) {
 }
 
 /**
- * JPG-only download actions: one tap downloads, progress/result show in the page's own
- * transfer status. Without a JPG the page says so and offers the remaining original by hand.
+ * The download button of one capture (viewer page / details), driven by the shared planner: one tap
+ * downloads every file the plan lists (JPG-only: the JPEG; Original: all original files, JPG+RAW in one
+ * go). A plan with nothing in it is never silent: the button is disabled and the reason is written
+ * under it (no JPG, already saved, over the size limit).
  */
 @Composable
-internal fun PhotoJpegOnlyActions(
-    plan: WifiDetailPlan, state: WifiRemoteState,
-    onDownload: (Long, WifiPhotoDownloadFormat) -> Unit,
+internal fun PhotoDownloadAction(
+    plan: WifiDownloadPlan?, state: WifiRemoteState,
+    onDownload: (List<WifiPhotoDownload>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val browser = state.photoBrowser
-    val idle = !browser.loading && !state.imageTransfer.busy
-    when (plan) {
-        WifiDetailPlan.ChooseFormat -> Unit
-        is WifiDetailPlan.DownloadJpeg -> {
-            val target = plan.target
-            val saved = target.download in browser.savedDownloads
-            Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Button(
-                    onClick = { onDownload(target.download.handle, target.download.format) },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = idle && target.file.downloadable && !saved
-                ) {
-                    val size = target.knownSize
-                    Text(
-                        if (size != null) stringResource(
-                            Res.string.wifi_remote_download_format_size, "JPG", formatByteSize(size)
-                        ) else stringResource(Res.string.wifi_remote_download_format, "JPG")
-                    )
-                }
-                if (saved) Text(stringResource(Res.string.wifi_remote_download_saved))
-                if (!target.file.downloadable) Text(stringResource(Res.string.wifi_remote_download_too_large))
-            }
+    val idle = !state.photoBrowser.loading && !state.imageTransfer.busy
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Button(
+            onClick = { if (plan != null) onDownload(plan.downloads) },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = idle && plan != null && plan.files.isNotEmpty(),
+        ) {
+            Text(
+                if (plan == null || plan.files.isEmpty()) stringResource(Res.string.wifi_remote_download)
+                else stringResource(
+                    Res.string.wifi_remote_download_format_size,
+                    plan.files.joinToString(" + ") { it.formatLabel }, formatByteSize(plan.totalBytes)
+                )
+            )
         }
-
-        is WifiDetailPlan.NoJpeg -> Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(stringResource(Res.string.wifi_remote_photo_no_jpg))
-            plan.fallback?.let { file ->
-                val saved = WifiPhotoDownload(file.handle) in browser.savedDownloads
-                Button(
-                    onClick = { onDownload(file.handle, WifiPhotoDownloadFormat.Original) },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = idle && file.downloadable && !saved
-                ) {
-                    Text(
-                        stringResource(
-                            Res.string.wifi_remote_download_format_size, file.formatLabel, formatByteSize(file.size)
-                        )
-                    )
-                }
-                if (saved) Text(stringResource(Res.string.wifi_remote_download_saved))
-                if (!file.downloadable) Text(stringResource(Res.string.wifi_remote_download_too_large))
+        if (plan != null && plan.files.isEmpty()) {
+            when (plan.mainSkipReason) {
+                WifiSkipReason.NoJpeg -> Text(stringResource(Res.string.wifi_remote_photo_no_jpg))
+                WifiSkipReason.AlreadySaved -> Text(stringResource(Res.string.wifi_remote_download_saved))
+                WifiSkipReason.TooLarge -> Text(stringResource(Res.string.wifi_remote_download_too_large))
+                null -> Unit
             }
         }
     }
