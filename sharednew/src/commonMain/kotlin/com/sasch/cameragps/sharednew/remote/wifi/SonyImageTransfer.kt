@@ -1,6 +1,7 @@
 package com.sasch.cameragps.sharednew.remote.wifi
 
 import androidx.compose.ui.graphics.ImageBitmap
+import com.diamondedge.logging.logging
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -97,6 +98,7 @@ internal class SonyImageTransfer(
     private val decodePreview: (ByteArray) -> ImageBitmap? = { null },
     private val store: CameraImageStore,
 ) {
+    private val log = logging()
     private val catalog = if (events != null && SonyContentCatalog.supported(capabilities))
         SonyContentCatalog(commands, capabilities, events) else null
     val supported: Boolean = catalog != null || listOf(
@@ -232,7 +234,10 @@ internal class SonyImageTransfer(
         val photo = (catalog?.file(handle)
             ?: captures.asSequence().flatMap { it.files }.singleOrNull { it.handle == handle })
             ?.takeIf { it.downloadable }
-            ?: return WifiImageTransferState(WifiImageTransferStatus.Failed)
+            ?: return WifiImageTransferState(
+                WifiImageTransferStatus.Failed,
+                failureReason = WifiTransferFailureReason.CatalogChanged
+            )
         val convert = format == WifiPhotoDownloadFormat.Jpeg
         if (convert && (photo.mimeType != "image/heif" || !store.canConvertHeif)) {
             return WifiImageTransferState(WifiImageTransferStatus.ConversionFailed, photo.filename)
@@ -241,21 +246,56 @@ internal class SonyImageTransfer(
         var converting = false
         var destination: CameraImageDestination? = null
         var committed = false
+        // Set by the wrapped failure sites below; the generic catch keeps it as Unknown.
+        var failureReason: WifiTransferFailureReason = WifiTransferFailureReason.Unknown
         try {
             return withTimeout(5.minutes) {
                 // Re-read metadata before saving: the card may have changed since listing.
-                val info = catalog?.revalidate(handle) ?: objectInfo(handle)
-                check(
-                    info.filename == photo.filename && info.size == photo.size && info.mimeType == photo.mimeType &&
-                            info.capturedAt == photo.capturedAt
-                )
-                val output = if (convert) store.createJpeg(info) else store.create(info)
+                val info = try {
+                    catalog?.revalidate(handle) ?: objectInfo(handle)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (changed: Exception) {
+                    failureReason = WifiTransferFailureReason.CatalogChanged
+                    throw changed
+                }
+                try {
+                    check(
+                        info.filename == photo.filename && info.size == photo.size && info.mimeType == photo.mimeType &&
+                                info.capturedAt == photo.capturedAt
+                    )
+                } catch (changed: IllegalStateException) {
+                    failureReason = WifiTransferFailureReason.CatalogChanged
+                    throw changed
+                }
+                val output = try {
+                    if (convert) store.createJpeg(info) else store.create(info)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (storage: Exception) {
+                    failureReason = WifiTransferFailureReason.Storage
+                    throw storage
+                }
                 destination = output
                 var offset = 0L
                 while (offset < info.size) {
                     val length = minOf(CHUNK_BYTES.toLong(), info.size - offset).toInt()
-                    val bytes = read(handle, offset, length)
-                    output.write(bytes)
+                    val bytes = try {
+                        read(handle, offset, length)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (protocol: Exception) {
+                        failureReason = WifiTransferFailureReason.Protocol
+                        throw protocol
+                    }
+                    try {
+                        output.write(bytes)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (storage: Exception) {
+                        failureReason = WifiTransferFailureReason.Storage
+                        throw storage
+                    }
                     offset += length
                     onProgress(
                         WifiImageTransferState(
@@ -268,19 +308,35 @@ internal class SonyImageTransfer(
                 }
                 converting = convert
                 if (convert) onProgress(WifiImageTransferState(WifiImageTransferStatus.Converting, filename))
-                output.prepare()
+                try {
+                    output.prepare()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (storage: Exception) {
+                    failureReason = WifiTransferFailureReason.Storage
+                    throw storage
+                }
                 currentCoroutineContext().ensureActive()
                 withContext(NonCancellable) {
-                    output.commit()
+                    try {
+                        output.commit()
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (storage: Exception) {
+                        failureReason = WifiTransferFailureReason.Storage
+                        throw storage
+                    }
                     committed = true
                     destination = null
                 }
                 WifiImageTransferState(WifiImageTransferStatus.Saved, filename)
             }
         } catch (_: TimeoutCancellationException) {
+            // A committed file is a full success; a converting failure keeps its own status.
             return WifiImageTransferState(
                 if (committed) WifiImageTransferStatus.Saved else if (converting) WifiImageTransferStatus.ConversionFailed else WifiImageTransferStatus.Failed,
-                filename
+                filename,
+                failureReason = if (committed || converting) null else WifiTransferFailureReason.Timeout
             )
         } catch (cancelled: CancellationException) {
             if (committed) return WifiImageTransferState(
@@ -288,9 +344,15 @@ internal class SonyImageTransfer(
                 filename
             )
             throw cancelled
-        } catch (_: Exception) {
+        } catch (failure: Exception) {
+            // Diagnostics carry only the exception category and reason — no extra payload.
+            log.w {
+                "download failed: ${failure::class.simpleName} reason=$failureReason"
+            }
             return WifiImageTransferState(
-                if (converting) WifiImageTransferStatus.ConversionFailed else WifiImageTransferStatus.Failed, filename
+                if (converting) WifiImageTransferStatus.ConversionFailed else WifiImageTransferStatus.Failed,
+                filename,
+                failureReason = if (converting) null else failureReason
             )
         } finally {
             withContext(NonCancellable) { destination?.abort() }

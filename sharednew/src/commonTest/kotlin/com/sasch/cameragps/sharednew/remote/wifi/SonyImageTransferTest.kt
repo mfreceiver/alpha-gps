@@ -1,9 +1,11 @@
 package com.sasch.cameragps.sharednew.remote.wifi
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -11,6 +13,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SonyImageTransferTest : WifiLoggingTest() {
@@ -206,7 +210,9 @@ class SonyImageTransferTest : WifiLoggingTest() {
         transfer.page(SonyImageTransfer.PAGE_SIZE)
         // The camera rewrote the file between browsing and downloading.
         transport.metadata = mapOf(45L to info(600_001L, "DSC45.JPG"))
-        assertEquals(WifiImageTransferStatus.Failed, transfer.download(45L) {}.status)
+        val result = transfer.download(45L) {}
+        assertEquals(WifiImageTransferStatus.Failed, result.status)
+        assertEquals(WifiTransferFailureReason.CatalogChanged, result.failureReason)
         assertFalse(transport.operations.any { it.first == 0x9211 })
         queue.close()
     }
@@ -316,6 +322,7 @@ class SonyImageTransferTest : WifiLoggingTest() {
             transfer.openBrowser()
             val result = transfer.download(1L) {}
             assertEquals(WifiImageTransferStatus.Failed, result.status)
+            assertEquals(WifiTransferFailureReason.Protocol, result.failureReason)
             assertTrue(output.aborted)
             assertFalse(output.committed)
             assertEquals(1, transport.operations.count { it.first == 0x9211 })
@@ -351,10 +358,42 @@ class SonyImageTransferTest : WifiLoggingTest() {
             transfer.openBrowser()
             val result = transfer.download(1L) {}
             assertEquals(WifiImageTransferStatus.Failed, result.status)
+            assertEquals(WifiTransferFailureReason.Storage, result.failureReason)
             assertTrue(output.aborted)
             assertFalse(output.committed)
             queue.close()
         }
+    }
+
+    @Test
+    fun downloadStallsReportTimeoutAfterFiveMinutes() = runTest {
+        val transport = Transport()
+        val queue = PtpIpCommandQueue(transport, backgroundScope)
+        val output = Destination().apply { blockWrite = true }
+        val transfer = SonyImageTransfer(queue, ready()) { output }
+        transfer.openBrowser()
+        val result = async { transfer.download(1L) {} }
+        runCurrent()
+        advanceTimeBy(5.minutes + 1.seconds)
+        runCurrent()
+        val state = result.await()
+        assertEquals(WifiImageTransferStatus.Failed, state.status)
+        assertEquals(WifiTransferFailureReason.Timeout, state.failureReason)
+        assertTrue(output.aborted)
+        assertFalse(output.committed)
+        queue.close()
+    }
+
+    @Test
+    fun unexpectedDownloadFailuresReportUnknownReason() = runTest {
+        val transport = Transport()
+        val queue = PtpIpCommandQueue(transport, backgroundScope)
+        val transfer = SonyImageTransfer(queue, ready()) { Destination() }
+        transfer.openBrowser()
+        val state = transfer.download(1L) { error("Listener crashed") }
+        assertEquals(WifiImageTransferStatus.Failed, state.status)
+        assertEquals(WifiTransferFailureReason.Unknown, state.failureReason)
+        queue.close()
     }
 
     @Test
@@ -371,7 +410,9 @@ class SonyImageTransferTest : WifiLoggingTest() {
         val transfer = SonyImageTransfer(queue, ready()) { error("No file") }
         transfer.openBrowser()
         val before = transport.operations.size
-        assertEquals(WifiImageTransferStatus.Failed, transfer.download(999L) {}.status)
+        val missing = transfer.download(999L) {}
+        assertEquals(WifiImageTransferStatus.Failed, missing.status)
+        assertEquals(WifiTransferFailureReason.CatalogChanged, missing.failureReason)
         assertEquals(before, transport.operations.size)
         queue.close()
     }

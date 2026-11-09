@@ -380,7 +380,12 @@ class WifiRemoteController internal constructor(
                 // The catalog was refreshed or closed after the batch was accepted.
                 log.w { "Wi-Fi remote download batch expired: generation changed" }
                 updateReady(id) {
-                    it.copy(imageTransfer = WifiImageTransferState(WifiImageTransferStatus.Failed))
+                    it.copy(
+                        imageTransfer = WifiImageTransferState(
+                            WifiImageTransferStatus.Failed,
+                            failureReason = WifiTransferFailureReason.CatalogChanged
+                        )
+                    )
                 }
                 return@photoWork
             }
@@ -501,7 +506,8 @@ class WifiRemoteController internal constructor(
                     it.copy(
                         photoBrowser = it.photoBrowser.copy(failed = true),
                         imageTransfer = if (it.imageTransfer.busy) it.imageTransfer.copy(
-                            status = WifiImageTransferStatus.Failed
+                            status = WifiImageTransferStatus.Failed,
+                            failureReason = WifiTransferFailureReason.Timeout
                         ) else it.imageTransfer
                     )
                 }
@@ -514,12 +520,15 @@ class WifiRemoteController internal constructor(
                             it.imageTransfer.copy(status = WifiImageTransferStatus.Cancelled) else it.imageTransfer
                     )
                 }
-            } catch (_: Exception) {
+            } catch (failure: Exception) {
+                // No protocol/store signal is available at this level; keep the generic cause.
+                log.w { "photo work failed: ${failure::class.simpleName}" }
                 updateReady(id) {
                     it.copy(
                         photoBrowser = it.photoBrowser.copy(failed = true),
                         imageTransfer = if (it.imageTransfer.busy) it.imageTransfer.copy(
-                            status = WifiImageTransferStatus.Failed
+                            status = WifiImageTransferStatus.Failed,
+                            failureReason = WifiTransferFailureReason.Unknown
                         ) else it.imageTransfer
                     )
                 }
