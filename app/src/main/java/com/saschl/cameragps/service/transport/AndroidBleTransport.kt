@@ -171,7 +171,13 @@ class AndroidBleTransport(
      * Closes the parked handle of a camera that is gone and will not come back on its own
      * (absent, "keep active" off): removed from the registry so it stops counting as connection
      * demand, autoConnect cancelled, GATT really closed. A no-op while the link is active or the
-     * handle is already gone. Emits no event: the session ended with the earlier Disconnected.
+     * handle is already gone.
+     *
+     * A handle that never got past its initial connect still has an upper-layer session stuck in
+     * `Connecting` — no Disconnected was ever delivered for it — so retiring it emits a synthetic
+     * [BleTransportEvent.Disconnected] to end that session (the camera is gone; a later manual
+     * Connect starts fresh). A handle that already reported its disconnect (parked after a real
+     * callback or a pause) needs no second event.
      *
      * @return true when a parked handle was retired.
      */
@@ -189,6 +195,9 @@ class AndroidBleTransport(
                 entry.gatt.close()
             }
         }.onFailure { Timber.w(it) }
+        if (!entry.disconnectedReported) {
+            eventChannel.trySend(BleTransportEvent.Disconnected(address, statusCode = null))
+        }
         return true
     }
 
@@ -336,6 +345,7 @@ class AndroidBleTransport(
                 registry.update(gatt, address) {
                     it.isActive = false
                     it.mtu = 23
+                    it.disconnectedReported = true
                     if (status == 19 || status == 8 || status == 0) {
                         Timber.i("Device disconnected in callback with status: $status")
                     } else {
