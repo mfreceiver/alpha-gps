@@ -25,9 +25,12 @@ class WifiAutoConnectTest {
     fun waitsForTheExperimentalNotice() = assertFalse(decide(acknowledged = false))
 
     @Test
-    fun neverStartsOnTopOfARunningOrFailedSession() {
+    fun entryOnAFailedSessionAllowsOneFreshAttempt() = assertTrue(decide(phase = WifiRemotePhase.Failed))
+
+    @Test
+    fun neverStartsOnTopOfARunningSession() {
         for (phase in WifiRemotePhase.entries) {
-            if (phase == WifiRemotePhase.Idle) continue
+            if (phase == WifiRemotePhase.Idle || phase == WifiRemotePhase.Failed) continue
             assertFalse(decide(phase = phase), "phase $phase must not auto-connect")
         }
     }
