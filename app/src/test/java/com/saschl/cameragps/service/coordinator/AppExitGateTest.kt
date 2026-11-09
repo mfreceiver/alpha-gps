@@ -186,10 +186,12 @@ class AppExitGateTest {
         }
 
     @Test
-    fun `a late callback after a completed exit was retired by a connect is rejected`() =
+    fun `a late owned callback after a completed exit was retired by a connect is rejected`() =
         runBlocking {
-            // The flow completed *before* the connect arrived; a late second
-            // callback of it would equally kill the brand-new connection.
+            // beginSession(A) → A.onDestroy (owned exit) runs to completion →
+            // a background connect retires the completed flow (session still
+            // A). A late owned callback must not run: its owner already
+            // entered the retired flow and is destroyed.
             withTimeout(10_000) {
                 val g = gate()
                 val activity = Any()
@@ -207,8 +209,48 @@ class AppExitGateTest {
 
                 var ran = false
                 g.scheduleExit(owner = activity, teardown = { ran = true }, afterwards = { ran = true })
-                g.scheduleExit(owner = null, teardown = { ran = true }, afterwards = { ran = true })
-                assertFalse("late callbacks of a retired completed flow must not run", ran)
+                assertFalse("late owned callbacks of a retired completed flow must not run", ran)
+            }
+        }
+
+    @Test
+    fun `a real unowned task removal after a completed owned exit was retired by a connect still runs`() =
+        runBlocking {
+            // Counterexample this pins down: A.Back at the root page →
+            // finish() → owned onDestroy exit runs teardown+afterwards to
+            // completion → the Recents card is NOT auto-removed, the process
+            // lives on, and a CDM-started service Connect calls
+            // cancelPendingExit → the completed owned flow is retired. The
+            // user then genuinely swipes the card away: onTaskRemoved is the
+            // FIRST real removal delivery for that swipe, and the flow had
+            // already used up its own removal's entries — so the teardown
+            // must run and stop the just-reconnected session's FGS.
+            withTimeout(10_000) {
+                val g = gate()
+                val activity = Any()
+                g.beginSession(activity)
+
+                val firstCalls = mutableListOf<String>()
+                g.scheduleExit(
+                    owner = activity,
+                    teardown = { firstCalls += "teardown" },
+                    afterwards = { firstCalls += "afterwards" },
+                )
+                assertEquals(listOf("teardown", "afterwards"), firstCalls)
+
+                g.cancelPendingExit() // background connect, no new activity
+
+                val secondCalls = mutableListOf<String>()
+                g.scheduleExit(
+                    owner = null,
+                    teardown = { secondCalls += "teardown" },
+                    afterwards = { secondCalls += "afterwards" },
+                )
+                assertEquals(
+                    "the first real task removal after a completed flow was retired must still disconnect",
+                    listOf("teardown", "afterwards"),
+                    secondCalls,
+                )
             }
         }
 
@@ -262,6 +304,41 @@ class AppExitGateTest {
             assertEquals(listOf("teardown", "afterwards"), calls)
         }
     }
+
+    @Test
+    fun `a second entry replacing a running first entry reruns the teardown`() =
+        runBlocking {
+            // Non-blocking observation (sol), pinned as current behaviour: for
+            // an UNretired flow the two entry points of one task removal each
+            // open their own flow — the second cancels and replaces the first,
+            // so teardown is not exactly-once across the double entry. Only
+            // retirement (connect) suppresses the late second entry; making
+            // teardown exactly-once across unretired double entries is left
+            // as-is deliberately (the real teardowns are idempotent).
+            withTimeout(10_000) {
+                val g = gate()
+                val activity = Any()
+                g.beginSession(activity)
+
+                val inFirstTeardown = CompletableDeferred<Unit>()
+                var firstAfterwardsRan = false
+                g.scheduleExit(
+                    owner = activity,
+                    teardown = { inFirstTeardown.complete(Unit); hang() },
+                    afterwards = { firstAfterwardsRan = true },
+                )
+                inFirstTeardown.await()
+
+                val secondCalls = mutableListOf<String>()
+                g.scheduleExit(
+                    owner = null,
+                    teardown = { secondCalls += "teardown" },
+                    afterwards = { secondCalls += "afterwards" },
+                )
+                assertFalse(firstAfterwardsRan) // first flow was cancelled mid-teardown
+                assertEquals(listOf("teardown", "afterwards"), secondCalls)
+            }
+        }
 
     private suspend fun hang() = CompletableDeferred<Unit>().await()
 }
