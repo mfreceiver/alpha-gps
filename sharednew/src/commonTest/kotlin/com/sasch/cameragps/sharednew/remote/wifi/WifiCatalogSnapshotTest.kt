@@ -22,6 +22,8 @@ class WifiCatalogSnapshotTest {
         assertEquals("2024-05-01", cameraDateKey("2024-05-01T12:30"))
         assertEquals("2024-05-01", cameraDateKey("2024-05-01T12:30:45.123Z"))
         assertEquals("2024-05-01", cameraDateKey("2024-05-01T12:30:45+08:00"))
+        assertEquals("2024-05-01", cameraDateKey("2024-05-01T12:30:45+0800"))
+        assertEquals("2024-05-01", cameraDateKey("2024-05-01T12:30-0530"))
         assertEquals("2024-05-01", cameraDateKey("20240501T123045.5-0500"))
         assertEquals("2024-12-31", cameraDateKey("2024-12-31T23:59:59"))
         assertEquals("2024-02-29", cameraDateKey("20240229T000000"))
