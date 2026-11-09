@@ -2964,6 +2964,56 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         controller.closeAndJoin()
     }
 
+    @Test
+    fun aSecondGestureBegunRetiresTheFirst() = runTest {
+        val (model, controller, _) = rangeModel()
+        val first = model.beginRangeSelection("photo:1")!!
+        val second = model.beginRangeSelection("photo:8")!!
+
+        assertFalse(
+            model.updateRangeSelection(first, 4),
+            "an update of gesture A after gesture B began must be dropped",
+        )
+        assertTrue(model.updateRangeSelection(second, 9))
+        assertEquals(photoIds(8..9).toSet(), model.selectedPhotoIds)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun aManualSelectionChangeMidDragRetiresTheOldGesture() = runTest {
+        val (model, controller, _) = rangeModel()
+        val session = model.beginRangeSelection("photo:2")!!
+        assertEquals(setOf("photo:2"), model.selectedPhotoIds)
+
+        model.clearPhotoSelection()
+        assertTrue(model.selectedPhotoIds.isEmpty(), "the manual clear is applied at once")
+        assertFalse(
+            model.updateRangeSelection(session, 5),
+            "the old gesture must not rebuild the selection from its stale initial",
+        )
+        assertTrue(model.selectedPhotoIds.isEmpty())
+
+        val second = model.beginRangeSelection("photo:6")!!
+        model.selectAllPhotos()
+        assertFalse(model.updateRangeSelection(second, 8), "select all retires the gesture too")
+        assertEquals(photoIds(0..pageSize - 1).toSet(), model.selectedPhotoIds)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun endingTheGestureRetiresItsSessionForGood() = runTest {
+        val (model, controller, _) = rangeModel()
+        val session = model.beginRangeSelection("photo:2")!!
+
+        model.endRangeSelection()
+
+        assertFalse(model.updateRangeSelection(session, 5), "an ended gesture never writes again")
+        assertEquals(setOf("photo:2"), model.selectedPhotoIds)
+        val fresh = model.beginRangeSelection("photo:3")!!
+        assertTrue(model.updateRangeSelection(fresh, 4), "a later gesture works normally")
+        controller.closeAndJoin()
+    }
+
     // ---- Unified download planner through the ViewModel ----
 
     private fun plannerConnection() = Connection().apply {

@@ -302,6 +302,7 @@ internal fun WifiPhotoBrowser(
                             } finally {
                                 drag.clear()
                                 dragActive = false
+                                viewModel.endRangeSelection()
                             }
                         }
                     } else Modifier

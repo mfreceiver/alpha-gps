@@ -16,6 +16,11 @@ internal data class PageIdentity(
  * the press began (selected anchor -> the whole range is deselected, otherwise selected), and
  * [initial] is the selection before the gesture: every update recomputes from it, so shrinking the
  * range back restores the tiles it had passed instead of leaving them toggled.
+ *
+ * [token] is the gesture's lifecycle identity from the view model: only the newest gesture — and
+ * only until another begins, a manual selection change happens or the gesture ends — may write
+ * into the selection. A stale session (e.g. an update of gesture A arriving after gesture B
+ * began) must be dropped, or it would rebuild the selection from its outdated [initial].
  */
 internal class RangeSelectionSession(
     val page: PageIdentity,
@@ -23,6 +28,7 @@ internal class RangeSelectionSession(
     val anchorIndex: Int,
     val select: Boolean,
     val initial: Map<String, WifiCameraCapture>,
+    val token: Long,
 )
 
 /**
