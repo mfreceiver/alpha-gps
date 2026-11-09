@@ -18,3 +18,4 @@
 ## 语言资源纪律
 - 仅支持英文基线（`values/`）+ 简体中文（`values-zh-rCN/`）；其余语言已移除，`app/build.gradle.kts` 用 `androidResources.localeFilters`（en、zh-rCN）屏蔽依赖库语言。
 - 新增文案只需写 `values/` 与 `values-zh-rCN/` 两处（app 的 `app/src/main/res` 与 sharednew 的 `commonMain/composeResources` 同理），不要新增其它语言目录。
+- 删减语言后必须清理 sharednew/build 的 compose 资源生成目录再验证 APK，增量构建会残留旧语言。
