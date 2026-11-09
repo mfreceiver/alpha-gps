@@ -8,8 +8,14 @@ data class DateGroup(val key: String, val count: Int) {
     val isUnknown: Boolean get() = key == UNKNOWN_DATE_KEY
 }
 
-private val legacyDate = Regex("""^(\d{4})(\d{2})(\d{2})T.*""")
-private val isoDate = Regex("""^(\d{4})-(\d{2})-(\d{2})T.*""")
+// Full date-time stamps, strictly: the legacy PTP form `YYYYMMDDThhmmss` and the v4 catalog
+// ISO form `YYYY-MM-DDThh:mm[:ss]` (LocalDateTime serializes without seconds when they are
+// zero). Both tolerate a fractional-second part and a trailing zone marker, which is never
+// converted — only its numeric plausibility is checked.
+private val legacyDateTime =
+    Regex("""(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(?:\.\d+)?(Z|[+-]\d{2}:?\d{2})?""")
+private val isoDateTime =
+    Regex("""(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(Z|[+-]\d{2}:\d{2})?""")
 
 private fun isLeap(year: Int) = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
 
@@ -20,18 +26,50 @@ private fun daysIn(year: Int, month: Int) = when (month) {
 }
 
 /**
- * The camera-recorded local calendar day as `YYYY-MM-DD`, or null when the value is absent or not a
- * strictly valid date. Both the legacy PTP form `YYYYMMDDThhmmss` and the v4 catalog ISO form
- * `YYYY-MM-DDThh:mm:ss` are understood; no time-zone conversion is ever applied.
+ * The camera-recorded local calendar day as `YYYY-MM-DD`, or null when the value is absent or
+ * not a strictly valid date-time. Both the legacy PTP form `YYYYMMDDThhmmss` and the v4 catalog
+ * ISO form `YYYY-MM-DDThh:mm[:ss]` (seconds optional, as LocalDateTime emits them) are
+ * understood; a fractional-second part and a trailing `Z`/numeric zone marker are tolerated.
+ * No time-zone conversion is ever applied. Anything else — impossible clock values included —
+ * is not a camera date and lands in the unknown group.
  */
 internal fun cameraDateKey(capturedAt: String): String? {
-    val match = legacyDate.matchEntire(capturedAt) ?: isoDate.matchEntire(capturedAt) ?: return null
-    val (year, month, day) = match.destructured.let {
-        Triple(it.component1().toInt(), it.component2().toInt(), it.component3().toInt())
+    fun dateKey(year: Int, month: Int, day: Int): String? {
+        if (year !in 1900..9999 || month !in 1..12 || day !in 1..daysIn(year, month)) return null
+        return "${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-" +
+                day.toString().padStart(2, '0')
     }
-    if (year !in 1900..9999 || month !in 1..12 || day !in 1..daysIn(year, month)) return null
-    return "${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-" +
-            day.toString().padStart(2, '0')
+
+    fun validTime(hour: Int, minute: Int, second: Int?): Boolean =
+        hour < 24 && minute < 60 && (second == null || second < 60)
+
+    fun plausibleOffset(offset: String?): Boolean {
+        if (offset == null || offset == "Z") return true
+        val digits = offset.filter { it.isDigit() }
+        return digits.take(2).toInt() < 24 && digits.substring(2).toInt() < 60
+    }
+
+    legacyDateTime.matchEntire(capturedAt)?.let { m ->
+        return if (
+            validTime(m.groupValues[4].toInt(), m.groupValues[5].toInt(), m.groupValues[6].toInt()) &&
+            plausibleOffset(m.groups[7]?.value)
+        ) {
+            dateKey(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[3].toInt())
+        } else {
+            null
+        }
+    }
+    isoDateTime.matchEntire(capturedAt)?.let { m ->
+        return if (
+            validTime(m.groupValues[4].toInt(), m.groupValues[5].toInt(), m.groups[6]?.value?.toInt()) &&
+            plausibleOffset(m.groups[7]?.value)
+        ) {
+            dateKey(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[3].toInt())
+        } else {
+            null
+        }
+    }
+    return null
 }
 
 /**

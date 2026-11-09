@@ -19,6 +19,10 @@ class WifiCatalogSnapshotTest {
         assertEquals("2024-05-01", cameraDateKey("20240501T123045"))
         assertEquals("2024-05-01", cameraDateKey("20240501T235959.0+0800"))
         assertEquals("2024-05-01", cameraDateKey("2024-05-01T12:30:45"))
+        assertEquals("2024-05-01", cameraDateKey("2024-05-01T12:30"))
+        assertEquals("2024-05-01", cameraDateKey("2024-05-01T12:30:45.123Z"))
+        assertEquals("2024-05-01", cameraDateKey("2024-05-01T12:30:45+08:00"))
+        assertEquals("2024-05-01", cameraDateKey("20240501T123045.5-0500"))
         assertEquals("2024-12-31", cameraDateKey("2024-12-31T23:59:59"))
         assertEquals("2024-02-29", cameraDateKey("20240229T000000"))
         assertEquals("1970-01-01", cameraDateKey("1970-01-01T00:00:01"))
@@ -30,6 +34,20 @@ class WifiCatalogSnapshotTest {
             "", "unknown", "20240501", "2024-05-01", "20241301T000000", "20240001T000000",
             "20240230T000000", "20230229T000000", "20240431T000000", "20240532T000000",
             "00000101T000000", "18991231T000000", "2024/05/01T12:00:00", " 20240501T120000"
+        )) assertNull(cameraDateKey(bad), "'$bad' must not form a date")
+    }
+
+    @Test
+    fun rejectsPlausibleDatesWithImpossibleOrTruncatedTimes() {
+        for (bad in listOf(
+            // Legacy PTP form: everything after the date must be a full hhmmss clock.
+            "20240501Tgarbage", "20240501T123045x", "20240501T1230", "20240501T240000",
+            "20240501T126045", "20240501T123060", "20240501T123045.99:30",
+            // ISO form: seconds optional but clock values still strict.
+            "2024-05-01T99:99:99", "2024-05-01T24:00:00", "2024-05-01T12:60",
+            "2024-05-01T12:30:60", "2024-05-01 12:00:00", "2024-05-01T12:30:",
+            // Zone markers must be numerically plausible when present.
+            "2024-05-01T12:30:45+99:99", "20240501T123045+2400"
         )) assertNull(cameraDateKey(bad), "'$bad' must not form a date")
     }
 
