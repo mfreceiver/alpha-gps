@@ -62,31 +62,21 @@ class WifiFormatPolicyTest {
     // --- grid badge -----------------------------------------------------------------
 
     @Test
-    fun originalBadgeListsEveryFormat() {
-        assertEquals(WifiFormatBadge.Label("JPEG + RAW"), jpgRaw.formatBadge(WifiFormatPolicy.Original, false))
-        assertEquals(WifiFormatBadge.Label("RAW + JPEG"), rawJpg.formatBadge(WifiFormatPolicy.Original, true))
-        assertEquals(WifiFormatBadge.Label("RAW"), rawOnly.formatBadge(WifiFormatPolicy.Original, true))
-        assertEquals(WifiFormatBadge.Label("RAW + HEIF + JPEG"), multi.formatBadge(WifiFormatPolicy.Original, true))
+    fun badgeReadsOnlyTheFileFormatsAndNeverThePolicyOrPlatform() {
+        assertEquals("J&R", jpgRaw.formatBadge())
+        assertEquals("J&R", rawJpg.formatBadge(), "Order of the files does not matter")
+        assertEquals("JPG", jpgOnly.formatBadge())
+        assertEquals("RAW", rawOnly.formatBadge())
+        assertEquals("HEIF", heifOnly.formatBadge(), "A HEIF is shown as HEIF, never disguised as JPG")
+        assertEquals("H&R", heifRaw.formatBadge())
+        assertEquals("J&H&R", multi.formatBadge())
     }
 
     @Test
-    fun jpegOnlyBadgeIsHiddenExceptForRawOnlyPhotos() {
-        val policy = WifiFormatPolicy.JpegOnly
-        assertEquals(WifiFormatBadge.None, jpgRaw.formatBadge(policy, false), "No '+ RAW' in JPG mode")
-        assertEquals(WifiFormatBadge.None, rawJpg.formatBadge(policy, false))
-        assertEquals(WifiFormatBadge.None, jpgOnly.formatBadge(policy, false))
-        assertEquals(WifiFormatBadge.None, multi.formatBadge(policy, false))
-        assertEquals(WifiFormatBadge.RawOnly, rawOnly.formatBadge(policy, true))
-        assertEquals(WifiFormatBadge.RawOnly, rawOnly.formatBadge(policy, false))
-    }
-
-    @Test
-    fun jpegOnlyBadgeNeverMentionsRawEvenWithoutAUsableJpeg() {
-        val policy = WifiFormatPolicy.JpegOnly
-        // HEIF the platform cannot convert: name the HEIF, hide the RAW companion.
-        assertEquals(WifiFormatBadge.Label("HEIF"), heifRaw.formatBadge(policy, false))
-        assertEquals(WifiFormatBadge.Label("HEIF"), heifOnly.formatBadge(policy, false))
-        assertEquals(WifiFormatBadge.None, heifRaw.formatBadge(policy, true))
+    fun badgeIsAbsentWhenNoFileHasAKnownFormat() {
+        assertNull(capture("x", file(30, "application/octet-stream")).formatBadge())
+        assertNull(WifiCameraCapture("empty", emptyList()).formatBadge())
+        assertEquals("JPG", capture("y", file(31, jpegMime), file(32, "application/octet-stream")).formatBadge())
     }
 
     // --- details page ---------------------------------------------------------------

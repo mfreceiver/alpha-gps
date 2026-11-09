@@ -79,6 +79,7 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
 import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
 import com.sasch.cameragps.sharednew.remote.wifi.WifiJpegBatchPlan
+import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoBrowserState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteController
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteFailure
@@ -247,6 +248,52 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         recordBatchSummary(null)
         selectedPhotos = selectedPhotos +
                 groupCameraPhotos(state.photoBrowser.photos).associateBy { it.id }
+    }
+
+    private fun WifiPhotoBrowserState.identity() =
+        PageIdentity(browserGeneration, dateKey, offset, pageRevision)
+
+    /**
+     * Starts a long-press-and-drag selection at the capture [anchorId] of the current page and applies
+     * the anchor itself right away (anchor selected -> the gesture deselects, otherwise it selects).
+     * Refused (null) while the browser is loading, a transfer runs, the viewer is open or the anchor is
+     * not on this page.
+     */
+    internal fun beginRangeSelection(anchorId: String): RangeSelectionSession? {
+        val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return null
+        val browser = state.photoBrowser
+        if (!browser.open || browser.loading || state.imageTransfer.busy || viewedPhotoIndex != null) return null
+        val captures = groupCameraPhotos(browser.photos)
+        val anchor = captures.indexOfFirst { it.id == anchorId }
+        if (anchor < 0) return null
+        val session = RangeSelectionSession(
+            page = browser.identity(),
+            pageIds = captures.map { it.id },
+            anchorIndex = anchor,
+            select = anchorId !in selectedPhotos,
+            initial = selectedPhotos,
+        )
+        recordBatchSummary(null)
+        selectedPhotos = rangeSelectionResult(session.initial, captures, anchor, anchor, session.select)
+        return session
+    }
+
+    /**
+     * Moves the gesture's end to capture [endIndex] and sets or unsets the whole closed range against
+     * the selection from before the gesture. Returns false when the gesture is stale — another page,
+     * day or catalog generation, a load/transfer started, or the viewer opened — and the caller must
+     * end it; a stale gesture never writes into the selection.
+     */
+    internal fun updateRangeSelection(session: RangeSelectionSession, endIndex: Int): Boolean {
+        val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return false
+        val browser = state.photoBrowser
+        if (!browser.open || browser.loading || state.imageTransfer.busy || viewedPhotoIndex != null) return false
+        if (browser.identity() != session.page) return false
+        val captures = groupCameraPhotos(browser.photos)
+        if (captures.map { it.id } != session.pageIds || endIndex !in captures.indices) return false
+        val result = rangeSelectionResult(session.initial, captures, session.anchorIndex, endIndex, session.select)
+        if (result != selectedPhotos) selectedPhotos = result
+        return true
     }
 
     fun clearPhotoSelection() {
