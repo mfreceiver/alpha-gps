@@ -10,6 +10,63 @@
 rl_fail() { echo "FAIL $1" >&2; }   # 注意：调用方必须紧跟 `return 1`（在 `||` 里不会替调用方退出函数）
 rl_warn() { echo "WARN $1" >&2; }
 
+# assert_asset_url_trusted <url> <host[:port]> <owner/repo> <tag> <asset文件名>
+#   Primary forge 资产下载 URL 同源校验（纯函数、无网络），全部用 python3 urllib.parse
+#   解析（不用正则猜），fail-closed：
+#     - URL 非空、不含控制字符（<0x20/0x7f）、空白、反斜杠、'@'（userinfo 旁路）；
+#     - scheme 恰为 https；
+#     - netloc（host[:port]）与期望精确相等（大小写敏感、无默认端口省略余地）；
+#     - 无 userinfo（urlsplit 的 username/password 为 None）；
+#     - path 恰等于 /<owner/repo>/releases/download/<tag>/<asset>（精确整串相等，
+#       同时覆盖 `..`、`%2e%2e`、错误 repo、错误 tag、前缀拼接等一切路径偏移）；
+#     - query/fragment 必须为空（urlsplit 无独立 params；';' 留在 path 中，
+#       被精确整串比较天然拒绝）。
+#   任一不满足 → stderr FAIL + 非零返回。
+assert_asset_url_trusted() {
+  local url=${1:-} host=${2:-} repo=${3:-} tag=${4:-} asset=${5:-}
+  [[ -n "$host" && -n "$repo" && -n "$tag" && -n "$asset" ]] \
+    || { rl_fail "资产 URL 校验: 参数不完整（host/repo/tag/asset），fail-closed"; return 1; }
+  if [[ -z "$url" ]]; then
+    rl_fail "资产 URL 校验: URL 为空，fail-closed"
+    return 1
+  fi
+  if ! python3 - "$url" "$host" "$repo" "$tag" "$asset" <<'PY'
+import sys
+from urllib.parse import urlsplit
+
+url, host, repo, tag, asset = sys.argv[1:6]
+
+def fail(msg):
+    sys.stderr.write(f"FAIL 资产 URL 校验: {msg}，fail-closed\n")
+    sys.exit(1)
+
+for c in url:
+    if ord(c) < 0x20 or ord(c) == 0x7F or c.isspace() or c == "\\":
+        fail(f"URL 含控制字符/空白/反斜杠（ord={ord(c):#x}）")
+if "@" in url:
+    fail("URL 含 '@'（userinfo 旁路）")
+if not url.startswith("https://"):
+    fail(f"URL 必须以小写 'https://' 开头（scheme 大小写严格），实际开头: {url[:12]!r}")
+p = urlsplit(url)
+if p.scheme != "https":
+    fail(f"scheme 必须是 https，实际 '{p.scheme or '(空)'}'")
+if p.username is not None or p.password is not None:
+    fail("URL 含 userinfo（username/password）")
+if p.netloc != host:
+    fail(f"host:port 必须精确等于 '{host}'，实际 '{p.netloc}'")
+expected_path = f"/{repo}/releases/download/{tag}/{asset}"
+if p.path != expected_path:
+    fail(f"path 必须精确等于 '{expected_path}'，实际 '{p.path}'")
+if p.query or p.fragment:
+    fail("query/fragment 必须为空")
+sys.exit(0)
+PY
+  then
+    rl_fail "资产 URL 校验失败: $url（fail-closed）"
+    return 1
+  fi
+}
+
 # rl_check_code <值>: canonical 十进制正整数（^[1-9][0-9]{0,9}$）且 ≤ 2147483647
 #   （Android Int 上限；10 位时用等长字符串字典序比较，不进算术，避免 2^31/2^63 回绕）。
 rl_check_code() {
