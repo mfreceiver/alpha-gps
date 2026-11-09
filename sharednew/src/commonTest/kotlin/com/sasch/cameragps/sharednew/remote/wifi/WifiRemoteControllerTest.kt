@@ -2271,4 +2271,99 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             exception
         }
 
+
+    @Test
+    fun topBarDownloadInJpegOnlyModeStartsThePlanAndRemembersTheSummary() = runTest {
+        val registry = CameraSessionRegistry()
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> pagedConnection() }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        model.togglePhotoSelection("photo:0")
+        model.togglePhotoSelection("photo:1")
+        val state = registry.get("camera")!!.wifiRemote
+        val started = mutableListOf<List<WifiPhotoDownload>>()
+
+        model.requestBatchDownload(WifiFormatPolicy.JpegOnly, state) { started += it }
+
+        // One JPG per capture, never the RAW companions; the sheet stays closed.
+        assertEquals(listOf(listOf(WifiPhotoDownload(0), WifiPhotoDownload(2))), started)
+        assertEquals(2, model.batchSummary?.downloaded)
+        assertFalse(model.showBatchOptions)
+        // The selection survives so the result line can be shown over it.
+        assertEquals(setOf("photo:0", "photo:1"), model.selectedPhotoIds)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun topBarDownloadInOriginalModeOpensTheFormatSheetAndClearingClosesIt() = runTest {
+        val registry = CameraSessionRegistry()
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> pagedConnection() }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        model.togglePhotoSelection("photo:0")
+        val state = registry.get("camera")!!.wifiRemote
+        var started = 0
+
+        model.requestBatchDownload(WifiFormatPolicy.Original, state) { started++ }
+
+        assertTrue(model.showBatchOptions)
+        assertEquals(0, started, "Original mode asks for formats first")
+        model.clearPhotoSelection()
+        assertFalse(model.showBatchOptions)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun topBarDownloadWithNothingToDownloadDoesNothing() = runTest {
+        val registry = CameraSessionRegistry()
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> pagedConnection() }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        val state = registry.get("camera")!!.wifiRemote
+        var started = 0
+
+        // No selection at all.
+        model.requestBatchDownload(WifiFormatPolicy.Original, state) { started++ }
+        model.requestBatchDownload(WifiFormatPolicy.JpegOnly, state) { started++ }
+
+        assertFalse(model.showBatchOptions)
+        assertEquals(0, started)
+        assertNull(model.batchSummary)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun topBarDisconnectEndsTheSessionDropsTheSelectionAndLeavesTheScreen() = runTest {
+        val registry = CameraSessionRegistry()
+        val controller =
+            WifiRemoteController(backgroundScope, registry, { _, _ -> pagedConnection() }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        model.togglePhotoSelection("photo:0")
+        var exits = 0
+
+        model.disconnectAndExit { exits++ }
+
+        assertEquals(1, exits)
+        assertTrue(model.selectedPhotoIds.isEmpty())
+        assertEquals(WifiRemotePhase.Closing, registry.get("camera")?.wifiRemote?.phase)
+        runCurrent()
+        assertNull(registry.get("camera"))
+        controller.closeAndJoin()
+    }
 }
