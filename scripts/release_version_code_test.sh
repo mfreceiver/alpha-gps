@@ -313,7 +313,23 @@ setup_wiring_sandbox() { # $1=沙箱根
   cat > "$SB/gradlew" <<'GW'
 #!/usr/bin/env bash
 mkdir -p app/build/outputs/apk/foss/release
-: > app/build/outputs/apk/foss/release/app-foss-release.apk
+# 生成真实 zip 形态的 fake APK（供 release_assert_apk.sh 的 python3 zipfile ABI 检查）。
+# APK_ABI_MODE: good=仅 lib/arm64-v8a（含 .so）/ bad=混入 armeabi-v7a / none=无 lib 条目
+python3 - <<'PZ'
+import os, zipfile
+p = "app/build/outputs/apk/foss/release/app-foss-release.apk"
+mode = os.environ.get("APK_ABI_MODE", "good")
+with zipfile.ZipFile(p, "w") as z:
+    z.writestr("AndroidManifest.xml", "")
+    if mode == "good":
+        z.writestr("lib/arm64-v8a/libsqliteJni.so", b"\x7fELF-arm64")
+        z.writestr("lib/arm64-v8a/libalpha_heif.so", b"\x7fELF-arm64")
+    elif mode == "bad":
+        z.writestr("lib/arm64-v8a/libsqliteJni.so", b"\x7fELF-arm64")
+        z.writestr("lib/armeabi-v7a/libsqliteJni.so", b"\x7fELF-armv7")
+    elif mode == "none":
+        z.writestr("classes.dex", b"x")
+PZ
 exit 0
 GW
   chmod +x "$SB/gradlew"
@@ -344,10 +360,10 @@ AAPT
   ( cd "$SB" && git remote add primary "$TMP/wvectory.git" )
 }
 
-run_wiring() { # $1=SB $2=AAPT_CODE $3=输出log
+run_wiring() { # $1=SB $2=AAPT_CODE $3=输出log；APK_ABI_MODE 经 env 透传（默认 good）
   ( cd "$1" && PATH="$1/home/jdk/bin:$PATH" HOME="$1/home" JAVA_HOME="$1/home/jdk" \
       DSH_KEYSTORE_PASSWORD=x DSH_KEY_PASSWORD=x \
-      AAPT_CODE="$2" AAPT_VNAME=0.1.3 \
+      AAPT_CODE="$2" AAPT_VNAME=0.1.3 APK_ABI_MODE="${APK_ABI_MODE:-good}" \
       timeout 30 bash scripts/release_build.sh 0.1.3 --allow-dirty ) > "$3" 2>&1
 }
 
@@ -372,7 +388,8 @@ echo "== 场景 23: publish-only 对 LEGACY tag（v0.1.2）使用表值 3（沙�
 SB3=$TMP/wire3; setup_wiring_sandbox "$SB3"
 # v0.1.1（LEGACY=2，早期提交）+ v0.1.2（HEAD）；归档 0.1.2 并让 fake aapt 报 code=3
 ( cd "$SB3" && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m pre && git tag v0.1.1 )
-mkdir -p "$SB3/release"; : > "$SB3/release/alpha-gps-0.1.2.apk"
+mkdir -p "$SB3/release"
+python3 -c 'import zipfile; z=zipfile.ZipFile("'"$SB3"'/release/alpha-gps-0.1.2.apk","w"); z.writestr("AndroidManifest.xml",""); z.writestr("lib/arm64-v8a/libsqliteJni.so",b"\x7fELF")'
 ( cd "$SB3" && sha256sum release/alpha-gps-0.1.2.apk > release/SHA256SUMS \
   && git add -A && git -c user.email=t@t -c user.name=t commit -qm archive && git tag v0.1.2 )
 ( cd "$SB3" && PATH="$SB3/home/jdk/bin:$PATH" HOME="$SB3/home" JAVA_HOME="$SB3/home/jdk" \
@@ -469,6 +486,27 @@ check "set -e 下无 key → rc=1 且错误含『恰好 1 行』（非静默提�
 # set -e 下正例仍正常
 OUT=$(bash -e -c "source '$LIB'; parse_version_code_props '$TMP/xrc2.props'" 2>/dev/null); RC=$?
 check "set -e 下正例 → 7" test "$RC" -eq 0 -a "$OUT" == "7"
+
+echo "== 场景 28: wiring — APK 混入 armeabi-v7a → ABI 断言拦截（仅 arm64-v8a） =="
+SB5=$TMP/wire5; setup_wiring_sandbox "$SB5"
+( cd "$SB5" && PATH="$SB5/home/jdk/bin:$PATH" HOME="$SB5/home" JAVA_HOME="$SB5/home/jdk" \
+    DSH_KEYSTORE_PASSWORD=x DSH_KEY_PASSWORD=x \
+    AAPT_CODE="$FIXTURE_CODE" AAPT_VNAME=0.1.3 APK_ABI_MODE=bad \
+    timeout 30 bash scripts/release_build.sh 0.1.3 --allow-dirty ) > "$TMP/wire5.log" 2>&1; RC=$?
+check "release_build.sh 非零退出" test "$RC" -ne 0 -a "$RC" -ne 124
+check "日志含『非 arm64-v8a 的 native 库目录』" grep -q "非 arm64-v8a 的 native 库目录" "$TMP/wire5.log"
+check "日志点名 lib/armeabi-v7a" grep -q "armeabi-v7a" "$TMP/wire5.log"
+
+echo "== 场景 29: wiring — lib/ 无任何 .so → ABI 断言拦截 =="
+SB6=$TMP/wire6; setup_wiring_sandbox "$SB6"
+( cd "$SB6" && PATH="$SB6/home/jdk/bin:$PATH" HOME="$SB6/home" JAVA_HOME="$SB6/home/jdk" \
+    DSH_KEYSTORE_PASSWORD=x DSH_KEY_PASSWORD=x \
+    AAPT_CODE="$FIXTURE_CODE" AAPT_VNAME=0.1.3 APK_ABI_MODE=none \
+    timeout 30 bash scripts/release_build.sh 0.1.3 --allow-dirty ) > "$TMP/wire6.log" 2>&1; RC=$?
+check "release_build.sh 非零退出" test "$RC" -ne 0 -a "$RC" -ne 124
+check "日志含『没有任何 .so』" grep -q "没有任何 .so" "$TMP/wire6.log"
+
+# 场景 22 的 good 模式即 ABI 正例：仅 arm64-v8a 且含 .so → 全链通过（已覆盖）
 
 echo
 SCENARIOS=$(grep -c '^echo "== 场景' -- "$0")
