@@ -467,4 +467,17 @@
     <string name="wifi_remote_batch_download_none">Nothing to download</string>
     <string name="wifi_remote_batch_download_size">Download %1$d files (%2$s)</string>
     <string name="wifi_remote_batch_original_hint">Downloads every original file of the selected photos (for example JPG and RAW together). Files already saved or over the size limit are skipped.</string>
+    <string name="device_connection_connect">Connect</string>
+    <string name="device_connection_disconnect">Disconnect</string>
+    <string name="device_connection_disconnecting">Disconnecting…</string>
+    <string name="device_info_keep_active">Keep active</string>
+    <string name="device_info_keep_active_hint">Keeps the background service running for this camera while it is out of range. Leaving the app still disconnects it.</string>
+    <string name="device_info_auto_time">Auto time correction</string>
+    <string name="device_info_auto_area">Auto area adjustment</string>
+    <string name="device_info_setting_enabled">On (the app keeps it on)</string>
+    <string name="device_info_setting_off">Off – switched on after connecting</string>
+    <string name="device_info_setting_unsupported">Not supported by this camera</string>
+    <string name="device_info_setting_unknown">Unknown (camera not connected)</string>
+    <string name="device_info_mtu">Bluetooth MTU</string>
+    <string name="device_info_mtu_value">%1$d bytes</string>
 </resources>

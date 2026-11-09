@@ -20,6 +20,15 @@ interface DeviceDetailDataSource {
 interface DeviceDetailServiceActions {
     fun startAlwaysOn(deviceAddress: String)
     fun requestShutdown(deviceAddress: String)
+
+    /** Explicit user Connect: ask the platform to connect this camera now. */
+    fun connect(deviceAddress: String) = Unit
+
+    /** Explicit user Disconnect: really close this one camera's link (not a pause). */
+    fun disconnect(deviceAddress: String) = Unit
+
+    /** Start/stop the platform's "camera appeared" observation that auto-connects the camera. */
+    fun setPresenceObservation(deviceAddress: String, enabled: Boolean) = Unit
 }
 
 data class DeviceDetailToggleState(
@@ -36,30 +45,28 @@ class DeviceDetailStateStore(
     val uiState: StateFlow<DeviceDetailToggleState> = _uiState.asStateFlow()
 
     /**
-     * Loads the row. The "enable device" and "always on" switches no longer exist
-     * in the UI, so flags persisted by earlier versions are normalised here: a
-     * device must not stay disabled with no way to re-enable it, and always-on is
-     * off (exiting the app disconnects the camera).
+     * Loads the row and publishes its real flags: "disabled" is the user's manual disconnect and
+     * must survive leaving and re-opening the screen. [reEnableDisabled] exists only for iOS,
+     * which has no connect button yet and so must not leave a device disabled for good.
      *
-     * @return true when a previously disabled device was re-enabled, so the
-     * platform can restore presence observation.
+     * @return true when a previously disabled device was re-enabled ([reEnableDisabled]).
      */
-    suspend fun load(deviceId: String, deviceName: String? = null): Boolean {
+    suspend fun load(deviceId: String, deviceName: String? = null, reEnableDisabled: Boolean = false): Boolean {
         val normalized = deviceId.uppercase()
         dataSource.ensureDeviceExists(normalized, deviceName)
+        var enabled = dataSource.isDeviceEnabled(normalized)
         var reEnabled = false
-        if (!dataSource.isDeviceEnabled(normalized)) {
+        if (!enabled && reEnableDisabled) {
             dataSource.setDeviceEnabled(normalized, true)
+            enabled = true
             reEnabled = true
         }
-        if (dataSource.isAlwaysOnEnabled(normalized)) {
-            dataSource.setAlwaysOnEnabled(normalized, false)
-        }
+        val alwaysOn = dataSource.isAlwaysOnEnabled(normalized)
         _uiState.update {
             it.copy(
                 deviceName = dataSource.getDeviceName(normalized) ?: deviceName.orEmpty(),
-                isAlwaysOnEnabled = false,
-                isDeviceEnabled = true,
+                isAlwaysOnEnabled = alwaysOn,
+                isDeviceEnabled = enabled,
             )
         }
         return reEnabled

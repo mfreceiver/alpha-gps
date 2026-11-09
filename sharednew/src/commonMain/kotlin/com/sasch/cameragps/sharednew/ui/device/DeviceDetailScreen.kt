@@ -18,6 +18,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,7 +39,10 @@ import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.camera_24px
 import cameragps.sharednew.generated.resources.cancel_button
 import cameragps.sharednew.generated.resources.connected
+import cameragps.sharednew.generated.resources.device_connection_connect
 import cameragps.sharednew.generated.resources.device_connection_connecting
+import cameragps.sharednew.generated.resources.device_connection_disconnect
+import cameragps.sharednew.generated.resources.device_connection_disconnecting
 import cameragps.sharednew.generated.resources.device_connection_status
 import cameragps.sharednew.generated.resources.keyboard_arrow_right_24px
 import cameragps.sharednew.generated.resources.rename_camera_hint
@@ -70,11 +74,14 @@ fun DeviceDetailContent(
     onPresentSystemRename: (() -> Unit)? = null,
     renameEnabled: Boolean = true,
     onWifiRemote: (() -> Unit)? = null,
+    /** Android: show the connect/disconnect button under the status (iOS has no such control yet). */
+    connectionControls: Boolean = false,
 ) {
     val state = viewModel.uiState.collectAsState().value
     val sessions by viewModel.sessions.collectAsState()
     val session = sessions[deviceId.uppercase()]
     val status = deviceConnectionStatus(session)
+    val pending by viewModel.pending.collectAsState()
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         viewModel.refreshCameraSettings(deviceId)
@@ -111,6 +118,31 @@ fun DeviceDetailContent(
                     onPresentSystemRename = onPresentSystemRename,
                     onRenameInApp = { newName -> viewModel.renameDevice(deviceId, newName) },
                 )
+                if (connectionControls) {
+                    val button = deviceConnectionButton(status, pending)
+                    OutlinedButton(
+                        onClick = {
+                            when (button) {
+                                DeviceConnectionButton.Connect -> viewModel.connect(deviceId)
+                                DeviceConnectionButton.Disconnect -> viewModel.disconnect(deviceId)
+                                else -> Unit
+                            }
+                        },
+                        enabled = button.enabled,
+                        modifier = Modifier.padding(top = 12.dp),
+                    ) {
+                        Text(
+                            stringResource(
+                                when (button) {
+                                    DeviceConnectionButton.Connect -> Res.string.device_connection_connect
+                                    DeviceConnectionButton.Connecting -> Res.string.device_connection_connecting
+                                    DeviceConnectionButton.Disconnect -> Res.string.device_connection_disconnect
+                                    DeviceConnectionButton.Disconnecting -> Res.string.device_connection_disconnecting
+                                },
+                            ),
+                        )
+                    }
+                }
             }
 
             if (onWifiRemote != null) {
@@ -230,7 +262,7 @@ private fun ConnectionStatusEntry(status: DeviceConnectionStatus) {
 }
 
 @Composable
-private fun RenameCameraDialog(
+internal fun RenameCameraDialog(
     currentName: String,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,

@@ -8,6 +8,7 @@ import java.util.Locale
 class ServiceCommandRouter {
     companion object {
         const val ACTION_DEVICE_DISAPPEARED = "com.saschl.cameragps.ACTION_DEVICE_DISAPPEARED"
+        const val ACTION_DISCONNECT_DEVICE = "com.saschl.cameragps.ACTION_DISCONNECT_DEVICE"
 
         /** Extra holding a [RemoteCommand] enum name for [SonyBluetoothConstants.ACTION_SEND_REMOTE_COMMAND]. */
         const val EXTRA_REMOTE_COMMAND = "remoteCommand"
@@ -22,6 +23,14 @@ class ServiceCommandRouter {
                 ServiceCommand.Ignore("Device disappearance ignored because address is missing")
             } else {
                 ServiceCommand.DeviceDisappeared(address)
+            }
+        }
+
+        if (action == ACTION_DISCONNECT_DEVICE) {
+            return if (address == null) {
+                ServiceCommand.Ignore("Disconnect ignored because address is missing")
+            } else {
+                ServiceCommand.Disconnect(address)
             }
         }
 

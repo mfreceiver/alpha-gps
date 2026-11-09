@@ -270,3 +270,22 @@ fun startDevicePresenceObservation(
         }
     }
 }
+
+/**
+ * Stops the presence observation of a camera the user manually disconnected, so the system no
+ * longer starts the service when it appears. [startDevicePresenceObservation] restores it.
+ */
+fun stopDevicePresenceObservation(
+    deviceManager: CompanionDeviceManager,
+    device: AssociatedDeviceCompat
+) {
+    Timber.i("Stopping device presence observation for ${device.name}")
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+        deviceManager.stopObservingDevicePresence(
+            ObservingDevicePresenceRequest.Builder().setAssociationId(device.id).build()
+        )
+    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        @Suppress("DEPRECATION")
+        deviceManager.stopObservingDevicePresence(device.address)
+    }
+}

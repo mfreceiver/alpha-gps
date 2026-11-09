@@ -55,6 +55,10 @@ interface CameraDeviceDAO {
     @Query("SELECT count(1) FROM camera_devices WHERE alwaysOnEnabled = 1")
     suspend fun getAlwaysOnEnabledDeviceCount(): Int
 
+    /** Enabled devices whose "keep active" switch asks the service to linger while they are away. */
+    @Query("SELECT count(1) FROM camera_devices WHERE deviceEnabled = 1 AND alwaysOnEnabled = 1")
+    suspend fun getKeepActiveDeviceCount(): Int
+
     /** Saved devices eligible for automatic reconnection (BOOT / package replacement). */
     @Query("SELECT count(1) FROM camera_devices WHERE deviceEnabled = 1")
     suspend fun getEnabledDeviceCount(): Int

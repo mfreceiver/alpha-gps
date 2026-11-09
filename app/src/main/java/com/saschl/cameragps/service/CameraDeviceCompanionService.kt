@@ -12,7 +12,12 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.core.app.ActivityCompat
 import androidx.core.content.getSystemService
+import com.saschl.cameragps.AppServices
+import com.saschl.cameragps.service.coordinator.isConnectAllowed
 import com.saschl.cameragps.utils.PreferencesManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.util.Locale
 
@@ -20,10 +25,31 @@ import java.util.Locale
 @RequiresApi(Build.VERSION_CODES.S)
 class CameraDeviceCompanionService : CompanionDeviceService() {
 
+    private companion object {
+        const val ENABLED_LOOKUP_TIMEOUT_MS = 1_500L
+    }
+
     private fun startLocationSenderService(address: String?) {
         if (PreferencesManager.isAppEnabled(this)) {
             if (!LocationSenderService.hasLocationPermission(this)) {
                 Timber.e("Location permission missing, not starting LocationSenderService for $address")
+                return
+            }
+
+            // A camera the user manually disconnected stays disconnected: do not even start the
+            // service for it. Unknown rows and a slow/failed read fail open — the service
+            // re-reads the flag before it connects anything.
+            val enabled = address?.let {
+                runCatching {
+                    runBlocking(Dispatchers.IO) {
+                        withTimeoutOrNull(ENABLED_LOOKUP_TIMEOUT_MS) {
+                            AppServices.from(this@CameraDeviceCompanionService).deviceDao.findDeviceEnabled(it)
+                        }
+                    }
+                }.getOrNull()
+            }
+            if (!isConnectAllowed(enabled)) {
+                Timber.i("Device $address is disabled by the user; ignoring presence")
                 return
             }
 

@@ -52,6 +52,7 @@ class DeviceRemovalCoordinatorTest {
             table.firstOrNull { it.mac == address.uppercase() }?.deviceEnabled
 
         override suspend fun getAlwaysOnEnabledDeviceCount(): Int = 0
+        override suspend fun getKeepActiveDeviceCount(): Int = 0
 
         override suspend fun getEnabledDeviceCount(): Int = table.count { it.deviceEnabled }
 
