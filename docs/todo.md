@@ -8,7 +8,7 @@
 > 5. 按优先级排序（P1 > P2 > P3），同级按紧迫程度。每次编辑后检查是否有已过期条目。
 > 6. 流程与背景说明不放这里（放 README 或 docs/ 下对应文档）；这里只放“还没做的事”。
 
-最后整理：2026-11-08（基线 v0.1.2，versionCode 3）
+最后整理：2026-11-09（基线 v0.1.2，versionCode 3；未发版改动已在分支上）
 
 ## P1
 
@@ -35,3 +35,13 @@
 - 做什么：传输进行中按返回无任何反馈（取消按钮可用）。加提示或确认“结束连接并取消传输？”。
 - 验收：忙时 Back 有明确反馈；补一条 Controller/VM 层测试。
 - 依据：v0.1.0 发版知情清单。
+
+### 6. 补测：队列 Closed → download 报 Protocol
+- 做什么：在 `SonyImageTransferTest.kt` 增加用例：openBrowser 后 `queue.close()`，再 `download`，断言 `failureReason == Protocol`。
+- 验收：用例通过；去掉 `ensureResponded` 对 Closed 的映射时该用例必须失败。
+- 依据：sol 对 a4f756f 的复核（实现分支直接，仅覆盖缺口）；`PtpIpCommandQueueTest.kt:57-67` 现只验证 Closed 解挂。
+
+### 7. README 精度：iOS 保留的德语 string catalog
+- 做什么：README:63-66、88-89 改写为“knownRegions 仅 en/Base；保留的 `iosApp/alphagps/InfoPlist.xcstrings` 仍含历史德语翻译（iOS 默认禁用，未清理）”，或直接删除该文件的 de 条目。
+- 验收：README 陈述与 `InfoPlist.xcstrings`、`project.pbxproj` 实际一致。
+- 依据：sol 对 a4f756f 的复核（InfoPlist.xcstrings:28-54）。
