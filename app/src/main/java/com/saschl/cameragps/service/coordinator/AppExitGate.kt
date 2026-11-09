@@ -16,9 +16,9 @@ import kotlinx.coroutines.launch
  *     during the teardown window and was subsequently torn down too.
  *
  * Every teardown is therefore stamped with the app session it belongs to:
- * [beginSession] re-stamps on a new activity, [cancelPendingExit] re-stamps
- * and cancels on an incoming connection, and [scheduleExit] from a stale
- * owner is rejected outright.
+ * [beginSession] re-stamps on a new activity, [cancelPendingExit] cancels a
+ * pending/running exit without deposing the current owner, and [scheduleExit]
+ * from a stale owner is rejected outright.
  */
 class AppExitGate(private val scope: CoroutineScope) {
 
@@ -33,12 +33,13 @@ class AppExitGate(private val scope: CoroutineScope) {
     }
 
     /**
-     * Voids any pending or running exit teardown. Also bumps the session
-     * token so a teardown still about to be scheduled by a stale caller is
-     * no longer authoritative.
+     * Voids any pending or running exit teardown. The current session owner
+     * keeps its authority: an incoming connection must not depose a still
+     * alive activity, whose own later exit must still be honoured (and still
+     * disconnect). Only [beginSession] — a new foreground activity — supersedes
+     * an owner.
      */
     fun cancelPendingExit() {
-        session = Any()
         exitJob?.cancel()
         exitJob = null
     }

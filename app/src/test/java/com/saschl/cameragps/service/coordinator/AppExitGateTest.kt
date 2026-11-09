@@ -86,6 +86,21 @@ class AppExitGateTest {
     }
 
     @Test
+    fun `the current owner may exit after a connect cancelled a pending exit`() = runBlocking {
+        // Regression: a plain Connect command used to call cancelPendingExit(),
+        // which overwrote the session token; the same activity's later real exit
+        // (back at the root page) was then silently rejected and never disconnected.
+        val g = gate()
+        val activity = Any()
+        g.beginSession(activity)
+        g.cancelPendingExit() // connect command while the activity is alive
+
+        val done = CompletableDeferred<Unit>()
+        g.scheduleExit(owner = activity, teardown = { done.complete(Unit) }, afterwards = {})
+        assertTrue("the still-alive owner must keep exit authority after a connect", done.isCompleted)
+    }
+
+    @Test
     fun `an unowned task-removal exit after a connect still runs`() = runBlocking {
         withTimeout(10_000) {
             val g = gate()
