@@ -23,7 +23,9 @@ import com.sasch.cameragps.sharednew.notification.TransmissionNotificationCoordi
 import com.saschl.cameragps.AppServices
 import com.saschl.cameragps.notification.AndroidTransmissionNotificationPublisher
 import com.saschl.cameragps.notification.NotificationsHelper
+import com.saschl.cameragps.service.coordinator.DeviceDisconnectCoordinator
 import com.saschl.cameragps.service.coordinator.ServicePresenceCoordinator
+import com.saschl.cameragps.service.coordinator.isConnectAllowed
 import com.saschl.cameragps.service.coordinator.ServiceShutdownCoordinator
 import com.saschl.cameragps.service.transport.AndroidBleTransport
 import com.saschl.cameragps.utils.PreferencesManager
@@ -67,11 +69,18 @@ class LocationSenderService : LifecycleService() {
         )
     }
 
+    private val disconnectCoordinator by lazy {
+        DeviceDisconnectCoordinator(
+            closeWifi = { address -> services.wifiRemote.closeAndJoin(address) },
+            closeLink = { address -> transport.disconnectDevice(address) },
+        )
+    }
+
     private val presenceCoordinator by lazy {
         ServicePresenceCoordinator(
             hasConnectedDevices = { transport.connectedCount() > 0 },
-            // Saved devices keep the service alive for automatic reconnection.
-            hasAlwaysOnDevices = { services.deviceDao.getEnabledDeviceCount() > 0 },
+            // Only cameras whose "keep active" switch is on keep the service alive while away.
+            hasAlwaysOnDevices = { services.deviceDao.getKeepActiveDeviceCount() > 0 },
             onShutdownRequested = {
                 Timber.i("No connected or saved cameras remain after presence loss; stopping service")
                 requestShutdown(lastHandledStartId)
@@ -176,15 +185,10 @@ class LocationSenderService : LifecycleService() {
         super.onStartCommand(intent, flags, startId)
 
         val command = commandRouter.route(intent)
-        // A valid connection request starts a new session: any exit teardown that is
-        // still pending or running (e.g. within the 3s Wi-Fi close window of a task
-        // removal) must not tear this connection down afterwards.
-        if (command is ServiceCommand.Connect) {
-            services.cancelPendingExit()
-        }
         // A stop-related startService intent can create a new instance. There is no
         // foreground session to shut down in that case, so don't promote it.
-        if ((command is ServiceCommand.Shutdown || command is ServiceCommand.DeviceDisappeared)
+        if ((command is ServiceCommand.Shutdown || command is ServiceCommand.DeviceDisappeared ||
+                    command is ServiceCommand.Disconnect)
             && !hasForegroundSession
         ) {
             Timber.i("Ignoring stop-related request because no foreground session is running")
@@ -291,18 +295,46 @@ class LocationSenderService : LifecycleService() {
                 }
             }
 
+            is ServiceCommand.Disconnect -> {
+                // The intent is re-read here, inside the command mutex and after any earlier
+                // queued Connect: a camera that was re-enabled meanwhile is not torn down.
+                if (isConnectAllowed(services.deviceDao.findDeviceEnabled(command.address))) {
+                    Timber.i("Ignoring disconnect for ${command.address}: the device is enabled again")
+                    return
+                }
+                Timber.i("Manual disconnect of ${command.address}")
+                disconnectCoordinator.disconnect(command.address)
+                // Nothing connected and no camera asking to be kept alive: let the service end.
+                if (transport.connectedCount() == 0 && services.deviceDao.getKeepActiveDeviceCount() == 0) {
+                    requestShutdown(startId)
+                }
+            }
+
             is ServiceCommand.Connect -> {
+                // Re-read the user's intent at execution time: a camera the user disconnected by
+                // hand stays disconnected for every entry point (CDM appearance, notification,
+                // explicit Connect queued before the disconnect) until they connect it again.
+                if (!isConnectAllowed(services.deviceDao.findDeviceEnabled(command.address))) {
+                    Timber.i("Ignoring connect for ${command.address}: the device is disabled")
+                    if (transport.connectedCount() == 0 && services.deviceDao.getKeepActiveDeviceCount() == 0) {
+                        requestShutdown(startId)
+                    }
+                    return
+                }
+                // A qualifying connection request starts a new session: any exit teardown that is
+                // still pending or running (e.g. within the 3s Wi-Fi close window of a task
+                // removal) must not tear this connection down afterwards.
+                services.cancelPendingExit()
                 presenceCoordinator.onDeviceAppeared(command.address)
                 ensureBluetoothStateReceiver()
                 if (!transport.hasConnection(command.address)) {
                     Timber.i("Service initialized")
                     orchestrator.onConnectRequested(command.address)
-                    runCatching {
-                        transport.connect(command.address)
-                    }.onFailure {
-                        Timber.e("Failed to connect to device, bluetooth is likely turned off")
-                        orchestrator.onConnectFailed(command.address)
-                    }
+                    val started = runCatching { transport.connect(command.address) }
+                        .onFailure { Timber.e("Failed to connect to device, bluetooth is likely turned off") }
+                        .getOrDefault(false)
+                    // A refused connect (not bonded, no GATT) is a failure just like an exception.
+                    if (!started) orchestrator.onConnectFailed(command.address)
                 }
             }
         }

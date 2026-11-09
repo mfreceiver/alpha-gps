@@ -17,6 +17,31 @@ fun deviceConnectionStatus(session: CameraSession?): DeviceConnectionStatus = wh
     else -> DeviceConnectionStatus.Connecting
 }
 
+/** What the user has just asked for and the camera/session has not confirmed yet. */
+enum class PendingConnection { None, Connecting, Disconnecting }
+
+/** The single connect/disconnect button: its label and whether it can be pressed. */
+enum class DeviceConnectionButton(val enabled: Boolean) {
+    Connect(true),
+    Connecting(false),
+    Disconnect(true),
+    Disconnecting(false),
+}
+
+/**
+ * Facts come from the session registry ([status]); only the not-yet-confirmed request comes from
+ * the user's intent ([pending]). A disconnect in flight disables both choices until the session is
+ * really gone, a connect in flight or a handshake under way reads "connecting" and cannot be
+ * pressed again, and a failed or paused session offers "connect" again.
+ */
+fun deviceConnectionButton(status: DeviceConnectionStatus, pending: PendingConnection): DeviceConnectionButton = when {
+    pending == PendingConnection.Disconnecting -> DeviceConnectionButton.Disconnecting
+    status == DeviceConnectionStatus.Connected -> DeviceConnectionButton.Disconnect
+    status == DeviceConnectionStatus.Connecting -> DeviceConnectionButton.Connecting
+    pending == PendingConnection.Connecting -> DeviceConnectionButton.Connecting
+    else -> DeviceConnectionButton.Connect
+}
+
 /**
  * Camera auto time correction / auto area adjustment are always on in this build
  * (there is no switch any more). Returns the settings that should be switched on

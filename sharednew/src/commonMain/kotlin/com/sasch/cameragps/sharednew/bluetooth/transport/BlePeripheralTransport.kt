@@ -122,6 +122,9 @@ interface BlePeripheralTransport {
 
     fun initiateMtuRequest(identifier: String, mtu: Int): Boolean = false
 
+    /** The MTU the link currently uses, if the platform exposes it. Read-only: asking never sends a request. */
+    fun currentMtu(identifier: String): Int? = null
+
     // ---- Operation initiation. Completion arrives via [events]. ----
     // Returning false means the operation could not even be started
     // (no connection, unknown characteristic, platform refusal).

@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import timber.log.Timber
 import java.util.Collections
 import java.util.UUID
+import java.util.WeakHashMap
 
 /**
  * Android implementation of [BlePeripheralTransport] over BluetoothGatt.
@@ -58,6 +59,13 @@ class AndroidBleTransport(
 
     /** Uppercased MAC → connection. Entries survive disconnects (autoConnect). */
     private val connections = Collections.synchronizedMap(mutableMapOf<String, Connection>())
+
+    /**
+     * GATT handles this transport closed itself. A late callback of such a handle must not reach the
+     * event channel: it would be read as news about whatever new connection now owns the address.
+     */
+    private val retiredGatts: MutableSet<BluetoothGatt> =
+        Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<BluetoothGatt, Boolean>()))
 
     /** Last requested enable state per "MAC:UUID", to label SubscriptionChanged events. */
     private val pendingSubscribeEnable =
@@ -111,6 +119,7 @@ class AndroidBleTransport(
             connections.values.toList().also { connections.clear() }
         }
         snapshot.forEach { connection ->
+            retiredGatts.add(connection.gatt)
             runCatching {
                 try {
                     connection.gatt.disconnect()
@@ -119,6 +128,32 @@ class AndroidBleTransport(
                 }
             }.onFailure { Timber.w(it) }
         }
+    }
+
+    /**
+     * The user disconnects exactly this camera: forget the handle, really close the GATT (no
+     * autoConnect left behind) and tell the orchestrator the link is gone. Other cameras are
+     * untouched, and late callbacks of the closed handle are dropped ([retiredGatts]).
+     *
+     * @return true when a connection existed.
+     */
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    fun disconnectDevice(mac: String): Boolean {
+        val address = mac.uppercase()
+        val connection = connections.remove(address) ?: return false
+        retiredGatts.add(connection.gatt)
+        synchronized(pendingSubscribeEnable) {
+            pendingSubscribeEnable.keys.removeAll { it.startsWith("$address:") }
+        }
+        runCatching {
+            try {
+                connection.gatt.disconnect()
+            } finally {
+                connection.gatt.close()
+            }
+        }.onFailure { Timber.w(it) }
+        eventChannel.trySend(BleTransportEvent.Disconnected(address, statusCode = null))
+        return true
     }
 
     /**
@@ -160,6 +195,8 @@ class AndroidBleTransport(
 
     override fun isConnected(identifier: String): Boolean =
         connections[identifier.uppercase()]?.isActive == true
+
+    override fun currentMtu(identifier: String): Int? = connections[identifier.uppercase()]?.mtu
 
     override fun wifiMtuRequest(identifier: String): Int? {
         val connection = connections[identifier.uppercase()] ?: return null
@@ -250,6 +287,7 @@ class AndroidBleTransport(
 
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+            if (gatt in retiredGatts) return
             val address = gatt.device.address.uppercase()
 
             if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
@@ -302,6 +340,7 @@ class AndroidBleTransport(
          }*/
 
         override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+            if (gatt in retiredGatts) return
             Timber.i("MTU changed for %s: mtu=%d status=%d", gatt.device.address, mtu, status)
             val address = gatt.device.address.uppercase()
             if (status == BluetoothGatt.GATT_SUCCESS) connections[address]?.mtu = mtu
@@ -309,6 +348,7 @@ class AndroidBleTransport(
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            if (gatt in retiredGatts) return
             Timber.i("Services discovered for ${gatt.device.address} with status $status")
             eventChannel.trySend(
                 BleTransportEvent.ServicesDiscovered(
@@ -323,6 +363,7 @@ class AndroidBleTransport(
             characteristic: BluetoothGattCharacteristic?,
             status: Int,
         ) {
+            if (gatt in retiredGatts) return
             val uuid = characteristic?.uuid?.toString() ?: return
             eventChannel.trySend(
                 BleTransportEvent.CharacteristicWritten(
@@ -339,6 +380,7 @@ class AndroidBleTransport(
             characteristic: BluetoothGattCharacteristic,
             status: Int,
         ) {
+            if (gatt in retiredGatts) return
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
                 emitCharacteristicRead(
                     gatt,
@@ -355,6 +397,7 @@ class AndroidBleTransport(
             value: ByteArray,
             status: Int,
         ) {
+            if (gatt in retiredGatts) return
             emitCharacteristicRead(gatt, characteristic, value, status)
         }
 
@@ -363,6 +406,7 @@ class AndroidBleTransport(
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray,
         ) {
+            if (gatt in retiredGatts) return
             Timber.d("Characteristic changed: %s, bytes=%d", characteristic.uuid, value.size)
             eventChannel.trySend(
                 BleTransportEvent.CharacteristicChanged(
@@ -378,6 +422,7 @@ class AndroidBleTransport(
             descriptor: BluetoothGattDescriptor,
             status: Int,
         ) {
+            if (gatt in retiredGatts) return
             val address = gatt.device.address.uppercase()
             val characteristicUuid = descriptor.characteristic.uuid.toString()
             Timber.d("Descriptor write completed for ${gatt.device.address} with status $status")

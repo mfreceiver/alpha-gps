@@ -273,7 +273,12 @@ class CameraSessionOrchestrator(
             is BleTransportEvent.CharacteristicChanged -> handleCharacteristicChanged(event)
 
             is BleTransportEvent.ServicesDiscovered -> Unit // consumed by the queue
-            is BleTransportEvent.MtuChanged -> Unit // consumed by the queue
+            is BleTransportEvent.MtuChanged -> {
+                // The queue consumes the event for its own request; the UI only reads the value.
+                if (event.status == BleOperationStatus.Success) {
+                    registry.updateIfPresent(event.identifier.uppercase()) { it.copy(mtu = event.mtu) }
+                }
+            }
         }
     }
 
@@ -306,6 +311,7 @@ class CameraSessionOrchestrator(
                 locationDisabledByCamera = false,
                 autoTimeCorrection = CameraSettingState(),
                 autoAreaAdjustment = CameraSettingState(),
+                mtu = transport.currentMtu(id),
             )
         }
         _events.tryEmit(OrchestratorEvent.DeviceConnected(id))

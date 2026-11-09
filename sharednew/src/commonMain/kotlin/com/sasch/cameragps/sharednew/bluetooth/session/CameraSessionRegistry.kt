@@ -28,6 +28,8 @@ data class CameraSession(
     val autoAreaAdjustment: CameraSettingState = CameraSettingState(),
     /** Wi-Fi control has its own lifecycle and may outlive a BLE disconnection. */
     val wifiRemote: WifiRemoteState = WifiRemoteState(),
+    /** Negotiated ATT MTU as the transport last reported it; display only, never requested from here. */
+    val mtu: Int? = null,
 ) {
     fun autoCorrectionSetting(setting: CameraAutoCorrectionSetting): CameraSettingState =
         when (setting) {
