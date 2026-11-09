@@ -10,6 +10,33 @@
 rl_fail() { echo "FAIL $1" >&2; }   # 注意：调用方必须紧跟 `return 1`（在 `||` 里不会替调用方退出函数）
 rl_warn() { echo "WARN $1" >&2; }
 
+# rl_check_apk_arm64 <apk路径>
+#   APK native ABI 检查（纯函数，zipfile 只读）：lib/ 下所有文件条目必须位于
+#   lib/arm64-v8a/ 且该目录至少有一个 .so。zip 的纯目录条目（name 以 '/' 结尾，
+#   如 'lib/'）不参与 ABI 判定——部分打包器会显式写入目录项，空目录无 native 含义。
+#   输出到 stdout: OK <so数> / BAD_ABI <样本> / NO_SO / OPEN_FAIL <原因>（均 rc=0，
+#   由调用方按输出分支 fail-closed）。
+rl_check_apk_arm64() {
+  python3 - "${1:-}" <<'PY'
+import sys, zipfile
+try:
+    z = zipfile.ZipFile(sys.argv[1])
+    names = z.namelist()
+except Exception as e:
+    print(f"OPEN_FAIL {e}"); sys.exit(0)
+bad = sorted(n for n in names
+             if not n.endswith("/") and n.startswith("lib/") and not n.startswith("lib/arm64-v8a/"))
+so = [n for n in names
+      if n.startswith("lib/arm64-v8a/") and n.endswith(".so")]
+if bad:
+    print("BAD_ABI " + ",".join(bad[:5]))
+elif not so:
+    print("NO_SO")
+else:
+    print("OK " + str(len(so)))
+PY
+}
+
 # assert_asset_url_trusted <url> <host[:port]> <owner/repo> <tag> <asset文件名>
 #   Primary forge 资产下载 URL 同源校验（纯函数、无网络），全部用 python3 urllib.parse
 #   解析（不用正则猜），fail-closed：

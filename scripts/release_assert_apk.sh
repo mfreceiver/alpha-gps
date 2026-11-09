@@ -6,6 +6,9 @@
 # 用法: scripts/release_assert_apk.sh <apk> <期望versionName> <期望versionCode> <期望证书SHA256>
 set -euo pipefail
 
+# shellcheck source=release_lib.sh
+source "$(cd "$(dirname "$0")" && pwd)/release_lib.sh"
+
 if [[ $# -ne 4 ]]; then
   echo "用法: $0 <apk> <期望versionName> <期望versionCode> <期望证书SHA256>" >&2
   exit 1
@@ -80,27 +83,9 @@ grep -q "^uses-permission: name='android.permission.INTERNET'$" <<< "$BADGING" \
 pass "package=$EXPECT_PACKAGE、INTERNET 权限、versionName=$VERSION_NAME、versionCode=$VERSION_CODE"
 
 # ─── 3. ABI 断言（仅 arm64-v8a；app/build.gradle.kts ndk.abiFilters）──────
-# lib/ 下所有条目必须位于 lib/arm64-v8a/ 且该目录至少有一个 .so。
-# 用 python3 zipfile（unzip 逐条列出不便于断言；此处已有 python3 依赖）。
-ABI_OUT=$(python3 - "$APK_PATH" <<'PY'
-import sys, zipfile
-try:
-    z = zipfile.ZipFile(sys.argv[1])
-    names = z.namelist()
-except Exception as e:
-    print(f"OPEN_FAIL {e}"); sys.exit(0)
-bad = sorted(n for n in names
-             if n.startswith("lib/") and not n.startswith("lib/arm64-v8a/"))
-so = [n for n in names
-      if n.startswith("lib/arm64-v8a/") and n.endswith(".so")]
-if bad:
-    print("BAD_ABI " + ",".join(bad[:5]))
-elif not so:
-    print("NO_SO")
-else:
-    print("OK " + str(len(so)))
-PY
-) || fail "APK ABI 检查：zipfile 打开/读取失败（非有效 zip/APK）"
+# lib/ 下所有文件条目必须位于 lib/arm64-v8a/ 且该目录至少有一个 .so；
+# zip 纯目录条目（如 'lib/'，name 以 '/' 结尾）不参与判定。见 rl_check_apk_arm64。
+ABI_OUT=$(rl_check_apk_arm64 "$APK_PATH") || fail "APK ABI 检查：zipfile 打开/读取失败（非有效 zip/APK）"
 case "$ABI_OUT" in
   OK\ *) pass "APK 仅含 arm64-v8a（lib/arm64-v8a/ 下 ${ABI_OUT#OK } 个 .so）" ;;
   OPEN_FAIL*) fail "APK 无法作为 zip 打开（ABI 检查）: $ABI_OUT" ;;

@@ -147,10 +147,11 @@ PY
     assert_asset_url_trusted "$vdurl" "$PRIMARY_HOST" "$PRIMARY_REPO" "$TAG_NAME" "$vname" \
       || fail "资产 URL 未通过同源校验: $vname → $vdurl（fail-closed）"
     RC=0
-    # 不加 -L：不跟随重定向（3xx 在此表现为非 200 → fail-closed）；--proto 双保险
-    # 确保即使被重定向也只允许 https。Primary forge browser_download_url 直接返回附件字节，
-    # 无 302 到对象存储的场景，无需跟随。
-    HTTP_CODE="$(curl_config | curl -K - -sS -m 300 --proto '=https' --proto-redir '=https' -o "$dl" -w '%{http_code}' "$vdurl")" || RC=$?
+    # -q 必须是首参：忽略 ~/.curlrc（防本机配置注入 -L/代理改写目标）；--no-location
+    # 显式不跟随重定向（3xx 表现为非 200 → fail-closed）；--proto 双保险确保即使被
+    # 重定向也只允许 https。Primary forge browser_download_url 直接返回附件字节，无 302 到
+    # 对象存储的场景，无需跟随。-K - 配置流只携带 user，不受 -q 影响。
+    HTTP_CODE="$(curl_config | curl -q -K - -sS -m 300 --no-location --proto '=https' --proto-redir '=https' -o "$dl" -w '%{http_code}' "$vdurl")" || RC=$?
     [[ "$RC" -eq 0 && "$HTTP_CODE" == "200" ]] \
       || { rm -f "$dl"; fail "资产强校验：$vname 下载失败 HTTP ${HTTP_CODE:-n/a}（fail-closed）"; }
     dsha="$(sha256sum "$dl" | awk '{print $1}')"
