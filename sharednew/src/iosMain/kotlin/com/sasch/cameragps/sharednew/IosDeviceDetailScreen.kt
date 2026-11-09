@@ -99,8 +99,9 @@ internal fun IosDeviceDetailScreen(
             deviceName = device.name,
             modifier = Modifier.padding(paddingValues),
             onWifiRemote = { wifiOpen = true },
-            onDeviceEnabledChanged = { enabled ->
-                IosBluetoothController.applyDeviceEnabledState(device.identifier, enabled)
+            // The enable switch is gone; a device an older version left disabled is re-enabled on load.
+            onDeviceReEnabled = {
+                IosBluetoothController.applyDeviceEnabledState(device.identifier, true)
             },
             // Authorized accessories rename in the system record so the app and
             // iOS Settings agree; cameras paired before AccessorySetupKit have no

@@ -2,42 +2,40 @@ package com.saschl.cameragps.ui.device
 
 import android.Manifest
 import android.companion.CompanionDeviceManager
-import android.companion.ObservingDevicePresenceRequest
-import android.content.Intent
-import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.annotation.RequiresPermission
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cameragps.sharednew.generated.resources.Res
-import cameragps.sharednew.generated.resources.app_name_ui
 import cameragps.sharednew.generated.resources.back
-import cameragps.sharednew.generated.resources.device_name_with_address
+import cameragps.sharednew.generated.resources.cancel_button
+import cameragps.sharednew.generated.resources.device_info_address
+import cameragps.sharednew.generated.resources.device_info_title
+import cameragps.sharednew.generated.resources.device_remove_confirm_message
+import cameragps.sharednew.generated.resources.device_remove_confirm_title
+import cameragps.sharednew.generated.resources.dialog_ok
 import cameragps.sharednew.generated.resources.help_menu_item
 import cameragps.sharednew.generated.resources.remove
 import com.sasch.cameragps.sharednew.database.LogDatabase
@@ -50,11 +48,8 @@ import com.sasch.cameragps.sharednew.ui.device.DeviceDetailViewModel
 import com.saschl.cameragps.AppServices
 import com.saschl.cameragps.R
 import com.saschl.cameragps.service.AssociatedDeviceCompat
-import com.saschl.cameragps.service.LocationSenderService
 import com.saschl.cameragps.ui.pairing.startDevicePresenceObservation
-import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
-import timber.log.Timber
 
 private fun createAndroidDataSource(dao: CameraDeviceDAO): DeviceDetailDataSource {
     return object : DeviceDetailDataSource {
@@ -97,7 +92,6 @@ fun DeviceDetailScreen(
     onClose: () -> Unit,
     onHelpClick: () -> Unit = {}
 ) {
-    val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var wifiRemoteOpen by rememberSaveable(device.address) { mutableStateOf(false) }
     if (wifiRemoteOpen) {
@@ -114,13 +108,19 @@ fun DeviceDetailScreen(
         )
     }
 
+    val resolvedName = viewModel.uiState.collectAsState().value.deviceName.ifEmpty { device.name }
+    var showRemoveConfirm by rememberSaveable(device.address) { mutableStateOf(false) }
+    var showInfo by rememberSaveable(device.address) { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
                     Text(
-                        text = stringResource(Res.string.app_name_ui),
-                        fontWeight = FontWeight.SemiBold
+                        text = resolvedName,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 },
                 navigationIcon = {
@@ -132,20 +132,24 @@ fun DeviceDetailScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onHelpClick) {
+                    IconButton(onClick = { showRemoveConfirm = true }) {
+                        Icon(
+                            painter = painterResource(R.drawable.delete_24px),
+                            contentDescription = stringResource(Res.string.remove),
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    IconButton(onClick = { showInfo = true }) {
                         Icon(
                             painter = painterResource(R.drawable.info_24px),
-                            contentDescription = stringResource(Res.string.help_menu_item),
+                            contentDescription = stringResource(Res.string.device_info_title),
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
-                    // scrolledContainerColor = Color.Unspecified,
-                    // navigationIconContentColor = Color.Unspecified,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    // actionIconContentColor = Color.Unspecified
                 )
             )
         }
@@ -156,59 +160,66 @@ fun DeviceDetailScreen(
             onWifiRemote = { wifiRemoteOpen = true },
             viewModel = viewModel,
             deviceId = device.address,
+            deviceName = device.name,
             modifier = Modifier.padding(innerPadding),
-            headerContent = { resolvedName ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
+            // The enable switch is gone: a device an older version left disabled is
+            // switched back on at load, so presence observation must resume too.
+            onDeviceReEnabled = { startDevicePresenceObservation(deviceManager, device) },
+        )
+    }
+
+    if (showRemoveConfirm) {
+        AlertDialog(
+            onDismissRequest = { showRemoveConfirm = false },
+            title = { Text(stringResource(Res.string.device_remove_confirm_title)) },
+            text = {
+                Text(stringResource(Res.string.device_remove_confirm_message, resolvedName))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showRemoveConfirm = false
+                        onDisassociate(device)
+                    },
                 ) {
-                    Column(modifier = Modifier.weight(0.6f)) {
-                        Text(
-                            text = stringResource(
-                                Res.string.device_name_with_address,
-                                resolvedName.ifEmpty { device.name },
-                                device.address
-                            )
-                        )
-                    }
-                    Column(modifier = Modifier.weight(0.4f)) {
-                        OutlinedButton(
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = { scope.launch { onDisassociate(device) } },
-                            border = ButtonDefaults.outlinedButtonBorder().copy(
-                                brush = SolidColor(MaterialTheme.colorScheme.error),
-                            ),
-                        ) {
-                            Text(
-                                text = stringResource(Res.string.remove),
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
+                    Text(
+                        text = stringResource(Res.string.remove),
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             },
-            onDeviceEnabledChanged = { enabled ->
-                if (!enabled) {
-                    AppServices.from(context).wifiRemote.disconnect(device.address)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
-                        deviceManager.stopObservingDevicePresence(
-                            ObservingDevicePresenceRequest.Builder()
-                                .setAssociationId(associationId).build()
-                        )
-                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        deviceManager.stopObservingDevicePresence(device.address)
-                    }
-                    Timber.i("Stopping LocationSenderService from detail for device ${device.address}")
-                    val shutdownIntent =
-                        Intent(context, LocationSenderService::class.java).apply {
-                            action =
-                                com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants.ACTION_REQUEST_SHUTDOWN
-                            putExtra("address", device.address.uppercase())
-                        }
-                    context.startService(shutdownIntent)
-                } else {
-                    startDevicePresenceObservation(deviceManager, device)
+            dismissButton = {
+                TextButton(onClick = { showRemoveConfirm = false }) {
+                    Text(stringResource(Res.string.cancel_button))
+                }
+            },
+        )
+    }
+
+    if (showInfo) {
+        // The MAC address lives only here, not in the screen body.
+        AlertDialog(
+            onDismissRequest = { showInfo = false },
+            title = { Text(stringResource(Res.string.device_info_title)) },
+            text = {
+                Text(
+                    text = resolvedName + "\n" +
+                        stringResource(Res.string.device_info_address, device.address)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showInfo = false }) {
+                    Text(stringResource(Res.string.dialog_ok))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showInfo = false
+                        onHelpClick()
+                    },
+                ) {
+                    Text(stringResource(Res.string.help_menu_item))
                 }
             },
         )

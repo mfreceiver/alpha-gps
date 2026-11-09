@@ -1,6 +1,5 @@
 package com.saschl.cameragps.ui
 
-import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -66,7 +65,6 @@ fun AssociatedDevicesList(
     SharedDeviceList(
         devices = devices,
         items = items,
-        showKeepAliveHint = Build.VERSION.SDK_INT < Build.VERSION_CODES.S,
         // Read on every recomposition so a toggle in settings applies on return
         hapticsEnabled = PreferencesManager.isHapticsEnabled(context),
         onConnect = { }, // tap-to-pair path: Android never lists unsaved devices
