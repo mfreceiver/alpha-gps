@@ -10,12 +10,13 @@ data class DateGroup(val key: String, val count: Int) {
 
 // Full date-time stamps, strictly: the legacy PTP form `YYYYMMDDThhmmss` and the v4 catalog
 // ISO form `YYYY-MM-DDThh:mm[:ss]` (LocalDateTime serializes without seconds when they are
-// zero). Both tolerate a fractional-second part and a trailing zone marker, which is never
-// converted — only its numeric plausibility is checked.
+// zero). Both tolerate a fractional-second part and a trailing zone marker (`Z` or a numeric
+// offset, with or without the colon — the legacy form accepts both spellings, so the ISO form
+// does too), which is never converted — only its numeric plausibility is checked.
 private val legacyDateTime =
     Regex("""(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(?:\.\d+)?(Z|[+-]\d{2}:?\d{2})?""")
 private val isoDateTime =
-    Regex("""(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(Z|[+-]\d{2}:\d{2})?""")
+    Regex("""(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(Z|[+-]\d{2}:?\d{2})?""")
 
 private fun isLeap(year: Int) = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
 
