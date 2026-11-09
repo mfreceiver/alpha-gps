@@ -54,10 +54,28 @@ class MainActivity : AppCompatActivity() {
         installSplashScreen()
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // A relaunch right after exit must not be undone by the previous exit's late teardown.
+        AppServices.from(this).cancelPendingExit()
 
         setContent {
             CameraGpsTheme {
                 AppContent()
+            }
+        }
+    }
+
+    /**
+     * Leaving the app for good (back at the root, or the task being swiped away) disconnects
+     * the camera. A configuration change or Home press does not: GPS keeps flowing while the
+     * app sits in the background.
+     */
+    override fun onDestroy() {
+        super.onDestroy()
+        if (isFinishing && !isChangingConfigurations) {
+            Timber.i("MainActivity finishing; disconnecting cameras")
+            val appContext = applicationContext
+            AppServices.from(appContext).disconnectAllOnExit {
+                appContext.stopService(Intent(appContext, LocationSenderService::class.java))
             }
         }
     }
@@ -102,7 +120,9 @@ class MainActivity : AppCompatActivity() {
             if (backStack.size > 1) {
                 backStack.removeAt(backStack.lastIndex)
             } else {
-                Timber.d("Ignoring back press on root destination")
+                // Android 12+ would only move the task to the background here, leaving the
+                // camera connected. Back at the root means exit: finish so onDestroy disconnects.
+                finish()
             }
         }
 
@@ -139,9 +159,10 @@ class MainActivity : AppCompatActivity() {
                         return@LaunchedEffect
                     }
                     cameraDeviceDAO.getAllCameraDevices().forEach {
+                        // Exiting the app disconnects the camera, so opening it again must
+                        // reconnect (a nearby camera raises no new presence event).
                         val shouldTransmissionStart =
                             it.deviceEnabled
-                                    && it.alwaysOnEnabled
                                     && PreferencesManager.isAppEnabled(context.applicationContext)
                         if (shouldTransmissionStart) {
                             Timber.d("Resuming location transmission for device ${it.mac}")

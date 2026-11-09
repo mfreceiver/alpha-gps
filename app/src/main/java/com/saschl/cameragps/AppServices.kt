@@ -10,11 +10,13 @@ import com.sasch.cameragps.sharednew.database.LogDatabase
 import com.sasch.cameragps.sharednew.database.devices.CameraDeviceDAO
 import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
 import com.sasch.cameragps.sharednew.remote.wifi.createAndroidWifiRemoteController
+import com.saschl.cameragps.service.coordinator.AppExitCoordinator
 import com.saschl.cameragps.service.location.createLocationSource
 import com.saschl.cameragps.service.transport.AndroidBleTransport
 import com.saschl.cameragps.utils.PreferencesManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -70,6 +72,37 @@ class AppServices(context: Context) {
         browseOnly = { true },
     )
     val pairingFailedDevice: StateFlow<String?> = _pairingFailedDevice
+
+    private val exitCoordinator = AppExitCoordinator(
+        closeWifi = { wifiRemote.closeAndJoin() },
+        shutdownSessions = { orchestrator.shutdownAll() },
+        disconnectBle = { transport.disconnectAll() },
+    )
+
+    /**
+     * Leaving the app (task removed / last activity finished) disconnects the camera:
+     * Wi-Fi session first, then every BLE session and GATT connection. [afterwards]
+     * runs once that is done (used to stop the foreground service).
+     */
+    fun disconnectAllOnExit(afterwards: () -> Unit = {}) {
+        exitJob?.cancel()
+        exitJob = scope.launch {
+            exitCoordinator.disconnectEverything()
+            afterwards()
+        }
+    }
+
+    /**
+     * A new app session started while an exit teardown was still running (quick relaunch):
+     * drop the rest of it, otherwise the late GATT close / service stop would kill the
+     * connection the new session just made.
+     */
+    fun cancelPendingExit() {
+        exitJob?.cancel()
+        exitJob = null
+    }
+
+    private var exitJob: Job? = null
 
     init {
         orchestrator.start()
