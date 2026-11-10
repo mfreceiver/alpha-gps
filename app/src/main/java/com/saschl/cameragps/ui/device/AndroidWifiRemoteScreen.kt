@@ -25,8 +25,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
-import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownloadFormat
 import com.sasch.cameragps.sharednew.ui.remote.WifiRemoteScreen
 import com.sasch.cameragps.sharednew.ui.remote.WifiRemoteViewModel
 import com.saschl.cameragps.AppServices
@@ -61,28 +59,6 @@ fun AndroidWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
             }
         }
     }
-    var pendingPhotos by rememberSaveable { mutableStateOf(emptyList<Long>()) }
-    var pendingPhotoFormats by rememberSaveable { mutableStateOf(emptyList<String>()) }
-    var pendingPhotoGeneration by rememberSaveable { mutableStateOf(-1L) }
-    val storagePermission =
-        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            val downloads = pendingPhotos.zip(pendingPhotoFormats) { handle, format ->
-                WifiPhotoDownload(handle, WifiPhotoDownloadFormat.valueOf(format))
-            }
-            val generation = pendingPhotoGeneration
-            pendingPhotos = emptyList()
-            pendingPhotoFormats = emptyList()
-            pendingPhotoGeneration = -1L
-            if (granted && downloads.isNotEmpty() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-                // The permission dialog can outlive a browser refresh: only download when the
-                // catalog generation the request was made against is still current.
-                val browser = controller.sessions.value[identifier.uppercase()]?.wifiRemote?.photoBrowser
-                if (browser != null && browser.open && browser.browserGeneration == generation) {
-                    controller.downloadPhotos(identifier, downloads)
-                }
-            }
-            else if (!granted) controller.imageStoragePermissionDenied(identifier)
-        }
     val close = { controller.disconnect(identifier); onClose() }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         if (activity?.isChangingConfigurations != true) {
@@ -129,19 +105,7 @@ fun AndroidWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
                 )
             )
         },
-        onDownloadPhotos = { downloads ->
-            if (Build.VERSION.SDK_INT <= 28 && ContextCompat.checkSelfPermission(
-                    context,
-                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                pendingPhotos = downloads.map { it.handle }
-                pendingPhotoFormats = downloads.map { it.format.name }
-                pendingPhotoGeneration = controller.sessions.value[identifier.uppercase()]
-                    ?.wifiRemote?.photoBrowser?.browserGeneration ?: -1L
-                storagePermission.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            } else controller.downloadPhotos(identifier, downloads)
-        },
+        onDownloadPhotos = { downloads -> controller.downloadPhotos(identifier, downloads) },
         onWifiSettings = { context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) },
         defaultDownloadFormatJpeg = PreferencesManager.isWifiDefaultDownloadFormatJpeg(context),
         onClose = close)

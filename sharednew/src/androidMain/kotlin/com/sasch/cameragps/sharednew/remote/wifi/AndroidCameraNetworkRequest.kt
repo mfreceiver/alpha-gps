@@ -11,12 +11,10 @@ import android.net.NetworkRequest
 import android.net.wifi.WifiManager
 import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
-import androidx.annotation.RequiresApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 
 /** Callback threads only enqueue events; the session owns and releases the request on Main. */
-@RequiresApi(29)
 internal class AndroidCameraNetworkRequest(context: Context, credentials: CameraWifiCredentials) : CameraNetworkRequest<Network> {
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
     private val channel = Channel<CameraNetworkEvent<Network>>(64)
