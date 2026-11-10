@@ -67,7 +67,7 @@ git submodule update --init --recursive
 Then build the Android app:
 
 ```bash
-./gradlew :app:assembleFossDebug
+./gradlew :app:assembleDebug
 ```
 
 Other verification tasks are listed in [AGENTS.md](AGENTS.md). For releases (signed APKs, tags and
