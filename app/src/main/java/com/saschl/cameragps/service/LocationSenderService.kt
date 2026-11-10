@@ -160,23 +160,11 @@ class LocationSenderService : LifecycleService() {
         return true
     }
 
-    /**
-     * The user swiped the app away: that is "exit", so actively disconnect the camera
-     * (Wi-Fi, then BLE/GATT) and stop instead of lingering as a background service.
-     * Backgrounding (Home) never reaches here. Boot / notification / CDM-presence
-     * starts are unaffected and simply start a new session.
-     */
+    /** Task removal cancels even a download, but BLE/GPS and this foreground service survive. */
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        Timber.i("Task removed; disconnecting cameras and stopping service")
-        // Snapshot: the teardown callback used to read the mutable field, which a
-        // start command arriving during the window could have advanced meanwhile.
-        val startId = lastHandledStartId
-        services.disconnectAllOnExit {
-            // Only stop for our own last start: a start command that arrived during
-            // the teardown window (and cancelled it) must keep the service alive.
-            if (startId > 0) stopSelf(startId) else stopSelf()
-        }
+        Timber.i("Task removed; ending Wi-Fi only, keeping BLE/GPS foreground service")
+        services.disconnectAllOnExit()
     }
 
     @SuppressLint("MissingPermission")

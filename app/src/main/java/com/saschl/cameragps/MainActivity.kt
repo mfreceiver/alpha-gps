@@ -60,23 +60,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Leaving the app for good (back at the root, or the task being swiped away) disconnects
-     * the camera. A configuration change or Home press does not: GPS keeps flowing while the
-     * app sits in the background.
-     */
+    override fun onStart() {
+        super.onStart()
+        AppServices.from(this).setAppVisible(this, true)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) AppServices.from(this).setAppVisible(this, false)
+    }
+
+    /** Finishing ends only Wi-Fi; BLE/GPS and the foreground service remain alive. */
     override fun onDestroy() {
         super.onDestroy()
         if (isFinishing && !isChangingConfigurations) {
-            Timber.i("MainActivity finishing; disconnecting cameras")
-            val appContext = applicationContext
-            // The stopService afterwards is guarded by the exit gate: it only runs
-            // if this teardown itself ran to completion (not cancelled by a newer
-            // session, not a late duplicate of an already-cancelled exit flow —
-            // the gate retires the exit generation a connect cancelled).
-            AppServices.from(appContext).disconnectAllOnExit(owner = this) {
-                appContext.stopService(Intent(appContext, LocationSenderService::class.java))
-            }
+            Timber.i("MainActivity finishing; ending Wi-Fi only")
+            AppServices.from(this).disconnectAllOnExit(owner = this)
         }
     }
 
@@ -119,14 +118,9 @@ class MainActivity : AppCompatActivity() {
             if (backStack.size > 1) {
                 backStack.removeAt(backStack.lastIndex)
             } else {
-                // Android 12+ would only move the task to the background here, leaving the
-                // camera connected. Back at the root means exit: finish so onDestroy disconnects.
-                // finishAndRemoveTask also removes the Recents card, so Back and a real swipe
-                // share one semantics: the task removal is delivered at once, the card is gone,
-                // and no later genuine "swipe the still-listed card" can race the exit flow.
-                // If the removal's unowned delivery arrives while the owned teardown is still
-                // active, the exit gate's replace path folds it in; if it arrives after a
-                // background connect retired the flow, the gate's retirement rules apply.
+                // Explicit exit cancels even an in-flight download, before ON_STOP could
+                // apply the ordinary background exception. BLE/GPS and the FGS stay alive.
+                AppServices.from(this@MainActivity).disconnectAllOnExit(owner = this@MainActivity)
                 finishAndRemoveTask()
             }
         }

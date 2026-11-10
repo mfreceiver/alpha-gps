@@ -548,8 +548,8 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     }
 
     override fun onCleared() {
-        logging("WifiRemoteViewModel").d { "Wi-Fi remote ViewModel cleared -> Wi-Fi disconnect requested" }
-        controller.disconnect(identifier)
+        logging("WifiRemoteViewModel").d { "Wi-Fi remote ViewModel cleared -> applying screen disposal policy" }
+        controller.onRemoteScreenDisposed(identifier)
     }
 }
 
