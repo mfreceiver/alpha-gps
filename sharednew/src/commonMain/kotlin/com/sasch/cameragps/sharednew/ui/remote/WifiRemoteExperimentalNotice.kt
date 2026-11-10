@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -24,6 +23,8 @@ import cameragps.sharednew.generated.resources.wifi_remote_experimental_title
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
 import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
 import com.sasch.cameragps.sharednew.ui.help.AlphaGpsLinks
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import org.jetbrains.compose.resources.stringResource
 
 /** One-time notice before the first Wi-Fi connection (design v3: capsule dialog, cancel left). */
@@ -39,19 +40,26 @@ internal fun WifiRemoteExperimentalNotice(onContinue: () -> Unit, onCancel: () -
             Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(stringResource(Res.string.wifi_remote_experimental_message))
+            Text(
+                stringResource(Res.string.wifi_remote_experimental_message),
+                style = AlphaType.Body,
+                color = AlphaTheme.colors.textSecondary,
+            )
             val linkStyle = TextLinkStyles(
                 SpanStyle(
-                    color = MaterialTheme.colorScheme.primary,
+                    color = AlphaTheme.colors.accent,
                     textDecoration = TextDecoration.Underline,
                 )
             )
             val reportIssue = stringResource(Res.string.help_report_issue)
-            Text(buildAnnotatedString {
-                withLink(LinkAnnotation.Url(AlphaGpsLinks.ISSUES, linkStyle)) {
-                    append(reportIssue)
-                }
-            })
+            Text(
+                buildAnnotatedString {
+                    withLink(LinkAnnotation.Url(AlphaGpsLinks.ISSUES, linkStyle)) {
+                        append(reportIssue)
+                    }
+                },
+                style = AlphaType.Label,
+            )
         }
     }
 }

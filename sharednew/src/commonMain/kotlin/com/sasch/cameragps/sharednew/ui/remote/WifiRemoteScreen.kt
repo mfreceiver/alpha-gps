@@ -12,12 +12,8 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -82,7 +78,11 @@ import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassBackground
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassTextField
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassTopBar
+import com.sasch.cameragps.sharednew.ui.components.glass.isScrolledUnderTopBar
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
@@ -570,7 +570,6 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit,
                      onWifiSettings: () -> Unit,
@@ -721,7 +720,6 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
  * the rare idle state outside the overlay (another camera holds Wi-Fi, a finished session). The
  * automatic path never stops here — its progress is the overlay.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WifiConnectionControls(
     state: WifiRemoteState,
@@ -740,12 +738,15 @@ private fun WifiConnectionControls(
     val ready = state.phase == WifiRemotePhase.Ready
     val busy = state.phase !in setOf(WifiRemotePhase.Idle, WifiRemotePhase.Failed)
     var manual by remember { mutableStateOf(!controller.supportsAutomaticConnection && !controller.supportsManualSetup) }
+    val scroll = rememberScrollState()
+    val body = AlphaType.Body
+    val colors = AlphaTheme.colors
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-                title = { Text(stringResource(Res.string.wifi_remote_title)) },
+            GlassTopBar(
+                title = stringResource(Res.string.wifi_remote_title),
+                scrolled = scroll.isScrolledUnderTopBar,
                 navigationIcon = {
                     GlassIconButton(
                         painterResource(Res.drawable.arrow_back_24px),
@@ -757,7 +758,7 @@ private fun WifiConnectionControls(
         },
     ) { padding ->
         Column(
-            Modifier.fillMaxSize().padding(padding).padding(16.dp).verticalScroll(rememberScrollState()),
+            Modifier.fillMaxSize().padding(padding).padding(16.dp).verticalScroll(scroll),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (!busy && (controller.supportsAutomaticConnection || controller.supportsManualSetup)) {
@@ -774,7 +775,8 @@ private fun WifiConnectionControls(
                         if (controller.supportsAutomaticConnection) Res.string.wifi_remote_auto_setup
                         else Res.string.wifi_remote_prepare_only_hint
                     ),
-                    color = AlphaTheme.colors.onSurfaceVariant,
+                    style = body,
+                    color = colors.textSecondary,
                 )
                 CapsuleButton(
                     text = stringResource(Res.string.wifi_remote_manual),
@@ -787,12 +789,14 @@ private fun WifiConnectionControls(
                     stringResource(
                         if (controller.supportsAddressDiscovery) Res.string.wifi_remote_setup_detect_address
                         else Res.string.wifi_remote_setup
-                    )
+                    ),
+                    style = body,
+                    color = colors.textPrimary,
                 )
                 CapsuleButton(text = wifiSettingsLabel, onClick = onWifiSettings, role = CapsuleRole.Secondary)
-                OutlinedTextField(
+                GlassTextField(
                     value = viewModel.host, onValueChange = { viewModel.host = it.take(64) },
-                    label = { Text(stringResource(Res.string.wifi_remote_ip)) }, singleLine = true,
+                    label = stringResource(Res.string.wifi_remote_ip), singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -802,7 +806,7 @@ private fun WifiConnectionControls(
                     enabled = (controller.supportsAddressDiscovery || viewModel.host.isNotBlank()) && !otherCamera,
                 )
             }
-            if (otherCamera) Text(stringResource(Res.string.wifi_remote_other_camera))
+            if (otherCamera) Text(stringResource(Res.string.wifi_remote_other_camera), style = body, color = colors.warningText)
             if (state.phase == WifiRemotePhase.Idle) {
                 val shutdownMessage = when (state.wifiShutdown) {
                     WifiShutdownStatus.Requested -> Res.string.wifi_remote_shutdown_requested
@@ -810,28 +814,28 @@ private fun WifiConnectionControls(
                     WifiShutdownStatus.Unconfirmed -> Res.string.wifi_remote_shutdown_unconfirmed
                     WifiShutdownStatus.NotRequested -> null
                 }
-                shutdownMessage?.let { Text(stringResource(it), color = AlphaTheme.colors.onSurfaceVariant) }
+                shutdownMessage?.let { Text(stringResource(it), style = body, color = colors.textSecondary) }
             }
-            if (state.phase == WifiRemotePhase.OpeningSession) Text(openingSessionMessage)
-            if (state.phase == WifiRemotePhase.PreparingCamera) Text(stringResource(Res.string.wifi_remote_preparing))
+            if (state.phase == WifiRemotePhase.OpeningSession) StatusText(openingSessionMessage)
+            if (state.phase == WifiRemotePhase.PreparingCamera) StatusText(stringResource(Res.string.wifi_remote_preparing))
             state.manualNetwork?.let { credentials ->
                 WifiManualJoin(
                     credentials, onWifiSettings,
                     onContinue = { controller.continueManualConnection(id) })
             }
-            if (state.phase == WifiRemotePhase.AwaitingNetworkApproval) Text(stringResource(Res.string.wifi_remote_approval))
-            if (state.phase == WifiRemotePhase.JoiningNetwork) Text(stringResource(Res.string.wifi_remote_joining))
-            if (state.phase == WifiRemotePhase.Closing) Text(stringResource(Res.string.wifi_remote_closing))
+            if (state.phase == WifiRemotePhase.AwaitingNetworkApproval) StatusText(stringResource(Res.string.wifi_remote_approval))
+            if (state.phase == WifiRemotePhase.JoiningNetwork) StatusText(stringResource(Res.string.wifi_remote_joining))
+            if (state.phase == WifiRemotePhase.Closing) StatusText(stringResource(Res.string.wifi_remote_closing))
             state.failure?.let { failure ->
-                Text(wifiFailureMessage(failure, networkPermissionMessage), color = AlphaTheme.colors.error)
+                Text(wifiFailureMessage(failure, networkPermissionMessage), style = body, color = colors.danger)
             }
             if (ready) {
-                Text(stringResource(Res.string.wifi_remote_connected, state.cameraName))
+                Text(stringResource(Res.string.wifi_remote_connected, state.cameraName), style = AlphaType.Label, color = colors.success)
                 if (state.canTransferImages) CapsuleButton(
                     text = stringResource(Res.string.wifi_remote_browse),
                     onClick = { controller.browseDates(id) },
                     role = CapsuleRole.Tonal,
-                ) else Text(stringResource(Res.string.wifi_remote_browse_unsupported))
+                ) else StatusText(stringResource(Res.string.wifi_remote_browse_unsupported))
             }
             if (busy) CapsuleButton(
                 text = stringResource(Res.string.wifi_remote_disconnect),
@@ -841,4 +845,10 @@ private fun WifiConnectionControls(
             )
         }
     }
+}
+
+/** A progress / status line of the connection page (Body, textPrimary). */
+@Composable
+private fun StatusText(text: String) {
+    Text(text, style = AlphaType.Body, color = AlphaTheme.colors.textPrimary)
 }
