@@ -74,9 +74,13 @@ fun GlassIconButton(
     val resolvedTint = if (tint.isSpecified) tint else iconButtonTint(emphasis, colors, enabled, container == GlassLevel.Viewer)
     val iconSize = if (emphasis == IconEmphasis.Subtle) 20.dp else AlphaDimens.iconSize
     val target = touchTarget.coerceAtLeast(AlphaDimens.minDenseTouchTarget)
-    val button: @Composable () -> Unit = {
+    // The caller's modifier must sit on the outermost node: with a tooltip, the button is a child
+    // of TooltipBox, and parent-data modifiers (`align`, `weight`, …) applied to it would be read by
+    // TooltipBox's own layout and silently ignored by the caller's Box/Row. (This put the dialog ✕,
+    // `Modifier.align(TopEnd)`, at the top-start corner over the dialog's first line.)
+    val button: @Composable (Modifier) -> Unit = { outer ->
         Box(
-            modifier = modifier
+            modifier = outer
                 .size(target)
                 .then(if (container != null) Modifier.glass(container, CircleShape) else Modifier.clip(CircleShape))
                 .clickable(
@@ -98,14 +102,15 @@ fun GlassIconButton(
         }
     }
     if (contentDescription.isNullOrEmpty()) {
-        button()
+        button(modifier)
     } else {
         TooltipBox(
             positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
             tooltip = { PlainTooltip { Text(contentDescription) } },
             state = rememberTooltipState(),
+            modifier = modifier,
         ) {
-            button()
+            button(Modifier)
         }
     }
 }

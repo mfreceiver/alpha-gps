@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -160,7 +161,8 @@ fun CapsuleDialog(
  *
  * - Scrim tap and system back call [onDismissRequest] — wire it to the same thing as the left
  *   (cancel) button. Disable with [dismissOnScrimClick] / [dismissOnBack] while busy.
- * - [onClose] adds a ✕ in the top-end corner (info dialogs: ✕ instead of an OK button).
+ * - [onClose] adds a ✕ at the top end, in a header row shared with [title] (never overlapping the
+ *   content; info dialogs: ✕ instead of an OK button).
  * - Inside a [GlassBackground] the dialog is drawn in-tree (it blurs the page); elsewhere it falls
  *   back to a platform dialog window with the solid glass fill.
  * - The content scrolls when the window is short (landscape, IME); the buttons stay visible.
@@ -270,6 +272,27 @@ private fun CapsuleDialogPanel(
         shape = AlphaShapes.dialog,
     ) {
         Column(Modifier.padding(PaddingValues(AlphaDimens.dialogPadding)), horizontalAlignment = horizontal) {
+            if (onClose != null) {
+                // ✕ sits in its own header row (title | ✕), so it can never overlap the content.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (title != null) {
+                        DialogTitle(title, centered = false, modifier = Modifier.weight(1f))
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+                    GlassIconButton(
+                        icon = painterResource(Res.drawable.close_24px),
+                        contentDescription = stringResource(Res.string.m0_dialog_close),
+                        onClick = onClose,
+                        // Optically align the glyph (not the 48 dp touch box) with the content edge.
+                        modifier = Modifier.offset(x = 12.dp),
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+            }
             Column(
                 modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
                 horizontalAlignment = horizontal,
@@ -289,17 +312,8 @@ private fun CapsuleDialogPanel(
                     )
                     Spacer(Modifier.height(16.dp))
                 }
-                if (title != null) {
-                    Text(
-                        title,
-                        style = AlphaTextStyles.dialogTitle,
-                        color = colors.onSurface,
-                        textAlign = if (centered) TextAlign.Center else TextAlign.Start,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            // Leave room for the ✕ in the corner.
-                            .padding(end = if (onClose != null && !centered) 36.dp else 0.dp),
-                    )
+                if (title != null && onClose == null) {
+                    DialogTitle(title, centered = centered, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(12.dp))
                 }
                 content()
@@ -309,13 +323,16 @@ private fun CapsuleDialogPanel(
                 DialogButtonRow(confirm = confirm, dismiss = dismiss, destructive = destructive)
             }
         }
-        if (onClose != null) {
-            GlassIconButton(
-                icon = painterResource(Res.drawable.close_24px),
-                contentDescription = stringResource(Res.string.m0_dialog_close),
-                onClick = onClose,
-                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
-            )
-        }
     }
+}
+
+@Composable
+private fun DialogTitle(title: String, centered: Boolean, modifier: Modifier) {
+    Text(
+        title,
+        style = AlphaTextStyles.dialogTitle,
+        color = AlphaTheme.colors.onSurface,
+        textAlign = if (centered) TextAlign.Center else TextAlign.Start,
+        modifier = modifier,
+    )
 }
