@@ -72,7 +72,7 @@
 | Jetpack Compose（BOM、Material3 多平台版）、Compose Multiplatform | Apache-2.0 | |
 | AndroidX：core-ktx、activity-compose、lifecycle、navigation3、navigationevent、appcompat、room、sqlite、exifinterface、core-splashscreen | Apache-2.0 | |
 | Material Components for Android（com.google.android.material） | Apache-2.0 | |
-| Material Icons / Material Symbols | Apache-2.0 | 应用内功能图标 |
+| Material Icons / Material Symbols | Apache-2.0 | 应用内功能图标，来源与逐项处置见 [`docs/icon-sources.md`](icon-sources.md) |
 | Haze（dev.chrisbanes.haze:haze / haze-blur 2.1.0，传递依赖 haze-utils 与 androidx.tracing 2.0.5，均为 Apache-2.0） | Apache-2.0 | 玻璃背景模糊，仅 sharednew 模块依赖（ui/components/glass） |
 | Timber | Apache-2.0 | 本机日志 |
 | Accompanist（permissions） | Apache-2.0 | |
@@ -125,3 +125,23 @@
 - 关于页：fork 声明、修改声明、GPL-3.0 全文、开源许可入口（与第 5 节清单一致，`LicenseCatalog`）、
   源码与反馈（仅 GitHub）、隐私入口、支持上游作者（第 7 节）、商标免责声明（第 6 节）、图标来源（第 8 节）。
 - 帮助页不放赞助链接；第 7 节的链接全应用仅在关于页出现。
+
+## 10. 应用内功能图标来源
+
+**EN**
+
+> The in-app function icons (toolbar, status, list and welcome-page icons, and the notification small
+> icon) come from the official [Google Material Icons / Material Symbols repository](https://github.com/google/material-design-icons)
+> (Apache-2.0). Each icon is either identical to the official file or has been replaced by an
+> official file; the per-icon source, disposition and checksum are listed in
+> [`docs/icon-sources.md`](icon-sources.md). Icons that still need a decision (currently none) would be
+> listed there as `NEEDS_DECISION`. This does not cover the app launcher icon (see section 8) or the
+> mockup images under `docs/design/`.
+
+**zh-CN**
+
+> 应用内功能图标（顶栏、状态、列表、欢迎页图标及通知小图标）均来自 Google Material Icons / Material
+> Symbols 官方仓库（[google/material-design-icons](https://github.com/google/material-design-icons)，
+> Apache-2.0）：与官方文件一致，或已替换为官方文件；逐项来源、处置与校验和见
+> [`docs/icon-sources.md`](icon-sources.md)。仍需决定的项（当前无）会在该清单中标为 `NEEDS_DECISION`。
+> 本节不涵盖应用启动图标（见第 8 节）与 `docs/design/` 下的设计稿图片。
