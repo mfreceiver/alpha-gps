@@ -110,7 +110,7 @@
     <string name="is_there_documenation">有文档说明吗？</string>
     <string name="is_there_documenation_answer">有的！请访问 GitHub 页面。\n应用的问题请到 GitHub Issues 反馈：</string>
     <string name="how_about_privacy">隐私保护如何？</string>
-    <string name="how_about_privacy_answer">本应用不会收集或上传任何数据，也没有崩溃上报或统计功能。应用不单独保存定位历史或轨迹；您的位置只用于通过蓝牙写入您自己的相机，相机断开连接后位置采集即会停止。用相机拍摄的照片可能包含相机写入的定位信息。通过相机 Wi-Fi 下载的照片仅保存在本机。不会向开发者或任何第三方发送任何内容。</string>
+    <string name="how_about_privacy_answer">应用本身不收集或上传任何数据，也没有崩溃上报或统计功能。位置与时间来自系统定位服务（GPS，以及系统在可用时提供的网络/融合定位——这些如何运作由系统与设备厂商的设置决定，不受本应用控制）。应用不单独保存定位历史或轨迹；位置与时间只通过蓝牙发送给您配对的相机，相机断开连接后采集即会停止。浏览和下载照片使用相机自身的 Wi-Fi，点对点传输，不经互联网。用相机拍摄的照片可能包含相机写入的定位信息。下载的照片仅保存在本机。帮助页的外部链接（GitHub 项目页与赞助页）由浏览器打开，适用对应站点自己的隐私政策。不会向开发者或任何第三方发送任何内容。</string>
     <string name="app_standby_title">待机</string>
     <string name="app_standby_content">等待相机连接</string>
     <string name="enable_auto_start_description">开启后设备重启时自动重连所有已保存且启用的相机；应用更新后的自动重连仅受应用总开关控制。</string>

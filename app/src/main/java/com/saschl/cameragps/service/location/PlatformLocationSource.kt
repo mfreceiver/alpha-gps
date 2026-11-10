@@ -17,9 +17,8 @@ import timber.log.Timber
 
 /**
  * Android [LocationSource] backed only by the platform [LocationManager] —
- * no Play Services. The only source in the foss flavor; the fallback provider
- * in the gplay flavor. Owns only provider plumbing — gating and periodic
- * sends live in the shared LocationTransmissionManager.
+ * no Play Services. Owns only provider plumbing — gating and periodic sends
+ * live in the shared LocationTransmissionManager.
  */
 class PlatformLocationSource(
     private val context: Context,
