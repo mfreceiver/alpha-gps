@@ -1,7 +1,6 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
 import com.sasch.cameragps.sharednew.remote.wifi.UNKNOWN_DATE_KEY
-import com.sasch.cameragps.sharednew.remote.wifi.WifiDownloadPlan
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteFailure
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemotePhase
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
@@ -185,16 +184,6 @@ internal fun letterboxSpan(length: Int, isBlackLine: (Int) -> Boolean): IntRange
         abs(leading - trailing) <= 2
     return if (symmetric && (end - start) * 2 >= length) start until end else 0 until length
 }
-
-/** What the viewer (and its info line) needs about one capture; see the view model's day API. */
-internal data class WifiCaptureDetails(
-    /** "JPG", "RAW", "J&R", … (null when no known format). */
-    val format: String?,
-    /** Sum of all original files of the capture. */
-    val totalBytes: Long,
-    /** What a single download of this capture fetches under the current policy. */
-    val plan: WifiDownloadPlan,
-)
 
 // ---- Day list --------------------------------------------------------------------------------
 
