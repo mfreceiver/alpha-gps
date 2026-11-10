@@ -36,9 +36,9 @@
 - 依据：wave3/m7 实现与 sol 对 0c9b324..ef196de 的复审（Compose 手势/窗口适配/真实相机部分读取无法在 JVM 验证）；`docs/wifi-architecture.md` “Live status and photo metadata” 的 Viewer use 段。
 
 ### 23. 真机核对：0.3.0 B0 玻璃材质与新组件
-- 做什么：装含 B0 的版本（亮/暗各一遍，Android 12 与 14+ 各一台）打开调试预览或已迁移页面，核对：①背景彩色光斑可见但不抢眼；卡片/浮条/对话框能明显看出毛玻璃（双向边缘光、顶部高光带、双层阴影、细噪点），文字清晰；②API 31/32 低端机长列表滚动不掉帧（噪点 + 每卡片模糊）；③对话框/菜单/面板/Snackbar 背后的页面模糊随滚动刷新；④动态字体 200% 下 GlassSegmented/StatusBadge/GlassTopBar 标题不截断；⑤TalkBack：Snackbar 播报、RevealValueRow 状态、图标长按 tooltip 不被朗读；⑥暗色开关/复选框选中态（浅蓝底 + 深蓝滑块/勾）观感可接受。⑦（页面迁移收尾并入）设备详情标题改左对齐后观感；⑧Welcome 页：`WelcomeScreenTest` 几何断言（375×627 slide 不滚动；412×860 标题与 slide 顶部 >80dp；该 androidTest 目前仅编译、未运行，需在设备/模拟器上跑一遍）；⑨设置页 `GlassRadio` 20dp 点击区/外观与 `GlassSwitch` 行高；⑩弹出菜单内 `GlassSegmented` 宽度；⑪网格复选框在很亮缩略图上的可见性；⑫预览页下载按钮对比度（见 #25）；⑬排障页返回按钮无障碍标签由 Close 变为 Back（TalkBack 朗读）；⑭信息值字号 14→15 后各行/弹窗折行；⑮`LocationPermissionBoxTest` 使用已弃用的 `createComposeRule`（既有编译警告，换成新 API 或保留并记录）。
+- 做什么：装含 B0 的版本（亮/暗各一遍，Android 12 与 14+ 各一台）打开调试预览或已迁移页面，核对：①背景彩色光斑可见但不抢眼；卡片/浮条/对话框能明显看出毛玻璃（双向边缘光、顶部高光带、双层阴影、细噪点），文字清晰；②API 31/32 低端机长列表滚动不掉帧（噪点 + 每卡片模糊）；③对话框/菜单/面板/Snackbar 背后的页面模糊随滚动刷新；④动态字体 200% 下 GlassSegmented/StatusBadge/GlassTopBar 标题不截断；⑤TalkBack：Snackbar 播报、RevealValueRow 状态、图标长按 tooltip 不被朗读；⑥暗色开关/复选框选中态（浅蓝底 + 深蓝滑块/勾）观感可接受。⑦（页面迁移收尾并入）设备详情标题改左对齐后观感；⑧Welcome 页：`WelcomeScreenTest` 几何断言（375×627 slide 不滚动；412×860 标题与 slide 顶部 >80dp；该 androidTest 目前仅编译、未运行，需在设备/模拟器上跑一遍）；⑨设置页单选行与开关行观感：`GlassRadio` 视觉圈 20dp，设置页由整行 `SharedRadioOption`（≥48dp、整行 selectable，`GlassRadio(onClick = null)`）承担点击，独立使用的 `GlassRadio(onClick ≠ null)` 点击区为 48dp——核对整行点按、选中圈外观与 `GlassSwitch` 行高一致；⑩弹出菜单内 `GlassSegmented` 宽度；⑪网格复选框在很亮缩略图上的可见性；⑫预览页下载按钮对比度（见 #26）；⑬排障页返回按钮无障碍标签由 Close 变为 Back（TalkBack 朗读）；⑭信息值字号 14→15 后各行/弹窗折行；⑮`LocationPermissionBoxTest` 使用已弃用的 `createComposeRule`（既有编译警告，换成新 API 或保留并记录）；⑯TalkBack 聚焦 `GlassTextField`（重命名相机、手动加入 Wi-Fi 的 SSID/密码、IP）读出标签名称、空值时 placeholder 提示、错误时错误文本，且标签/说明不重复朗读；在设备/模拟器上跑 `GlassTextFieldSemanticsTest`（目前仅编译）；⑰弹层焦点：外接键盘/方向键打开网格"视图选项"弹层与各对话框/底部面板，焦点进入弹层、Tab/方向键到不了背后页面、关闭后回到打开它的按钮（触屏打开则关闭后不出现焦点框）；在设备/模拟器上跑 `GlassOverlayFocusTest`（目前仅编译）；⑱字体 200% 下网格"视图选项"弹层（固定 248dp 宽）内的 `GlassSegmented`（小/中/大）不截断。
 - 验收：不满意的项按 `docs/glass-material-notes.md` 的参数说明调 token，调后 `PaletteContrastTest` 仍全部通过（不放宽阈值）。
-- 依据：B0 只能在 JVM 做对比度矩阵与纯逻辑测试，渲染观感/性能/无障碍需真机（`docs/glass-material-notes.md` §7）；⑦–⑮ 来自 P1–P3 页面迁移批次的自报（`docs/ui-audit-2026-11.md`）。
+- 依据：B0 只能在 JVM 做对比度矩阵与纯逻辑测试，渲染观感/性能/无障碍需真机（`docs/glass-material-notes.md` §7）；⑦–⑮ 来自 P1–P3 页面迁移批次的自报（`docs/ui-audit-2026-11.md`）；⑯–⑱ 来自 0.3.0 样式统一复审（sharednew 无 Compose UI 测试依赖，语义/焦点只在 JVM 测纯逻辑，Compose 层测试在 `app/src/androidTest/.../ui/components/`）。
 
 ## P2
 
@@ -58,10 +58,10 @@
 - 验收：竖屏下载按钮取样到照片并呈现玻璃（或文档确认接受现状）；对比度仍过 `PaletteContrastTest`；翻页/下载状态不受影响；B/C 窗口不回归。
 - 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiPhotoViewer.kt` 竖屏下载行（`ViewerDownloadArea`，约 :456、:921）；预览根背景 `:372`。
 
-### 27. GlassPopover 无焦点陷阱
-- 做什么：原系统 `Popup` 自带焦点/无障碍遏制，页内 `GlassPopover` 没有：打开时背后内容仍可被 TalkBack/键盘焦点到达。评估并在组件级实现（打开时背后内容 `clearAndSetSemantics`/隐藏、焦点进入弹层、关闭后回到锚点），菜单 `GlassMenu` 同类问题一并核对。
-- 验收：弹层打开时 TalkBack 焦点只在弹层内，关闭后焦点回锚点；有测试覆盖语义/焦点逻辑（可做 JVM 层）；不引入系统窗口。
-- 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/components/glass/GlassPopover.kt:166`（"never a platform Popup"）；`docs/ui-components-cheatsheet.md` 页内叠层规则。
+### 27. 页内弹层焦点：真机验证与剩余缺口
+- 做什么：组件级焦点已实现（`GlassOverlayFocus.kt`：Popover/Menu/`CapsuleDialog`/`GlassBottomSheet` 打开时焦点移入面板容器、模态期间底页焦点组拒绝进入、关闭回 `glassAnchor` 或打开前的焦点项；`GlassPopover`/`GlassMenu` 可传 `paneTitle`）。剩余：①在设备/模拟器上跑 `app/src/androidTest/.../ui/components/GlassOverlayFocusTest.kt` 并用外接键盘/方向键实测（同 #23 ⑰）；②焦点落在面板容器而非首个条目，键盘用户需多按一次——真机评估是否改为直接聚焦首个可聚焦条目（Compose 对 focusGroup 的 requestFocus 行为需真机确认）；③面板内 Tab 到末项后不循环（底页拒绝进入，焦点停住），评估是否需要循环；④无 `GlassBackground` 时 `CapsuleDialog` 走平台 `Dialog` 回退，焦点由窗口管理，不经过焦点记忆。
+- 验收：①通过；②③有结论（改或记录为接受）；不引入系统窗口；`OverlayFocusMemoryTest` 仍通过。
+- 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/components/glass/GlassOverlayFocus.kt`、`GlassBackground.kt`（底页焦点组 + 关闭恢复）、`GlassPopover.kt`；基线行为为 `PopupProperties(focusable = true)`。
 
 ## P3
 
