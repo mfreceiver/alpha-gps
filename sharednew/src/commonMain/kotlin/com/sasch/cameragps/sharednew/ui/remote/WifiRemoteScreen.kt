@@ -75,7 +75,6 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteController
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemotePhase
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiShutdownStatus
-import com.sasch.cameragps.sharednew.remote.wifi.formatBadge
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import com.sasch.cameragps.sharednew.remote.wifi.planDownloads
 import com.sasch.cameragps.sharednew.remote.wifi.toSummary
@@ -217,17 +216,6 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
      */
     fun setPhotoSelected(captureId: String, selected: Boolean) {
         if (isPhotoSelected(captureId) != selected) togglePhotoSelection(captureId)
-    }
-
-    /** Format tag and planned size of one capture under [policy], for the viewer's info line. */
-    internal fun captureDetails(capture: WifiCameraCapture, policy: WifiFormatPolicy): WifiCaptureDetails {
-        val saved = controller.sessions.value[identifier.uppercase()]?.wifiRemote?.photoBrowser?.savedDownloads
-            ?: emptySet()
-        return WifiCaptureDetails(
-            format = capture.formatBadge(),
-            totalBytes = capture.files.sumOf { it.size },
-            plan = planDownloads(listOf(capture), policy, saved),
-        )
     }
 
     /**
