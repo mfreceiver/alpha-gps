@@ -181,7 +181,7 @@ internal class SonyContentCatalog(
             ),
             maxDataBytes = length
         ).ensureResponded()
-        check(response.response.code == 0x2001)
+        if (response.response.code != PtpResponse.OK) throw PtpOperationRejected(response.response.code)
         if (response.response.parameters.size >= 2) {
             val timestamp =
                 response.response.parameters[0] or (response.response.parameters[1] shl 32)

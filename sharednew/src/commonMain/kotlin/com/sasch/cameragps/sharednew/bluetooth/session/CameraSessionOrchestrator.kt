@@ -10,6 +10,10 @@ import com.sasch.cameragps.sharednew.bluetooth.coordinator.RemoteControlCoordina
 import com.sasch.cameragps.sharednew.bluetooth.location.LocationEvent
 import com.sasch.cameragps.sharednew.bluetooth.location.LocationSource
 import com.sasch.cameragps.sharednew.bluetooth.location.LocationTransmissionManager
+import com.sasch.cameragps.sharednew.bluetooth.status.CameraLiveStatusHub
+import com.sasch.cameragps.sharednew.bluetooth.status.CameraStatusPersistence
+import com.sasch.cameragps.sharednew.bluetooth.status.RssiMonitor
+import com.sasch.cameragps.sharednew.bluetooth.status.SignalMonitoringLease
 import com.sasch.cameragps.sharednew.bluetooth.transport.BleOperation
 import com.sasch.cameragps.sharednew.bluetooth.transport.BleOperationQueue
 import com.sasch.cameragps.sharednew.bluetooth.transport.BleOperationResult
@@ -59,13 +63,25 @@ class CameraSessionOrchestrator(
     private val shouldRemainConnected: suspend (String) -> Boolean = { true },
     /** iOS: app-level transmission toggle for the location manager. */
     isTransmissionAllowed: () -> Boolean = { true },
+    /** Optional storage of the last GPS write time (see [CameraLiveStatusHub]); in-memory when omitted. */
+    statusPersistence: CameraStatusPersistence = CameraStatusPersistence.None,
 ) : CameraAutoCorrectionControls {
     private val log = logging()
 
     val registry = CameraSessionRegistry()
 
+    /** Per-camera live status (time correction, GPS write counters, signal, MTU, battery); read-only for UI. */
+    val liveStatus = CameraLiveStatusHub(registry, scope, persistence = statusPersistence)
+
+    private val rssiMonitor = RssiMonitor(transport, registry, scope, report = { id, rssi -> liveStatus.onRssi(id, rssi) })
+
     private val queue: BleOperationQueue =
-        BleOperationQueue(transport, scope, shouldExecute = { id, operation ->
+        BleOperationQueue(transport, scope, onOperationFinished = { id, operation, result ->
+            // Only the GATT outcome counts as "written"; queueing is counted separately.
+            if (operation is BleOperation.Write && result !is BleOperationResult.Cancelled &&
+                operation.characteristicUuid.equals(SonyBluetoothConstants.CHARACTERISTIC_UUID, true)
+            ) liveStatus.onGpsWriteResult(id, result is BleOperationResult.Success)
+        }, shouldExecute = { id, operation ->
             // Parked location packets require a completed handshake. Camera-reported
             // location status is advisory and does not gate transmission.
             when {
@@ -88,7 +104,10 @@ class CameraSessionOrchestrator(
     })
     private val port = QueuedBleGattPort(queue, transport, registry)
     private val autoCorrection = CameraAutoCorrectionController(port, registry, scope)
-    private val timeSync = CameraTimeSyncController(port, registry, scope)
+    private val timeSync = CameraTimeSyncController(
+        port, registry, scope,
+        onStatus = { id, outcome, reason -> liveStatus.onTimeSync(id, outcome, reason) },
+    )
     private val remoteControl: RemoteControlCoordinator = RemoteControlCoordinator(port, scope)
     private val sessionCoordinator =
         BleSessionCoordinator(port, remoteControl, timeSync::synchronize)
@@ -100,6 +119,7 @@ class CameraSessionOrchestrator(
         port = port,
         scope = scope,
         isTransmissionAllowed = isTransmissionAllowed,
+        onPacketQueued = { id -> liveStatus.onGpsQueued(id) },
     )
 
     /**
@@ -169,6 +189,14 @@ class CameraSessionOrchestrator(
         registry.updateIfPresent(identifier) { it.copy(phase = BleSessionPhase.Error) }
     }
 
+    /**
+     * Starts RSSI polling (every 10 s while the link is Transmitting) for [identifier] until the
+     * returned lease is released. Reference counted: call from the device page when it becomes
+     * visible, release when it goes away. The result lands in [liveStatus].
+     */
+    fun acquireSignalMonitoring(identifier: String): SignalMonitoringLease =
+        rssiMonitor.acquire(identifier)
+
     fun triggerRemoteShutter(identifier: String): Boolean =
         sendRemoteCommand(identifier, RemoteCommand.ShutterFullPress)
 
@@ -219,6 +247,7 @@ class CameraSessionOrchestrator(
         sessionCoordinator.clearSession(id)
         registry.markBleDisconnected(id)
         locationManager.updateTracking()
+        liveStatus.onSessionEnded(id)
     }
 
     fun shutdownAll() {
@@ -227,6 +256,7 @@ class CameraSessionOrchestrator(
         sessionCoordinator.clearAllSessions()
         queue.shutdown("shutdown")
         locationManager.shutdown()
+        rssiMonitor.shutdown()
         registry.clear()
     }
 
@@ -274,6 +304,7 @@ class CameraSessionOrchestrator(
             is BleTransportEvent.CharacteristicChanged -> handleCharacteristicChanged(event)
 
             is BleTransportEvent.ServicesDiscovered -> Unit // consumed by the queue
+            is BleTransportEvent.RssiRead -> rssiMonitor.onEvent(event)
             is BleTransportEvent.MtuChanged -> {
                 // The queue consumes the event for its own request; the UI only reads the value.
                 if (event.status == BleOperationStatus.Success) {
@@ -304,6 +335,7 @@ class CameraSessionOrchestrator(
         autoCorrection.clear(id)
         timeSync.clear(id)
         log.i { "Device $id connected" }
+        liveStatus.onSessionStarted(id)
         registry.upsert(id) {
             it.copy(
                 phase = BleSessionPhase.Connected,
