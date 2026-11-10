@@ -94,14 +94,13 @@ internal enum class WifiGridSize(val columns: Int, val minTileDp: Int, val corne
 }
 
 /**
- * Grid view preferences (persisted by the app). Default: small tiles and no tags — the format, size
- * and protection tags are each opt-in.
+ * Grid view preferences (persisted by the app). Default: small tiles and no tags — the format and
+ * size tags are each opt-in. (The former protection switch is gone; its stored key is ignored.)
  */
 data class WifiGridOptions(
     val size: String = WifiGridSize.Small.name,
     val showFormat: Boolean = false,
     val showSize: Boolean = false,
-    val showProtection: Boolean = false,
 ) {
     internal val gridSize: WifiGridSize
         get() = WifiGridSize.entries.firstOrNull { it.name == size } ?: WifiGridSize.Small
@@ -110,21 +109,6 @@ data class WifiGridOptions(
 }
 
 // ---- Capture tags ----------------------------------------------------------------------------
-
-/**
- * Protection of a whole capture: true if any file is protected, false only when every file says it
- * is not, null when unknown (the v4 catalog does not report it) — then no tag is shown, never a guess.
- */
-internal val WifiCameraCapture.isProtected: Boolean?
-    get() = when {
-        files.any { it.isProtected == true } -> true
-        files.isNotEmpty() && files.all { it.isProtected == false } -> false
-        else -> null
-    }
-
-/** Whether any capture of [captures] reports a protection flag at all (else the switch is greyed). */
-internal fun protectionKnown(captures: List<WifiCameraCapture>): Boolean =
-    captures.any { it.isProtected != null }
 
 /** "12.3 MB": the size tag, always megabytes with one decimal (binary MB), rounded half up. */
 internal fun formatSizeTag(bytes: Long): String {
@@ -139,8 +123,6 @@ internal data class WifiCaptureDetails(
     val format: String?,
     /** Sum of all original files of the capture. */
     val totalBytes: Long,
-    /** See [isProtected]: null = unknown. */
-    val isProtected: Boolean?,
     /** What a single download of this capture fetches under the current policy. */
     val plan: WifiDownloadPlan,
 )

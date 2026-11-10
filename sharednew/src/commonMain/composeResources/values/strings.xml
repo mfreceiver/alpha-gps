@@ -586,9 +586,6 @@
     <string name="mw_grid_large">Large</string>
     <string name="mw_tag_format">File format</string>
     <string name="mw_tag_size">File size</string>
-    <string name="mw_tag_protection">Protection</string>
-    <string name="mw_tag_protection_unavailable">Not provided by this camera</string>
-    <string name="mw_protected">Protected</string>
     <string name="m7_viewer_only_format">Only %1$s</string>
     <string name="m7_viewer_download_format">Download %1$s</string>
     <string name="m7_viewer_downloading">Downloading %1$s</string>

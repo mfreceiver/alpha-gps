@@ -229,21 +229,3 @@ fun AlphaColors.toColorScheme(): ColorScheme =
             surfaceContainerLowest = surfaceContainerLowest,
         )
     }
-
-/** Rating star colours (design v1, kept in v3). Coloured only in the viewer's detail panel. */
-object RatingColors {
-    val star1 = Color(0xFF90A4AE)
-    val star2 = Color(0xFF4FC3F7)
-    val star3 = Color(0xFF66BB6A)
-    val star4 = Color(0xFFFFB300)
-    val star5 = Color(0xFFFF7043)
-
-    /** Colour for a 1–5 rating; anything else falls back to the 1-star grey. */
-    fun forRating(rating: Int): Color = when (rating) {
-        2 -> star2
-        3 -> star3
-        4 -> star4
-        5 -> star5
-        else -> star1
-    }
-}

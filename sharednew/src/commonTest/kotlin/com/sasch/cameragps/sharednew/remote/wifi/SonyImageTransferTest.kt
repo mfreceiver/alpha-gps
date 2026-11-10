@@ -633,31 +633,30 @@ class SonyImageTransferTest : WifiLoggingTest() {
     }
 
     @Test
-    fun objectInfoExposesProtectionAndPixelSizeWhenTheCameraProvidesThem() {
+    fun objectInfoExposesPixelSizeWhenTheCameraProvidesIt() {
         fun withFields(protection: Long, width: Long, height: Long) = info(42).also {
             number(protection, 2).copyInto(it, 6)
             number(width, 4).copyInto(it, 26)
             number(height, 4).copyInto(it, 30)
         }
         val plain = SonyImageInfo.parse(withFields(1, 6000, 4000))
-        assertEquals(true, plain.isProtected)
         assertEquals(6000, plain.width)
         assertEquals(4000, plain.height)
         val none = SonyImageInfo.parse(withFields(0, 0, 0))
-        assertEquals(false, none.isProtected)
         assertEquals(null, none.width)
         assertEquals(null, none.height)
-        // Unknown protection codes and absurd sizes are "not provided", never an error.
+        // Absurd sizes are "not provided", never an error; the ProtectionStatus word is not read at
+        // all (the protection display was removed), so any value there parses the same.
         val odd = SonyImageInfo.parse(withFields(7, 0xffffffffL, 5))
-        assertEquals(null, odd.isProtected)
         assertEquals(null, odd.width)
         assertEquals(5, odd.height)
+        assertEquals(SonyImageInfo.parse(withFields(0, 6000, 4000)), plain)
     }
 
     @Test
     fun parsesSupportedImageMetadataAndRejectsUnsafeOrTruncatedNames() {
         assertEquals(
-            SonyImageInfo(42, "DSC01234.JPG", "image/jpeg", captureId = "object:1:0:DSC01234:", isProtected = false),
+            SonyImageInfo(42, "DSC01234.JPG", "image/jpeg", captureId = "object:1:0:DSC01234:"),
             SonyImageInfo.parse(info(42))
         )
         assertEquals("image/x-sony-arw", SonyImageInfo.parse(info(42, "DSC.ARW", 0xb101)).mimeType)

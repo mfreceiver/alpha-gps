@@ -81,8 +81,6 @@ import cameragps.sharednew.generated.resources.m7_viewer_only_format
 import cameragps.sharednew.generated.resources.m7_viewer_other_transfer
 import cameragps.sharednew.generated.resources.m7_viewer_selected_count
 import cameragps.sharednew.generated.resources.m7_viewer_shooting_params
-import cameragps.sharednew.generated.resources.mw_lock_24px
-import cameragps.sharednew.generated.resources.mw_protected
 import cameragps.sharednew.generated.resources.wifi_remote_batch_progress
 import cameragps.sharednew.generated.resources.wifi_remote_browser_empty
 import cameragps.sharednew.generated.resources.wifi_remote_browser_failed
@@ -271,7 +269,6 @@ internal fun WifiPhotoViewer(
                         viewerPositionTotal(browser.grouped, captures.size, browser.totalObjects),
                     )
                 },
-                isProtected = info?.isProtected == true,
                 selectedCount = viewModel.selectedPhotoIds.size,
                 info = info,
                 histogram = histogram,
@@ -335,7 +332,6 @@ private class ViewerParts(
     val title: String,
     val capturedAt: String?,
     val position: String?,
-    val isProtected: Boolean,
     val selectedCount: Int,
     val info: ViewerInfoStrip?,
     val histogram: FloatArray?,
@@ -466,15 +462,11 @@ private fun ViewerTopBar(
     }
 }
 
-/** Status tags: protection (lock) and the shared selection count. Informational, not clickable. */
+/** Status tag: the shared selection count. Informational, not clickable. */
 @Composable
 private fun ViewerStatusTags(parts: ViewerParts, modifier: Modifier = Modifier) {
-    if (!parts.isProtected && parts.selectedCount == 0) return
+    if (parts.selectedCount == 0) return
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (parts.isProtected) InfoTag(
-            stringResource(Res.string.mw_protected), style = InfoTagStyle.OnPhoto,
-            icon = painterResource(Res.drawable.mw_lock_24px),
-        )
         if (parts.selectedCount > 0) InfoTag(
             stringResource(Res.string.m7_viewer_selected_count, parts.selectedCount), style = InfoTagStyle.OnPhoto,
         )

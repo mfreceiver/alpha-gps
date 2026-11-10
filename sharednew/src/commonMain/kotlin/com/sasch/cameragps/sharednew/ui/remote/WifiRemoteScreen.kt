@@ -226,7 +226,6 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         return WifiCaptureDetails(
             format = capture.formatBadge(),
             totalBytes = capture.files.sumOf { it.size },
-            isProtected = capture.isProtected,
             plan = planDownloads(listOf(capture), policy, saved),
         )
     }

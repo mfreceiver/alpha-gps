@@ -557,9 +557,6 @@
     <string name="mw_grid_large">大</string>
     <string name="mw_tag_format">文件格式</string>
     <string name="mw_tag_size">文件大小</string>
-    <string name="mw_tag_protection">保护</string>
-    <string name="mw_tag_protection_unavailable">此相机不提供</string>
-    <string name="mw_protected">已保护</string>
     <string name="m7_viewer_only_format">仅 %1$s</string>
     <string name="m7_viewer_download_format">下载 %1$s</string>
     <string name="m7_viewer_downloading">正在下载 %1$s</string>

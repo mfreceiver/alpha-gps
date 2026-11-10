@@ -28,7 +28,7 @@ class WifiPhotoViewerModelTest {
 
     private fun metadata(handle: Long, exif: PhotoExif? = null, format: PhotoFormat = PhotoFormat.Jpeg) = PhotoMetadata(
         handle = handle, filename = "DSC1.JPG", format = format, sizeBytes = 1, capturedAt = "",
-        width = 6000, height = 4000, isProtected = null, exif = exif, extendedRead = exif != null,
+        width = 6000, height = 4000, exif = exif, extendedRead = exif != null,
     )
 
     private val sampleExif = PhotoExif(
@@ -140,15 +140,6 @@ class WifiPhotoViewerModelTest {
         // RAW has no readable EXIF: the basic Ready result shows no extras either.
         val rawReady = viewerInfoStrip(rawOnly, WifiFormatPolicy.Original, PhotoMetadataState.Ready(metadata(2, format = PhotoFormat.Raw)), all)
         assertEquals(ViewerExtrasState.None, rawReady.extras)
-    }
-
-    @Test
-    fun protectionComesFromTheCatalogOrTheMetadata() {
-        val locked = WifiCameraCapture("p", listOf(jpg.copy(isProtected = true)))
-        assertTrue(viewerInfoStrip(locked, WifiFormatPolicy.JpegOnly, PhotoMetadataState.Idle, ViewerInfoOptions()).isProtected)
-        assertFalse(viewerInfoStrip(jpgOnly, WifiFormatPolicy.JpegOnly, PhotoMetadataState.Idle, ViewerInfoOptions()).isProtected)
-        val viaMetadata = PhotoMetadataState.Ready(metadata(1).copy(isProtected = true))
-        assertTrue(viewerInfoStrip(jpgOnly, WifiFormatPolicy.JpegOnly, viaMetadata, ViewerInfoOptions()).isProtected)
     }
 
     @Test

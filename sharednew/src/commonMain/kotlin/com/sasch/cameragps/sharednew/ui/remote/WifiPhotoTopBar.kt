@@ -46,8 +46,6 @@ import cameragps.sharednew.generated.resources.mw_grid_medium
 import cameragps.sharednew.generated.resources.mw_grid_small
 import cameragps.sharednew.generated.resources.mw_grid_view_24px
 import cameragps.sharednew.generated.resources.mw_tag_format
-import cameragps.sharednew.generated.resources.mw_tag_protection
-import cameragps.sharednew.generated.resources.mw_tag_protection_unavailable
 import cameragps.sharednew.generated.resources.mw_tag_size
 import cameragps.sharednew.generated.resources.mw_view_options
 import cameragps.sharednew.generated.resources.refresh_24px
@@ -148,9 +146,6 @@ internal fun WifiPhotoBrowserTopBar(
                         )
                         if (open) WifiGridOptionsPopover(
                             options = gridOptions,
-                            protectionAvailable = remember(browser.photos) {
-                                protectionKnown(groupCameraPhotos(browser.photos))
-                            },
                             onChange = onGridOptionsChange,
                             onDismiss = { open = false },
                         )
@@ -175,14 +170,12 @@ internal fun WifiPhotoBrowserTopBar(
 }
 
 /**
- * View options popover under the grid icon: tile size (small / medium / large) and three independent
- * tag switches. Changes apply at once; it closes on an outside tap or Back. The protection switch is
- * greyed when no photo of the day reports a protection flag (the newer catalog does not).
+ * View options popover under the grid icon: tile size (small / medium / large) and two independent
+ * tag switches (file format, file size). Changes apply at once; it closes on an outside tap or Back.
  */
 @Composable
 private fun WifiGridOptionsPopover(
     options: WifiGridOptions,
-    protectionAvailable: Boolean,
     onChange: (WifiGridOptions) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -236,12 +229,6 @@ private fun WifiGridOptionsPopover(
             OptionSwitch(stringResource(Res.string.mw_tag_size), null, options.showSize, true) {
                 onChange(options.copy(showSize = it))
             }
-            OptionSwitch(
-                stringResource(Res.string.mw_tag_protection),
-                if (protectionAvailable) null else stringResource(Res.string.mw_tag_protection_unavailable),
-                options.showProtection && protectionAvailable,
-                protectionAvailable,
-            ) { onChange(options.copy(showProtection = it)) }
         }
     }
 }
