@@ -439,14 +439,6 @@
     <string name="m9_photo_transfer_title">Photo transfer</string>
     <string name="m9_download_format_hint">Batch and single-photo downloads both follow this format.</string>
     <string name="m9_download_format_jpeg_desc">Only the JPG is downloaded. Photos without a JPG are skipped and listed in the summary.</string>
-    <string name="m9_viewer_info_title">Preview info</string>
-    <string name="m9_viewer_histogram">Show histogram</string>
-    <string name="m9_viewer_histogram_desc">A brightness histogram of the photo.</string>
-    <string name="m9_viewer_exif_params">Show shooting parameters</string>
-    <string name="m9_viewer_exif_params_desc">Aperture, shutter speed, ISO, focal length and exposure compensation.</string>
-    <string name="m9_viewer_lens">Show lens info</string>
-    <string name="m9_viewer_lens_desc">Lens model and lens details.</string>
-    <string name="m9_viewer_info_note">These details appear only in the info area of the preview. When any of them is on, opening a preview reads the photo header once more, which slightly increases communication with the camera.</string>
     <string name="m9_logs_copy">Copy logs</string>
     <string name="m9_logs_copied">Copied %1$d log entries</string>
     <string name="m9_logs_copied_latest">Copied the latest %1$d log entries (only the newest are copied)</string>
@@ -616,4 +608,17 @@
     <string name="a1_address_hidden">Hidden</string>
     <string name="b1_tile_size">%1$s MB</string>
     <string name="b1_tile_size_not_downloaded">%1$s MB, not included in JPG-only downloads</string>
+    <string name="b1_details_title">Photo details</string>
+    <string name="b1_details_open">Show photo details</string>
+    <string name="b1_details_close">Close photo details</string>
+    <string name="b1_detail_captured">Captured</string>
+    <string name="b1_detail_format">Format</string>
+    <string name="b1_detail_files">Files</string>
+    <string name="b1_detail_resolution">Resolution</string>
+    <string name="b1_exif_aperture">Aperture</string>
+    <string name="b1_exif_shutter">Shutter speed</string>
+    <string name="b1_exif_iso">ISO</string>
+    <string name="b1_exif_bias">Exposure compensation</string>
+    <string name="b1_exif_focal">Focal length</string>
+    <string name="b1_exif_camera">Camera</string>
 </resources>

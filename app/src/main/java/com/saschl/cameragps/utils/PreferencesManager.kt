@@ -226,36 +226,6 @@ object PreferencesManager {
         TransmissionSoundEvent.CAMERA_DISCONNECTED -> KEY_SOUND_URI_CAMERA_DISCONNECTED
     }
 
-    // --- Photo viewer info toggles (read by the viewer; default off) ---------------------------
-
-    private const val KEY_VIEWER_SHOW_HISTOGRAM = "viewer_show_histogram"
-    private const val KEY_VIEWER_SHOW_EXIF_PARAMS = "viewer_show_exif_params"
-    private const val KEY_VIEWER_SHOW_LENS = "viewer_show_lens"
-
-    /** Show the histogram in the photo viewer's info area. */
-    fun isViewerShowHistogram(context: Context): Boolean =
-        getPreferences(context).getBoolean(KEY_VIEWER_SHOW_HISTOGRAM, false)
-
-    fun setViewerShowHistogram(context: Context, enabled: Boolean) {
-        getPreferences(context).edit { putBoolean(KEY_VIEWER_SHOW_HISTOGRAM, enabled) }
-    }
-
-    /** Show aperture / shutter / ISO / focal length / exposure compensation in the viewer. */
-    fun isViewerShowExifParams(context: Context): Boolean =
-        getPreferences(context).getBoolean(KEY_VIEWER_SHOW_EXIF_PARAMS, false)
-
-    fun setViewerShowExifParams(context: Context, enabled: Boolean) {
-        getPreferences(context).edit { putBoolean(KEY_VIEWER_SHOW_EXIF_PARAMS, enabled) }
-    }
-
-    /** Show the lens information in the viewer. */
-    fun isViewerShowLens(context: Context): Boolean =
-        getPreferences(context).getBoolean(KEY_VIEWER_SHOW_LENS, false)
-
-    fun setViewerShowLens(context: Context, enabled: Boolean) {
-        getPreferences(context).edit { putBoolean(KEY_VIEWER_SHOW_LENS, enabled) }
-    }
-
     // ---- Wi-Fi photo grid view options (wave 2 / Wi-Fi screen; keys prefixed mw_) ----
 
     /** Wi-Fi day-grid view options; default small tiles with every tag off. */

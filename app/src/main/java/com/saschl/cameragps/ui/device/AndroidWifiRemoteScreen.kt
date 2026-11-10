@@ -25,7 +25,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.sasch.cameragps.sharednew.ui.remote.ViewerInfoOptions
 import com.sasch.cameragps.sharednew.ui.remote.WifiRemoteScreen
 import com.sasch.cameragps.sharednew.ui.remote.WifiRemoteViewModel
 import com.saschl.cameragps.AppServices
@@ -97,10 +96,6 @@ fun AndroidWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
         } else if (host == null) startCameraSetup() else controller.connect(identifier, host)
     }
     var gridOptions by remember { mutableStateOf(PreferencesManager.getWifiGridOptions(context)) }
-    // Viewer info toggles live on the settings page, a different destination: read them on entry and
-    // again on every resume, which covers coming back from settings without a preference listener.
-    var viewerInfoOptions by remember { mutableStateOf(readViewerInfoOptions(context)) }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewerInfoOptions = readViewerInfoOptions(context) }
     WifiRemoteScreen(model, onConnect = { connect(it) }, onConnectAutomatically = { connect(null) },
         autoConnectOnEntry = !entryConnectAttempted,
         isExperimentalNoticeAcknowledged = {
@@ -135,7 +130,6 @@ fun AndroidWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
             gridOptions = it
             PreferencesManager.setWifiGridOptions(context, it)
         },
-        viewerInfoOptions = viewerInfoOptions,
         onClose = close)
 }
 
@@ -150,12 +144,6 @@ internal fun KeepScreenOnWhileRemoteActive(active: Boolean) {
         }
     }
 }
-
-private fun readViewerInfoOptions(context: Context) = ViewerInfoOptions(
-    showHistogram = PreferencesManager.isViewerShowHistogram(context),
-    showExifParams = PreferencesManager.isViewerShowExifParams(context),
-    showLens = PreferencesManager.isViewerShowLens(context),
-)
 
 private fun Context.activity(): Activity? = when (this) {
     is Activity -> this

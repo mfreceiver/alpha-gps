@@ -2,7 +2,6 @@ package com.sasch.cameragps.sharednew.remote.wifi
 
 import androidx.compose.ui.graphics.ImageBitmap
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionRegistry
-import com.sasch.cameragps.sharednew.ui.remote.ViewerInfoOptions
 import com.sasch.cameragps.sharednew.ui.remote.WifiRemoteViewModel
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -79,61 +78,72 @@ class WifiPhotoViewerViewModelTest : WifiLoggingTest() {
     }
 
     @Test
-    fun allTogglesOffOrHistogramOnlyNeverReadTheOriginal() = runTest {
+    fun aClosedDetailsDrawerNeverReadsTheOriginal() = runTest {
         val connection = Connection()
         val (controller, model) = open(connection)
         model.previewPhoto("a")
-        model.showViewerMetadata(ViewerInfoOptions())
+        model.showViewerMetadata(extended = false)
         val basic = assertIs<PhotoMetadataState.Ready>(controller.metadata.value).metadata
         assertEquals(42L, basic.handle)
         assertFalse(basic.extendedRead)
-        model.showViewerMetadata(ViewerInfoOptions(showHistogram = true))
-        assertIs<PhotoMetadataState.Ready>(controller.metadata.value)
         advanceTimeBy(1_000); runCurrent()
         assertTrue(connection.heads.isEmpty(), "basic data is free: no camera read")
         controller.closeAndJoin()
     }
 
     @Test
-    fun parametersOrLensTriggerTheExtendedRead() = runTest {
-        for (options in listOf(ViewerInfoOptions(showExifParams = true), ViewerInfoOptions(showLens = true))) {
-            val connection = Connection()
-            val (controller, model) = open(connection)
-            model.previewPhoto("a")
-            model.showViewerMetadata(options)
-            assertIs<PhotoMetadataState.Loading>(controller.metadata.value)
-            advanceTimeBy(300); runCurrent()
-            val ready = assertIs<PhotoMetadataState.Ready>(controller.metadata.value).metadata
-            assertTrue(ready.extendedRead)
-            assertEquals(listOf(42L), connection.heads)
-            controller.closeAndJoin()
-        }
+    fun openingTheDetailsTriggersTheExtendedRead() = runTest {
+        val connection = Connection()
+        val (controller, model) = open(connection)
+        model.previewPhoto("a")
+        model.showViewerMetadata(extended = true)
+        assertIs<PhotoMetadataState.Loading>(controller.metadata.value)
+        advanceTimeBy(300); runCurrent()
+        val ready = assertIs<PhotoMetadataState.Ready>(controller.metadata.value).metadata
+        assertTrue(ready.extendedRead)
+        assertEquals(listOf(42L), connection.heads)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun closingTheDrawerBeforeTheDebounceCancelsTheRead() = runTest {
+        val connection = Connection()
+        val (controller, model) = open(connection)
+        model.previewPhoto("a")
+        model.showViewerMetadata(extended = true)
+        assertIs<PhotoMetadataState.Loading>(controller.metadata.value)
+        // The drawer closes within the 250 ms debounce: the viewer asks for the basic data again.
+        model.showViewerMetadata(extended = false)
+        assertFalse(assertIs<PhotoMetadataState.Ready>(controller.metadata.value).metadata.extendedRead)
+        advanceTimeBy(1_000); runCurrent()
+        assertTrue(connection.heads.isEmpty(), "the pending extended read was cancelled")
+        controller.closeAndJoin()
     }
 
     @Test
     fun aSwipeCancelsThePreviousReadAndClosingStopsIt() = runTest {
         val connection = Connection()
         val (controller, model) = open(connection)
-        val options = ViewerInfoOptions(showExifParams = true)
+        val extended = true // the details are shown
         model.previewPhoto("a")
-        model.showViewerMetadata(options)
+        model.showViewerMetadata(extended)
         assertIs<PhotoMetadataState.Loading>(controller.metadata.value)
         // Swipe before the debounce ends: only the new photo is read.
         model.viewPhotoAt(1)
-        model.showViewerMetadata(options)
+        model.showViewerMetadata(extended)
         assertEquals(44L, assertIs<PhotoMetadataState.Loading>(controller.metadata.value).handle)
         advanceTimeBy(300); runCurrent()
         assertEquals(listOf(44L), connection.heads)
         // Back to the first photo, then close before the read starts.
         model.viewPhotoAt(0)
-        model.showViewerMetadata(options)
+        model.showViewerMetadata(extended)
         assertIs<PhotoMetadataState.Loading>(controller.metadata.value)
         model.closePhoto()
         model.stopViewerMetadata()
         assertEquals(PhotoMetadataState.Idle, controller.metadata.value)
         advanceTimeBy(1_000); runCurrent()
         assertEquals(listOf(44L), connection.heads, "a closed viewer reads nothing")
-        model.showViewerMetadata(options)
+        model.showViewerMetadata(extended)
         assertEquals(PhotoMetadataState.Idle, controller.metadata.value, "no request without a viewed photo")
         controller.closeAndJoin()
     }
@@ -174,15 +184,15 @@ class WifiPhotoViewerViewModelTest : WifiLoggingTest() {
     fun aLateHeadResultNeverPollutesTheNewlyShownPhoto() = runTest {
         val connection = GatedConnection()
         val (controller, model) = open(connection)
-        val options = ViewerInfoOptions(showExifParams = true)
+        val extended = true // the details are shown
         model.previewPhoto("a")
-        model.showViewerMetadata(options)
+        model.showViewerMetadata(extended)
         advanceTimeBy(300); runCurrent()
         assertEquals(listOf(42L), connection.heads, "the first head read was issued and is in flight")
 
         // Swipe while the head of the first photo is still in flight.
         model.viewPhotoAt(1)
-        model.showViewerMetadata(options)
+        model.showViewerMetadata(extended)
         assertEquals(44L, assertIs<PhotoMetadataState.Loading>(controller.metadata.value).handle)
         advanceTimeBy(300); runCurrent()
         assertEquals(listOf(42L, 44L), connection.heads)
@@ -206,9 +216,9 @@ class WifiPhotoViewerViewModelTest : WifiLoggingTest() {
     fun aLateHeadResultAfterClosingTheViewerStaysIdle() = runTest {
         val connection = GatedConnection()
         val (controller, model) = open(connection)
-        val options = ViewerInfoOptions(showExifParams = true)
+        val extended = true // the details are shown
         model.previewPhoto("a")
-        model.showViewerMetadata(options)
+        model.showViewerMetadata(extended)
         advanceTimeBy(300); runCurrent()
         assertEquals(listOf(42L), connection.heads)
 
@@ -228,9 +238,9 @@ class WifiPhotoViewerViewModelTest : WifiLoggingTest() {
     fun aDownloadInterruptsTheReadAndTheViewerReRequestsOnceTheCameraIsIdleAgain() = runTest {
         val connection = GatedConnection()
         val (controller, model) = open(connection)
-        val options = ViewerInfoOptions(showExifParams = true)
+        val extended = true // the details are shown
         model.previewPhoto("a")
-        model.showViewerMetadata(options)
+        model.showViewerMetadata(extended)
         advanceTimeBy(300); runCurrent()
         assertEquals(listOf(42L), connection.heads)
 
@@ -244,7 +254,7 @@ class WifiPhotoViewerViewModelTest : WifiLoggingTest() {
         // the current photo's read restarts from scratch.
         connection.downloadGate.complete(Unit)
         runCurrent()
-        model.showViewerMetadata(options)
+        model.showViewerMetadata(extended)
         assertIs<PhotoMetadataState.Loading>(controller.metadata.value)
         advanceTimeBy(300); runCurrent()
         assertEquals(listOf(42L, 42L), connection.heads, "the read is issued a second time")
