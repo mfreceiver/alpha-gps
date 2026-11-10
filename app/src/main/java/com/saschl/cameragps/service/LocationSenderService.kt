@@ -307,13 +307,6 @@ class LocationSenderService : LifecycleService() {
                 presenceCoordinator.onDeviceDisappeared(command.address)
             }
 
-            is ServiceCommand.SendRemoteCommand -> {
-                val success = orchestrator.sendRemoteCommand(command.address, command.command)
-                if (!success) {
-                    Timber.w("Remote command ${command.command} failed for ${command.address.uppercase()}")
-                }
-            }
-
             is ServiceCommand.Disconnect -> {
                 // The intent is re-read here, inside the command mutex and after any earlier
                 // queued Connect: a camera that was re-enabled meanwhile is not torn down.
