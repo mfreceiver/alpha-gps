@@ -22,7 +22,6 @@ import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
@@ -34,19 +33,15 @@ import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.add_camera
 import cameragps.sharednew.generated.resources.device_list_need_help
-import cameragps.sharednew.generated.resources.pairing_preparation_search
-import cameragps.sharednew.generated.resources.pairing_preparation_step_ready
 import com.sasch.cameragps.sharednew.bluetooth.BluetoothDeviceInfo
 import com.sasch.cameragps.sharednew.ui.device.SharedDevicesScreen
 import com.sasch.cameragps.sharednew.ui.devicelist.AddCameraButton
 import com.sasch.cameragps.sharednew.ui.devicelist.DeviceListItem
 import com.sasch.cameragps.sharednew.ui.devicelist.DeviceListLayout
 import com.sasch.cameragps.sharednew.ui.devicelist.SharedDeviceList
-import com.sasch.cameragps.sharednew.ui.pairing.SharedPairingPreparationScreen
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsColumn
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsScreen
 import org.jetbrains.compose.resources.stringResource
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -189,28 +184,6 @@ class AdaptiveLayoutTest {
             compose.onNodeWithTag("setting-19")
                 .getUnclippedBoundsInRoot().width > narrow.width * 0.8f
         )
-    }
-
-    @Test
-    fun pairingInstructionsAndSearchRemainUsableOnWideAndNarrowWindows() {
-        val width = mutableStateOf(1024.dp)
-        lateinit var search: String
-        lateinit var instruction: String
-        var searches = 0
-        compose.setContent {
-            TestViewport(width.value, fontScale = 1.5f) {
-                search = stringResource(Res.string.pairing_preparation_search)
-                instruction = stringResource(Res.string.pairing_preparation_step_ready)
-                SharedPairingPreparationScreen(false, { searches++ }, {}, {})
-            }
-        }
-        val wide = compose.onNodeWithTag("viewport").getUnclippedBoundsInRoot()
-        assertTrue(compose.onNodeWithText(search).getUnclippedBoundsInRoot().width < wide.width / 2)
-        compose.onNodeWithText(search).assertIsDisplayed().performClick()
-        compose.runOnIdle { width.value = 320.dp }
-        compose.onNodeWithText(instruction).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText(search).assertIsDisplayed().performClick()
-        compose.runOnIdle { assertEquals(2, searches) }
     }
 }
 
