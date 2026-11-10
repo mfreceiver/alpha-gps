@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # assert_asset_url_trusted（scripts/release_lib.sh）自测：纯离线、无网络、
-# 无 git 仓库依赖。校验 Primary forge 资产下载 URL 的同源约束（astra P2-1）。
+# 无 git 仓库依赖。校验主仓库资产下载 URL 的同源约束（astra P2-1）；
+# 主机/仓库用占位 forge.example.com:443 / owner/alphagps（真实值不入库）。
 #   场景 1  合法 URL（精确 host:port / repo / tag / 资产名）→ 放行
 #   场景 2  http scheme → 拒绝
-#   场景 3  错误 host（forge.example.com，无端口）→ 拒绝
-#   场景 4  错误端口（:8443）→ 拒绝
+#   场景 3  错误 host（缺端口 / 期望无端口却带 :443）→ 拒绝
+#   场景 4  错误端口（:8443 / :4443）→ 拒绝
 #   场景 5  userinfo（https://a:b@host:port/..）→ 拒绝
 #   场景 6  '@' 旁路（https://forge.example.com:443@evil.com/..）→ 拒绝
 #   场景 7  '..' 路径穿越 → 拒绝
@@ -14,7 +15,7 @@
 #   场景 11 错误 repo 路径 → 拒绝
 #   场景 12 错误 tag 路径 → 拒绝
 #   场景 13 空白 / 反斜杠 / 查询串 / fragment / 前缀拼接 host → 拒绝
-#   场景 14 大小写 host（HTTPS://forge.example.com:443/..）→ 拒绝（netloc 精确比较）
+#   场景 14 大小写 host（HTTPS://FORGE.EXAMPLE.COM:443/..）→ 拒绝（netloc 精确比较）
 #   场景 15 变异验证：弱实现（netloc 后缀匹配 / path 前缀匹配）必须被子域 host、
 #           path 前缀拼接等用例区分——这些输入不含 '@'，能穿过其余守卫，
 #           仅被“精确 netloc/path 匹配”拦截
@@ -35,8 +36,8 @@ check() { # check <desc> <expr...>
   else FAILED=$((FAILED+1)); echo "FAIL - $desc"; fi
 }
 
-H=forge.example.com:443          # 与 release_build.sh 的 PRIMARY_HOST 一致
-RP=owner/alphagps          # 与 PRIMARY_REPO 一致
+H=forge.example.com:443          # 占位，对应 release_build.sh 的 PRIMARY_HOST
+RP=owner/alphagps                # 占位，对应 PRIMARY_REPO
 TAG=v0.1.2
 ASSET=alpha-gps-0.1.2.apk
 P="/$RP/releases/download/$TAG/$ASSET"
@@ -61,10 +62,12 @@ reject "http://（明文）" "http://$H$P"
 
 echo "== 场景 3: 错误 host（缺端口）→ 拒绝 =="
 reject "host 无端口 forge.example.com" "https://forge.example.com$P"
+out=$(assert_asset_url_trusted "https://forge.example.com:443$P" "forge.example.com" "$RP" "$TAG" "$ASSET" 2>"$TMP/err"); rc=$?
+check "期望无端口时带显式 :443 → 拒绝（netloc 精确比较）" test "$rc" -ne 0
 
 echo "== 场景 4: 错误端口 → 拒绝 =="
 reject "端口 8443" "https://forge.example.com:8443$P"
-reject "端口 443（默认省略）" "https://forge.example.com:443$P"
+reject "端口 4443" "https://forge.example.com:4443$P"
 
 echo "== 场景 5: userinfo → 拒绝 =="
 reject "userinfo a:b@host" "https://a:b@$H$P"
@@ -108,7 +111,7 @@ reject "带查询串 ?x=1" "https://$H$P?x=1"
 reject "带 fragment #f" "https://$H$P#f"
 
 echo "== 场景 14: host 大小写 → 拒绝（netloc 精确比较） =="
-reject "大写 host" "https://forge.example.com:443$P"
+reject "大写 host" "https://FORGE.EXAMPLE.COM:443$P"
 reject "大写 scheme" "HTTPS://$H$P"
 
 echo "== 场景 15: 变异验证——仅被精确 netloc/path 匹配拦截的输入 =="

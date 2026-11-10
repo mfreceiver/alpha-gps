@@ -54,6 +54,12 @@ check() { # check <desc> <expr...>
   else FAILED=$((FAILED+1)); echo "FAIL - $desc"; fi
 }
 
+# 主仓库参数外置（scripts/release.local.env 不入库）：沙箱用环境变量注入占位值，
+# 沙箱内的 scripts/ 不含 release.local.env，故不会读到本机真实配置。
+export ALPHAGPS_PRIMARY_HOST=forge.example.com:443
+export ALPHAGPS_PRIMARY_REPO=owner/alphagps
+export ALPHAGPS_PRIMARY_REMOTE=primary
+
 PROPS_TPL() { # $1=code → stdout（含无关属性行，贴近真实文件形态）
   printf 'org.gradle.jvmargs=-Xmx4096m\nalphagps.enableIos=false\nalphagps.versionCode=%s\nkotlin.code.style=official\n' "$1"
 }
@@ -363,8 +369,8 @@ AAPT
   printf 'DSH_KEYSTORE_PASSWORD=x\nDSH_KEY_PASSWORD=x\n' > "$SB/home/.gradle/gradle.properties"
   printf 'placeholder\n' > "$SB/home/.config/alphagps/signing/release.jks"
   ( cd "$SB" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm init )
-  rm -rf -- "$TMP/wvectory.git"; git init -q --bare "$TMP/wvectory.git"
-  ( cd "$SB" && git remote add primary "$TMP/wvectory.git" )
+  rm -rf -- "$TMP/wprimary.git"; git init -q --bare "$TMP/wprimary.git"
+  ( cd "$SB" && git remote add primary "$TMP/wprimary.git" )
 }
 
 run_wiring() { # $1=SB $2=AAPT_CODE $3=输出log；APK_ABI_MODE 经 env 透传（默认 good）
@@ -404,7 +410,7 @@ python3 -c 'import zipfile; z=zipfile.ZipFile("'"$SB3"'/release/alpha-gps-0.1.2.
     DSH_KEYSTORE_PASSWORD=x DSH_KEY_PASSWORD=x \
     AAPT_CODE=3 AAPT_VNAME=0.1.2 \
     timeout 30 bash scripts/release_build.sh 0.1.2 --publish-only ) > "$TMP/wire3.log" 2>&1; RC=$?
-check "走到凭据预取才停（归档断言全过；沙箱无 Primary forge 凭据 → 非零退出，非超时）" \
+check "走到凭据预取才停（归档断言全过；沙箱无主仓库凭据 → 非零退出，非超时）" \
   test "$RC" -ne 0 -a "$RC" -ne 124
 check "归档完整性校验通过（『归档完整』）" grep -q "归档完整" "$TMP/wire3.log"
 check "单调性对 v0.1.1 用 LEGACY 表值 2（3 > v0.1.1(versionCode=2)）" \

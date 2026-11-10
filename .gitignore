@@ -5,6 +5,8 @@
 .DS_Store
 /build
 /release
+# 发版脚本的本机私有配置（主仓库地址等，绝不入库）
+/scripts/release.local.env
 /captures
 .externalNativeBuild
 .cxx
