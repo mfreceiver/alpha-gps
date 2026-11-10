@@ -1027,7 +1027,7 @@ echo "结果: ${SCENARIOS} 场景 / ${TOTAL} 断言: PASS=$PASS FAIL=$FAILED"
 # 兜底核对（见文件头注释）：先恢复原 stderr，再扫描自身 stderr 镜像（此时扫描不会被本脚本的
 # xtrace 写入镜像文件污染）。grep 退出码只允许 0/1：>=2 是读取失败，fail-closed。
 exec 2>&3
-SHELL_ERR=$(grep -Ec 'bad substitution|unbound variable|syntax error' "$SELF_STDERR"); SHELL_RC=$?
+SHELL_ERR=$(grep -Ec 'bad substitution|unbound variable|syntax error|division by 0|bad array subscript' "$SELF_STDERR"); SHELL_RC=$?
 if [[ "$SHELL_RC" -ge 2 ]]; then
   echo "FATAL: 无法读取自身 stderr 镜像 $SELF_STDERR（grep rc=$SHELL_RC）" >&2
   exit 1
