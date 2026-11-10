@@ -47,30 +47,19 @@ def date_list_screen(state="normal", callouts=False):
         s += t(195, 437, "与相机的连接已断开", 13.5, 400, C["onSurfV"], "middle")
         s += tonal_btn(195 - 70, 466, 140, 48, "重新读取", "refresh")
         return s + end()
-    # one line per card (only cards that are present); capacity only — no firmware / serial here
-    for k, row in enumerate(((("卡 1", "sd_card"), ("64 GB · 剩余 21.3 GB", None)),
-                             (("卡 2", "sd_card"), ("128 GB · 剩余 96.0 GB", None)))):
-        x = 20
-        for lab, ic_ in row:
-            tg, tw = info_tag(x, 102 + k * 27, lab, on_photo=False, ic=ic_, size=11.5, h=22, pad=8)
-            s += tg
-            x += tw + 6
+    # 0.2.0: no capacity / firmware / serial on this page, and no cover thumbnails (tracked in docs/todo.md)
     rows = [("11月9日", "周日 · 今天", 227), ("11月8日", "周六", 64), ("11月3日", "周一", 118),
             ("10月28日", "周二", 9), ("10月21日", "周二", 342), ("未知日期", "无拍摄时间", 3)]
-    y = 164
+    y = 108
     for i, (d, sub, n) in enumerate(rows):
-        s += row_card(y, 80)
-        if d == "未知日期":
-            s += rect(28, y + 12, 56, 56, C["onSurf"], 14, op=0.07) + icon("image", 44, y + 28, 24, C["outline"])
-        else:
-            s += photo_art(28, y + 12, 56, 56, i * 3 + 1, 14)
-        s += t(98, y + 37, d, 17, 600)
-        s += t(98, y + 59, sub, 12.5, 400, C["onSurfV"])
-        s += t(334, y + 46, f"{n} 张", 14, 500, C["onSurfV"], "end")
-        s += icon("chevron_right", 338, y + 28, 24, C["onSurfV"])
-        y += 90
+        s += row_card(y, 72)
+        s += t(36, y + 33, d, 17, 600)
+        s += t(36, y + 55, sub, 12.5, 400, C["onSurfV"])
+        s += t(334, y + 42, f"{n} 张", 14, 500, C["onSurfV"], "end")
+        s += icon("chevron_right", 338, y + 24, 24, C["onSurfV"])
+        y += 82
     if callouts:
-        s += callout(1, 14, 62) + callout(2, 362, 50) + callout(3, 14, 113) + callout(4, 30, 174)
+        s += callout(1, 14, 62) + callout(2, 362, 50) + callout(3, 22, 114) + callout(4, 22, 524)
     return s + end()
 
 
@@ -209,7 +198,7 @@ def grid_screen(mode_="S", fmt=False, size=False, pr=False, selecting=0, panel=F
     # top bar sits on the backdrop (content scrolls under a solid-ish bar; no live blur over the grid)
     s += rect(0, 0, W, 96, C["bg"], op=0.94) + sbar()
     if selecting:
-        s += top_bar(f"已选 {len(sel_set)} 张", back="close", acts=("select_all",))
+        s += top_bar(f"已选 {len(sel_set)} 张", back="close", acts=())
     else:
         s += top_bar("11月9日", sub="227 张", acts=("grid_view",))
     # bottom fade so the pill reads on any photo
@@ -494,19 +483,22 @@ def settings_screen():
     s += glass(16, 104, 358, 76, 24, 1)
     s += list_row(104, "位置同步", ic="gps", kind="switch", sub="总开关：关闭后不连接任何相机", h=76)
     s += section_label(28, 206, "连接与定位")
-    s += glass(16, 216, 358, 162, 24, 1)
-    s += list_row(216, "位置来源", "融合定位", "location_on", h=54)
-    s += list_row(270, "提示音", "连接 / 断开", "volume_up", h=54)
-    s += list_row(324, "电池优化", "未限制", "battery_full", h=54)
-    s += section_label(28, 404, "照片")
-    s += glass(16, 414, 358, 54, 24, 1)
-    s += list_row(414, "预览信息条", "仅基础信息", "image", h=54)
-    s += section_label(28, 494, "通用")
-    s += glass(16, 504, 358, 162, 24, 1)
-    s += list_row(504, "语言", "简体中文", "language", h=54)
-    s += list_row(558, "日志级别", "信息", "list", h=54)
-    s += list_row(612, "更新日志", "0.1.5", "info", h=54)
-    s += t(195, 700, "AlphaGPS 0.1.5 · cn.vectory.alphagps", 12, 400, C["onSurfV"], "middle")
+    s += glass(16, 216, 358, 144, 24, 1)
+    s += list_row(216, "位置来源", "融合定位", "location_on", h=48)
+    s += list_row(264, "提示音", "连接 / 断开", "volume_up", h=48)
+    s += list_row(312, "电池优化", "未限制", "battery_full", h=48)
+    s += section_label(28, 384, "照片传输")
+    s += glass(16, 394, 358, 192, 24, 1)
+    s += list_row(394, "默认下载格式", "仅 JPG", "download", h=48)
+    s += list_row(442, "显示直方图", ic="image", kind="switch", h=48, on=False)
+    s += list_row(490, "显示拍摄参数", ic="image", kind="switch", h=48, on=False)
+    s += list_row(538, "显示镜头信息", ic="image", kind="switch", h=48, on=False)
+    s += section_label(28, 610, "通用")
+    s += glass(16, 620, 358, 144, 24, 1)
+    s += list_row(620, "语言", "简体中文", "language", h=48)
+    s += list_row(668, "日志级别", "信息", "list", h=48)
+    s += list_row(716, "更新日志", "0.2.0", "info", h=48)
+    s += t(195, 790, "AlphaGPS 0.2.0 · cn.vectory.alphagps", 12, 400, C["onSurfV"], "middle")
     return s + end()
 
 
@@ -651,20 +643,14 @@ def troubleshoot_screen():
 
 
 def logs_screen():
-    s = base() + top_bar("日志", acts=("content_copy", "download", "delete"))
-    x = 20
-    for lab, on in (("全部", True), ("警告", False), ("错误", False)):
-        w_ = 60
-        s += rect(x, 104, w_, 34, C["primary"] if on else C["onSurf"], 17, op=None if on else 0.07)
-        s += t(x + w_ / 2, 126, lab, 13.5, 600, C["onPrimary"] if on else C["onSurfV"], "middle")
-        x += w_ + 8
-    s += glass(16, 150, 358, 590, 24, 1)
+    s = base() + top_bar("日志", acts=("content_copy", "delete"))
+    s += glass(16, 104, 358, 636, 24, 1)
     lines = [("14:32:08", "I", "GPS 写入成功 #1284"), ("14:32:05", "I", "GPS 写入成功 #1283"),
              ("14:31:50", "W", "RSSI -84 dBm 信号偏弱"), ("14:30:02", "I", "CC0E 校时 applied=1"),
-             ("14:30:01", "I", "蓝牙已连接 MTU 517"), ("14:29:58", "I", "开始连接 ILCE-7M4"),
+             ("14:30:01", "I", "蓝牙已连接"), ("14:29:58", "I", "开始连接 ILCE-7M4"),
              ("14:02:11", "E", "GATT 133：连接超时"), ("14:02:01", "I", "相机离开范围，进入待命"),
              ("13:58:40", "I", "Wi‑Fi 会话结束（返回设备页）"), ("13:41:07", "I", "下载完成 DSC03456.JPG 6.6 MB")]
-    y = 178
+    y = 134
     for tm, lv, msg in lines:
         col = {"I": C["onSurfV"], "W": C["amberText"], "E": C["error"]}[lv]
         s += t(30, y, tm, 11, 500, C["onSurfV"], extra='font-family="monospace"')
