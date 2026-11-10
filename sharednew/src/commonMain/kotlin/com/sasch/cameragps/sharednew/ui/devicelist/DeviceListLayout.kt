@@ -4,10 +4,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -17,10 +15,21 @@ import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.add_camera
 import cameragps.sharednew.generated.resources.device_list_need_help
+import cameragps.sharednew.generated.resources.m2_add_24px
 import com.sasch.cameragps.sharednew.ui.components.AdaptiveAction
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
+import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
-/** iOS-style screen layout; hosts supply platform actions, notices and empty states. */
+/**
+ * Device list layout (design v3): header (notices, add camera), the list, and the connection
+ * troubleshooting link at the bottom — no divider and no opaque footer, the page's glass
+ * background shows through.
+ */
 @Composable
 fun DeviceListLayout(
     onNeedHelp: () -> Unit,
@@ -33,19 +42,18 @@ fun DeviceListLayout(
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             content()
         }
-        Surface(modifier = Modifier.fillMaxWidth()) {
-            Column {
-                HorizontalDivider()
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    TextButton(onClick = onNeedHelp) {
-                        Text(stringResource(Res.string.device_list_need_help))
-                    }
-                }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = AlphaDimens.screenMargin, vertical = 4.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            TextButton(onClick = onNeedHelp, modifier = Modifier.heightIn(min = AlphaDimens.minTouchTarget)) {
+                Text(
+                    stringResource(Res.string.device_list_need_help),
+                    style = AlphaTextStyles.button,
+                    color = AlphaTheme.colors.primary,
+                )
             }
         }
     }
@@ -55,10 +63,14 @@ fun DeviceListLayout(
 fun AddCameraButton(onClick: () -> Unit) {
     AdaptiveAction(
         modifier = Modifier
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = AlphaDimens.screenMargin, vertical = 8.dp),
     ) { actionModifier ->
-        Button(onClick = onClick, modifier = actionModifier) {
-            Text(stringResource(Res.string.add_camera))
-        }
+        CapsuleButton(
+            text = stringResource(Res.string.add_camera),
+            onClick = onClick,
+            role = CapsuleRole.Primary,
+            icon = painterResource(Res.drawable.m2_add_24px),
+            modifier = actionModifier,
+        )
     }
 }
