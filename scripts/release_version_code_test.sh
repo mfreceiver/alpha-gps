@@ -409,7 +409,7 @@ python3 -c 'import zipfile; z=zipfile.ZipFile("'"$SB3"'/release/alpha-gps-0.1.2.
 ( cd "$SB3" && PATH="$SB3/home/jdk/bin:$PATH" HOME="$SB3/home" JAVA_HOME="$SB3/home/jdk" \
     DSH_KEYSTORE_PASSWORD=x DSH_KEY_PASSWORD=x \
     AAPT_CODE=3 AAPT_VNAME=0.1.2 \
-    timeout 30 bash scripts/release_build.sh 0.1.2 --publish-only ) > "$TMP/wire3.log" 2>&1; RC=$?
+    timeout 30 bash scripts/release_build.sh 0.1.2 --publish-only --no-github ) > "$TMP/wire3.log" 2>&1; RC=$?
 check "走到凭据预取才停（归档断言全过；沙箱无主仓库凭据 → 非零退出，非超时）" \
   test "$RC" -ne 0 -a "$RC" -ne 124
 check "归档完整性校验通过（『归档完整』）" grep -q "归档完整" "$TMP/wire3.log"
@@ -427,7 +427,7 @@ mkdir -p "$SB4/release"; : > "$SB4/release/alpha-gps-0.9.9.apk"
 ( cd "$SB4" && PATH="$SB4/home/jdk/bin:$PATH" HOME="$SB4/home" JAVA_HOME="$SB4/home/jdk" \
     DSH_KEYSTORE_PASSWORD=x DSH_KEY_PASSWORD=x \
     AAPT_CODE=1 AAPT_VNAME=0.9.9 \
-    timeout 30 bash scripts/release_build.sh 0.9.9 --publish-only ) > "$TMP/wire4.log" 2>&1; RC=$?
+    timeout 30 bash scripts/release_build.sh 0.9.9 --publish-only --no-github ) > "$TMP/wire4.log" 2>&1; RC=$?
 check "非零退出（非超时）" test "$RC" -ne 0 -a "$RC" -ne 124
 check "日志含『无法读取/解析』" grep -q "无法读取/解析" "$TMP/wire4.log"
 
