@@ -16,7 +16,6 @@ logging = "2.1.2"
 material = "1.14.0"
 navigationeventVersion = "1.2.0"
 room = "2.8.5"
-runtimeLivedata = "1.12.1"
 coreSplashscreen = "1.2.0"
 lifecycle = "2.11.0"
 navigation3 = "1.2.0"
@@ -37,7 +36,6 @@ kotlinxDatetime = "0.8.0"
 [libraries]
 androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version.ref = "exifinterface" }
 
-androidx-compose-runtime-livedata = { module = "androidx.compose.runtime:runtime-livedata", version.ref = "runtimeLivedata" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-lifecycle-process = { module = "androidx.lifecycle:lifecycle-process", version.ref = "lifecycle" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
