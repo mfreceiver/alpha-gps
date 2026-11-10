@@ -59,6 +59,12 @@ internal interface WifiRemoteConnection {
 
     suspend fun closePhotoBrowser() {}
 
+    /**
+     * One-shot battery percentage (0..100) from the camera, `null` when the camera does not expose
+     * it or the read failed. Best-effort and never throws.
+     */
+    suspend fun readBatteryPercent(): Int? = null
+
     /** End transfer mode without reopening a shooting session during teardown. */
     suspend fun prepareToDisconnect() = closePhotoBrowser()
 
@@ -115,6 +121,8 @@ class WifiRemoteController internal constructor(
     private val releaseControls: (String) -> Unit,
     private val automaticConnector: WifiAutomaticConnector? = null,
     private val manualSetupConnector: WifiManualSetupConnector? = null,
+    /** Receives (identifier, percent) once per session when the camera reports its battery level. */
+    private val onBatteryRead: (String, Int) -> Unit = { _, _ -> },
 ) {
     private val log = logging()
 
@@ -903,6 +911,12 @@ class WifiRemoteController internal constructor(
                 }
                 sessionScope = this
                 activeConnection = opened
+                launch {
+                    val percent = try { opened.readBatteryPercent() }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { null }
+                    if (percent != null) onBatteryRead(id, percent)
+                }
                 startPreview(id, opened, this)
                 launch(start = CoroutineStart.UNDISPATCHED) {
                     var confirmationTimer: Job? = null
