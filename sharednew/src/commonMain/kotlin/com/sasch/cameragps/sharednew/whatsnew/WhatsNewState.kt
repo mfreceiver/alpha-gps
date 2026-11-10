@@ -9,12 +9,11 @@ import androidx.compose.runtime.setValue
 
 class WhatsNewState(
     private val version: String,
-    platform: ReleasePlatform,
     private val previousVersion: String?,
     firstLaunch: Boolean,
     private val saveVersion: (String) -> Unit,
 ) {
-    val release = ReleaseNotesCatalog.forVersion(version, platform)
+    val release = ReleaseNotesCatalog.forVersion(version)
     var pending by mutableStateOf(
         WhatsNewPolicy.shouldShow(version, previousVersion, firstLaunch, release != null)
     )
@@ -38,13 +37,12 @@ class WhatsNewState(
 @Composable
 fun rememberWhatsNewState(
     version: String,
-    platform: ReleasePlatform,
     previousVersion: String?,
     firstLaunch: Boolean,
     saveVersion: (String) -> Unit,
 ): WhatsNewState {
-    val state = remember(version, platform) {
-        WhatsNewState(version, platform, previousVersion, firstLaunch, saveVersion)
+    val state = remember(version) {
+        WhatsNewState(version, previousVersion, firstLaunch, saveVersion)
     }
     LaunchedEffect(state) { state.initialize() }
     return state

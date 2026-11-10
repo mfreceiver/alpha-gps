@@ -12,8 +12,7 @@ import kotlinx.coroutines.flow.stateIn
 
 /**
  * Platform inputs for the shared device-list state. Both implementations are
- * thin wrappers over the app-scoped graph (AppServices on Android,
- * IosBluetoothController on iOS).
+ * thin wrappers over the app-scoped graph (AppServices on Android).
  */
 interface DeviceListDataSource {
     val sessions: StateFlow<Map<String, CameraSession>>

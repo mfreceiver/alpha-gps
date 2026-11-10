@@ -194,23 +194,12 @@
     <string name="bluetooth_connect_permanently_denied">蓝牙权限已被永久拒绝。请前往“应用设置”→“权限”→“附近设备”，手动开启该权限。</string>
     <string name="bluetooth_connect_required_title">需要蓝牙权限</string>
     <string name="bluetooth_connect_required_desc">此应用需要蓝牙连接权限，用于发现和连接您的相机。</string>
-    <string name="tip_jar_description">喜欢这个应用吗？您的打赏将用于支付维持该应用在 App Store 上架所需的 Apple 开发者计划费用（99 美元/年）。这完全取决于个人意愿 —— 感谢您使用 AlphaGPS！❤️</string>
     <string name="no_devices_found">未检测到设备</string>
     <string name="welcome_app_icon_description">AlphaGPS App 图标</string>
     <string name="device_icon">设备图标</string>
     <string name="language_english">English</string>
     <string name="language_german">Deutsch</string>
     <string name="language_chinese">简体中文</string>
-    <string name="tip_jar_loading">加载中…</string>
-    <string name="tip_jar">赞助</string>
-    <string name="donation_dialog_confirm">支持项目</string>
-    <string name="donation_dialog_dismiss">以后再说</string>
-    <string name="donation_dialog_message">如果这个应用对你的拍摄有所帮助，一份小额捐赠将支持我继续开发。这完全取决于你的意愿。</string>
-    <string name="tip_jar_thank_you">非常感谢您的支持！</string>
-    <string name="tip_jar_unavailable">打赏功能暂不可用。</string>
-    <string name="tip_jar_error_prefix">出错了：</string>
-    <string name="tip_jar_dismiss">忽略</string>
-    <string name="donation_dialog_title">喜欢 AlphaGPS 吗？</string>
     <string name="auto_scan_description">当设备列表可见时，自动搜索附近的相机</string>
     <string name="event_sounds_configure_transmission_channel">配置“传输”通知渠道</string>
     <string name="event_sounds_configure_disconnect_channel">配置“断开连接”通知渠道</string>
@@ -234,7 +223,6 @@
     <string name="guide_repair_description">典型情况是之前用索尼的 Creators' App 或 Imaging Edge Mobile 设置相机时：手机已经与相机配对，因此不会请求新的配对——但 AlphaGPS 的位置传输无法正常工作。在所有地方移除旧配对可以解决这个问题。</string>
     <string name="guide_repair_step_phone">从手机的蓝牙设置中删除相机：</string>
     <string name="guide_repair_step_phone_path_android">设置 → 蓝牙 → 你的相机 → 取消配对</string>
-    <string name="guide_repair_step_phone_path_ios">设置 → 蓝牙 → 相机旁边的ⓘ → 忘记此设备</string>
     <string name="guide_repair_step_camera">在相机上，删除旧的配对（旧型号没有此菜单项——在那里，再次配对只是替换旧的连接）：</string>
     <string name="guide_repair_step_camera_path">MENU → 网络 → 蓝牙 → 管理配对设备</string>
     <string name="guide_repair_step_sony_app">如果仍安装了索尼应用程序，请同时删除其中的相机：</string>
@@ -250,7 +238,6 @@
     <string name="guide_accuracy_description">如果照片被标记为明显偏离的位置，则应用程序通常不允许使用您的精确位置。</string>
     <string name="guide_accuracy_step_precise">允许 AlphaGPS 的精确定位：</string>
     <string name="guide_accuracy_step_precise_path_android">设置 → 应用 → AlphaGPS → 权限 → 位置 → 使用精确位置</string>
-    <string name="guide_accuracy_step_precise_path_ios">设置 → 隐私和安全 → 定位服务 → AlphaGPS → 精确位置 → 开启</string>
     <string name="haptic_feedback">振动反馈</string>
     <string name="haptic_feedback_description">应用执行操作时提供振动反馈</string>
     <string name="guide_accuracy_step_battery">将应用排除在电池优化之外，以确保传输在后台持续运行：设置 → 应用 → AlphaGPS → 电池 → 不受限制。</string>
@@ -291,7 +278,6 @@
     <string name="whats_new_170_wifi_remote">新增实验性 Wi-Fi 照片功能，支持浏览和下载图像。目前仅在索尼 α6700 上验证过。\n\n打开方式：在设备列表中点击你的相机，然后点击“Wi-Fi 照片传输”。</string>
     <string name="whats_new_162_time">在相机的详细信息中查看并切换自动时间校正。该设置决定相机是否使用手机调整其日期和时间。</string>
     <string name="whats_new_162_notifications">位置传输通知现已能更稳定地更新。</string>
-    <string name="whats_new_162_pairing">iOS 上的相机配对已更新，现改用系统配件选择器。此前已配对的相机可能需要重新授权，应用将引导您完成操作。</string>
     <string name="welcome_next">下一步</string>
     <string name="welcome_skip">跳过</string>
     <string name="welcome_page_position">第 %1$d 页，共 %2$d 页</string>
@@ -307,7 +293,7 @@
     <string name="welcome_ready_title">为照片持续记录位置</string>
     <string name="welcome_ready_body">AlphaGPS 需要访问精确位置，才能为照片添加地理位置信息。后台位置访问可让位置更新在手机锁屏时继续运行。</string>
     <string name="wifi_remote_experimental_title">实验性 Wi-Fi 照片传输</string>
-    <string name="wifi_remote_experimental_message">Wi-Fi 照片传输功能仍处于实验阶段，目前仅在开发者的索尼 α6700 上验证过。其他相机型号的表现可能不同。\n\n请到 GitHub Issues 反馈相机型号与测试结果，并注明手机操作系统和版本（Android 或 iOS）。</string>
+    <string name="wifi_remote_experimental_message">Wi-Fi 照片传输功能仍处于实验阶段，目前仅在开发者的索尼 α6700 上验证过。其他相机型号的表现可能不同。\n\n请到 GitHub Issues 反馈相机型号与测试结果，并注明手机的 Android 版本。</string>
     <string name="wifi_remote_title">Wi-Fi 照片传输</string>
     <string name="wifi_remote_entry_hint">浏览并下载相机里的照片</string>
     <string name="wifi_remote_setup">启动相机的智能手机 Wi-Fi 连接，断开 Creators’ App 的连接，然后在手机设置中连接相机的 Wi-Fi，并输入相机的 IP 地址。</string>
@@ -400,9 +386,6 @@
     <string name="wifi_remote_default_download_format_original">原片</string>
     <string name="wifi_remote_converting_jpeg">正在转换为 JPEG…</string>
     <string name="wifi_remote_conversion_failed">无法创建 JPEG 副本。此手机可能不支持 HEIF 格式，或内存、存储空间不足。您仍可下载原始 HEIF 文件。</string>
-    <string name="wifi_remote_ios_settings">应用权限</string>
-    <string name="wifi_remote_ios_permission">请在应用设置中允许访问“本地网络”，然后重新连接。</string>
-    <string name="wifi_remote_ios_opening">正在连接相机… 如果 iOS 弹出提示，请允许访问“本地网络”。</string>
     <string name="welcome_remote_label">Wi-Fi 照片传输</string>
     <string name="wifi_remote_setup_detect_address">请先在相机上启动智能手机连接并关闭索尼的 App，然后在手机设置中连接相机的 Wi-Fi。IP 地址请留空以自动检测，或者手动输入。</string>
     <string name="wifi_connection_failed">无法建立与相机的 Wi-Fi 连接。</string>

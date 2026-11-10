@@ -2,7 +2,7 @@
 
 - PDF：`docs/design/ui-v3/ui-design-v3.pdf`（34 页，1400×1000 横版，约 7.4 MB）
 - 基线：分支 `feature/browse-only-download`，HEAD `587f510`（v0.1.5）。仅设计交付，未改动应用代码。
-- 范围：全应用界面，亮/暗两套；**仅 Android 12（API 31）及以上**（iOS 目标已禁用，不在设计范围）。
+- 范围：全应用界面，亮/暗两套；**仅 Android 12（API 31）及以上**（本定制版仅 Android，iOS 已整体删除）。
 - 设计语言：全应用统一玻璃风格 + 固定蓝色主色（亮 `#0B57D0` / 暗 `#A8C7FA`），不启用动态色；背景模糊用 Haze 实现，minSdk 31 后无降级分支。
 - 名称：产品名一律 **AlphaGPS**；保持小写的只有包名 `cn.vectory.alphagps`、仓库名 `alphagps`、文件名 `alpha-gps-*`。
 - 三轮评审均原地修订本目录：第一轮 27 页（`47038fe`），第二轮 30 页（`38e365e`），第三轮 34 页。改了什么见 PDF 第 2、3 页。

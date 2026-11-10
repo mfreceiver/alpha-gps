@@ -30,7 +30,6 @@ import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
 import com.sasch.cameragps.sharednew.database.logging.LogRepository
 import com.sasch.cameragps.sharednew.ui.logs.SharedLogViewerScreen
 import com.sasch.cameragps.sharednew.ui.theme.CameraGpsTheme
-import com.sasch.cameragps.sharednew.whatsnew.ReleasePlatform
 import com.sasch.cameragps.sharednew.whatsnew.rememberWhatsNewState
 import com.saschl.cameragps.service.LocationSenderService
 import com.saschl.cameragps.ui.EnhancedLocationPermissionBox
@@ -102,7 +101,6 @@ class MainActivity : AppCompatActivity() {
         }
         val whatsNew = rememberWhatsNewState(
             version = appVersion,
-            platform = ReleasePlatform.Android,
             previousVersion = PreferencesManager.getLastSeenReleaseVersion(context),
             firstLaunch = PreferencesManager.isFirstLaunch(context),
             saveVersion = { PreferencesManager.setLastSeenReleaseVersion(context, it) },

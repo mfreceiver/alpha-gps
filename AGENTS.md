@@ -4,7 +4,6 @@
 - 产品名一律 **AlphaGPS**（无连字符，A/G/P/S 大写，显示时区分大小写）。保持小写不动的只有：包名 `cn.vectory.alphagps`、仓库名 `alphagps`、文件名 `alpha-gps-*`。
 - 定位：向索尼 Alpha 相机经蓝牙写入 GPS 位置与时间 + 经相机 Wi-Fi 浏览/下载照片的个人定制版；**不涉及任何应用市场分发**（无 Google Play / F-Droid / App Store / Obtainium，商店徽章与 fastlane/website 素材已删除）。
 - 崩溃上报（Sentry）不用：W2 移除后应用完全不收集、不上传任何数据（见 privacy.md）。
-- iOS 目标默认禁用，源码保留。
 - `docs/brand/` 项目品牌图标（SVG 源，含导出方法）；`docs/design/` 界面设计方案（索引 `docs/design/README.md`，当前生效版本 v3）。
 
 ## 待办纪律
@@ -25,7 +24,6 @@
 - GitHub 目的地规则：本机 GitHub 远端的 fetch 与 push 侧都必须解析到唯一公开 URL，传输钉在 URL 字面量上（见 `rl_gh_verify_remote`）。
 - **历史已净化（2026-11）**：自有提交范围的私有主机/仓库/账号标识、`@local`/私有邮箱作者与旧版设计 PDF 已从历史移除（保留包名 `cn.vectory.alphagps`）；tag v0.1.x 已随之迁移，已发布 APK 不变。**每次向 GitHub 推送前必须对待推 tag/分支的全部可达对象做指纹扫描**（私有主机名、端口、主发布仓库的产品名、私有邮箱、`/home/<user>/` 绝对路径），非空不得推送；新增入库内容也不得带这些标识。
 - 发版脚本自测：`scripts/*_test.sh`（无网络、沙箱 + fake curl，不碰真实仓库），改动发版脚本后须全部通过。
-- iOS 目标默认禁用（`gradle.properties` 的 `alphagps.enableIos=false`），源码保留；Linux 无法编译 iOS。
 - 验证命令：`./gradlew --no-daemon :sharednew:testAndroidHostTest :app:testDebugUnitTest :app:assembleDebug :app:compileDebugAndroidTestKotlin`。
 - 本机 `local.properties` 的 `sdk.dir=$HOME/Android/Sdk` 不入库（已被 .gitignore 忽略）。
 - **仅 arm64**：app 与 heif 的 `defaultConfig.ndk.abiFilters` 只含 `arm64-v8a`（native 仅构建/打包该 ABI）；老 32 位（armeabi-v7a）与 x86/x86_64 设备/模拟器不可安装。`scripts/release_assert_apk.sh` 断言 APK `lib/` 下仅含 `arm64-v8a` 且至少一个 `.so`。
