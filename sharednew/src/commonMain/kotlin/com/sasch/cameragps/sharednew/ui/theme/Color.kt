@@ -76,6 +76,17 @@ data class AlphaColors(
     val glowTeal: Color,
     /** Opacity of the three backdrop glows: top-left blue, right violet, bottom-left teal. */
     val glowAlphas: List<Float>,
+    // Thumbnails
+    /**
+     * Fill of a photo tile / filmstrip cell, visible around a fitted camera thumbnail. Deliberately
+     * near-black in both themes so the camera's baked-in letterbox bars blend into the frame instead
+     * of reading as borders (the decision against trimming them is recorded in docs/todo.md).
+     */
+    val thumbnailFrame: Color,
+    /** Scrim behind an unselected corner badge on a near-black thumbnail frame. */
+    val thumbnailBadgeScrim: Color,
+    /** Stroke of an unselected corner badge and of the filmstrip's current frame (on dark frames). */
+    val thumbnailBadgeStroke: Color,
 )
 
 val LightAlphaColors = AlphaColors(
@@ -125,6 +136,9 @@ val LightAlphaColors = AlphaColors(
     glowViolet = Color(0xFFCDBDF7),
     glowTeal = Color(0xFFA6E6D6),
     glowAlphas = listOf(0.60f, 0.42f, 0.36f),
+    thumbnailFrame = Color(0xFF0E0E10),
+    thumbnailBadgeScrim = Color.Black.copy(alpha = 0.25f),
+    thumbnailBadgeStroke = Color.White,
 )
 
 val DarkAlphaColors = AlphaColors(
@@ -174,6 +188,9 @@ val DarkAlphaColors = AlphaColors(
     glowViolet = Color(0xFF5B3FA8),
     glowTeal = Color(0xFF0E6B5C),
     glowAlphas = listOf(0.42f, 0.30f, 0.26f),
+    thumbnailFrame = Color(0xFF0E0E10),
+    thumbnailBadgeScrim = Color.Black.copy(alpha = 0.25f),
+    thumbnailBadgeStroke = Color.White,
 )
 
 /** Material 3 scheme for this palette; every role is set so no M3 baseline (purple) leaks through. */

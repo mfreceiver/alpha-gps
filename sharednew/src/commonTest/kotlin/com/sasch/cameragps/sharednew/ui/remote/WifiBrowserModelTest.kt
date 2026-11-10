@@ -6,7 +6,10 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoBrowserState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteFailure
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemotePhase
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
+import com.sasch.cameragps.sharednew.remote.wifi.formatByteSize
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
+import com.sasch.cameragps.sharednew.ui.theme.DarkAlphaColors
+import com.sasch.cameragps.sharednew.ui.theme.LightAlphaColors
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -97,9 +100,18 @@ class WifiBrowserModelTest {
         assertEquals("0.1", formatSizeTag(mb / 10 + 1))
         assertEquals("1.0", formatSizeTag(mb))
         assertEquals("6.6", formatSizeTag(mb * 66 / 10))
-        assertEquals("24.5", formatSizeTag(mb * 49 / 2))
+        assertEquals("25", formatSizeTag(mb * 49 / 2), "24.5 MB drops the decimal, rounded half up")
         assertEquals("1.1", formatSizeTag(mb + 52_429), "1.05 MB rounds half up")
         assertEquals("1.0", formatSizeTag(mb + 52_428), "just below 1.05 MB rounds down")
+    }
+
+    @Test
+    fun sizeTagsAndStripSizesShareOneNumberFormat() {
+        // P3-1: the tag (no unit) and the strip/button text ("MB") are the same number.
+        val mb = 1024L * 1024L
+        for (bytes in listOf(6.6.toLong() * mb, 245L * mb / 10, 105L * mb / 100)) {
+            assertEquals(formatSizeTag(bytes), formatByteSize(bytes).removeSuffix(" MB"), "bytes=$bytes")
+        }
     }
 
     @Test
@@ -126,28 +138,18 @@ class WifiBrowserModelTest {
     }
 
     @Test
-    fun theTileFrameIsPaleGlassNeverBlack() {
+    fun theTileFrameIsNearBlackInBothThemes() {
+        // The camera's thumbnails bake their letterbox bars into the pixels; the near-black frame
+        // (one token, both themes) makes those bars blend in instead of being trimmed.
         listOf(false, true).forEach { dark ->
-            val fill = tileFrameColor(dark)
-            assertEquals(1f, fill.red); assertEquals(1f, fill.green); assertEquals(1f, fill.blue)
-            assertTrue(fill.alpha in 0.05f..0.7f, "translucent veil, dark=$dark")
+            val fill = if (dark) DarkAlphaColors else LightAlphaColors
+            assertEquals(1f, fill.thumbnailFrame.alpha, "opaque, dark=$dark")
+            assertTrue(
+                fill.thumbnailFrame.red <= 0x1A / 255f && fill.thumbnailFrame.green <= 0x1A / 255f &&
+                        fill.thumbnailFrame.blue <= 0x1A / 255f,
+                "near-black #0E0E10-ish, dark=$dark",
+            )
         }
-    }
-
-    @Test
-    fun letterboxBarsAreTrimmedOnlyWhenSymmetric() {
-        // 120 rows, 7 black on each side (a 3:2 picture in a 4:3 thumbnail).
-        fun bars(top: Int, bottom: Int, length: Int = 120): (Int) -> Boolean = { it < top || it >= length - bottom }
-        assertEquals(7 until 113, letterboxSpan(120, bars(7, 7)))
-        assertEquals(7 until 112, letterboxSpan(120, bars(7, 8)), "a pixel of rounding is fine")
-        assertEquals(0 until 120, letterboxSpan(120, bars(0, 0)), "no bars")
-        assertEquals(0 until 120, letterboxSpan(120, bars(30, 0)), "a dark sky on one side is the picture")
-        assertEquals(0 until 120, letterboxSpan(120, bars(1, 1)), "hairlines are not letterboxing")
-        assertEquals(0 until 120, letterboxSpan(120, bars(40, 40)), "too little would remain")
-        assertEquals(0 until 120, letterboxSpan(120) { true }, "an all-black frame is kept")
-        assertTrue(isLetterboxBlack(0xFF000000.toInt()))
-        assertTrue(isLetterboxBlack(0xFF101410.toInt()))
-        assertFalse(isLetterboxBlack(0xFF203040.toInt()))
     }
 
     @Test

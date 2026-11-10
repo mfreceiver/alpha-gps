@@ -8,6 +8,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
@@ -602,6 +603,11 @@ class WifiRemoteController internal constructor(
                     "estBytes=$bitmapEstBytes"
         }
         _thumbnails.value += photo.handle to bitmap
+        // Fire-and-forget: the pixel scan runs away from this loader so it can never delay the
+        // next thumbnail; the log line is the only side effect.
+        if (index < 3) scope.launch(Dispatchers.Default) {
+            logLetterboxDiagnostics(pageOffset, index, photo.handle, bitmap)
+        }
         return ThumbnailFetch(fetchedBytes, itemMs)
     }
 
@@ -613,6 +619,23 @@ class WifiRemoteController internal constructor(
     fun requestThumbnails(identifier: String, pageRevision: Long, visible: List<String>, margin: List<String>) {
         if (_owner.value.equals(identifier, true)) {
             thumbDemand.value = ThumbnailDemand(pageRevision, visible, margin)
+        }
+    }
+
+    /**
+     * "AlphaThumb" diagnostics for the first three thumbnails of a page: decoded size plus the
+     * near-black edge lines measured off the composition thread ([Dispatchers.Default]); the scan
+     * only produces a log line, never touches what is displayed.
+     */
+    private suspend fun logLetterboxDiagnostics(pageOffset: Int, index: Int, handle: Long, bitmap: ImageBitmap) {
+        val bars = runCatching {
+            val pixels = IntArray(bitmap.width * bitmap.height)
+            bitmap.readPixels(pixels)
+            letterboxBarCounts(pixels, bitmap.width, bitmap.height)
+        }.getOrNull()
+        thumbLog.i {
+            "page=$pageOffset #$index handle=$handle decoded=${bitmap.width}x${bitmap.height} " +
+                    "nearBlackBars=${bars ?: "unavailable"}"
         }
     }
 
