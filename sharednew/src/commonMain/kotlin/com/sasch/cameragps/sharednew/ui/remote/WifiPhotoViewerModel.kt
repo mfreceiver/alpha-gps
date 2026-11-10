@@ -1,5 +1,6 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
+import com.sasch.cameragps.sharednew.remote.wifi.PhotoExif
 import com.sasch.cameragps.sharednew.remote.wifi.PhotoFormat
 import com.sasch.cameragps.sharednew.remote.wifi.PhotoMetadata
 import com.sasch.cameragps.sharednew.remote.wifi.PhotoMetadataState
@@ -75,7 +76,11 @@ internal fun viewerInfoStrip(capture: WifiCameraCapture, policy: WifiFormatPolic
 internal data class ViewerFileEntry(val format: String, val filename: String, val bytes: Long)
 
 /** A shooting parameter row of the details; the label is localized by the UI, values are not. */
-internal enum class ViewerExifField { Aperture, Shutter, Iso, ExposureBias, FocalLength, Lens, Camera }
+internal enum class ViewerExifField {
+    Aperture, Shutter, Iso, ExposureBias, FocalLength,
+    /** 35 mm-equivalent focal length; a separate row, also shown when the actual one is missing. */
+    FocalLength35mm, Lens, Camera
+}
 
 /**
  * Everything the details drawer (portrait) / side panel (wide layouts) shows for one capture. Every
@@ -105,6 +110,9 @@ internal fun viewerExifRows(metadata: PhotoMetadata?): List<Pair<ViewerExifField
         ViewerExifField.Iso to exif.isoText,
         ViewerExifField.ExposureBias to exif.exposureBiasText,
         ViewerExifField.FocalLength to exif.focalLengthText,
+        // A separate row whenever the camera reports it, next to the actual focal length
+        // (focalLengthText is "50mm"; the equivalent is written the same way).
+        ViewerExifField.FocalLength35mm to exif.focalLength35mm?.let { PhotoExif.decimal(it.toDouble(), 0) + "mm" },
         ViewerExifField.Lens to exif.lensModel?.trim(),
         ViewerExifField.Camera to exif.cameraModel?.trim(),
     ).mapNotNull { (field, value) -> value?.takeIf { it.isNotBlank() }?.let { field to it } }

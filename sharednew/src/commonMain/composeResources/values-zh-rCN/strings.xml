@@ -594,4 +594,5 @@
     <string name="b1_exif_camera">相机</string>
     <string name="d1_tile_too_large">超过大小上限，将跳过</string>
     <string name="d1_tile_saved">已保存</string>
+    <string name="d1_exif_focal_35mm">等效焦距</string>
 </resources>
