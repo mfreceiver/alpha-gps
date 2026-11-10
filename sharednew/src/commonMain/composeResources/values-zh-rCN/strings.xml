@@ -574,4 +574,20 @@
     <string name="m7_viewer_metadata_loading">正在读取照片信息…</string>
     <string name="m7_viewer_file_size">文件大小</string>
     <string name="c1_open_wifi_settings">打开 Wi-Fi 设置</string>
+    <string name="a1_settings_help_title">帮助</string>
+    <string name="a1_settings_help_desc">入门说明、常见问题与连接排查</string>
+    <string name="a1_settings_logs_title">运行日志</string>
+    <string name="a1_settings_logs_desc">连接与传输记录，用于排查问题</string>
+    <string name="a1_setting_enabled">已启用</string>
+    <string name="a1_setting_off">未启用</string>
+    <string name="a1_setting_unsupported">不支持</string>
+    <string name="a1_setting_unknown">未知</string>
+    <string name="a1_bt_connected_short">已连接</string>
+    <string name="a1_bt_connecting_short">正在连接…</string>
+    <string name="a1_bt_disconnecting_short">正在断开…</string>
+    <string name="a1_bt_disconnected_short">未连接</string>
+    <string name="a1_info_bt_address">蓝牙地址</string>
+    <string name="a1_address_show">显示</string>
+    <string name="a1_address_hide">隐藏</string>
+    <string name="a1_address_hidden">已隐藏</string>
 </resources>

@@ -603,4 +603,20 @@
     <string name="m7_viewer_metadata_loading">Reading photo info…</string>
     <string name="m7_viewer_file_size">File size</string>
     <string name="c1_open_wifi_settings">Open Wi-Fi settings</string>
+    <string name="a1_settings_help_title">Help</string>
+    <string name="a1_settings_help_desc">Getting started, FAQ and connection troubleshooting</string>
+    <string name="a1_settings_logs_title">Activity log</string>
+    <string name="a1_settings_logs_desc">Connection and transfer records, for troubleshooting</string>
+    <string name="a1_setting_enabled">Enabled</string>
+    <string name="a1_setting_off">Off</string>
+    <string name="a1_setting_unsupported">Not supported</string>
+    <string name="a1_setting_unknown">Unknown</string>
+    <string name="a1_bt_connected_short">Connected</string>
+    <string name="a1_bt_connecting_short">Connecting…</string>
+    <string name="a1_bt_disconnecting_short">Disconnecting…</string>
+    <string name="a1_bt_disconnected_short">Not connected</string>
+    <string name="a1_info_bt_address">Bluetooth address</string>
+    <string name="a1_address_show">Show</string>
+    <string name="a1_address_hide">Hide</string>
+    <string name="a1_address_hidden">Hidden</string>
 </resources>
