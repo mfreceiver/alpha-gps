@@ -4,7 +4,7 @@
 #     sed 改写、构建后（含失败）自动还原；versionCode 实际值来自产物 manifest，
 #     预期值来自仓库根 gradle.properties 的 alphagps.versionCode（平面文件严格解析，
 #     不再解析 Kotlin 源码）
-#   - 产物 app/build/outputs/apk/foss/release/app-foss-release.apk（签名可用时）归档为
+#   - 产物 app/build/outputs/apk/release/app-release.apk（签名可用时）归档为
 #     release/alpha-gps-<版本>.apk；release/ 只留最新版，SHA256SUMS 每次全量重生成
 #   - 断言：构建后必须调用 scripts/release_assert_apk.sh（签名者/证书钉定/包名/版本/权限）
 #   - 发布（--publish / --publish-only）两步：①主仓库：push 当前分支+tag 到主仓库 git 远端
@@ -42,7 +42,7 @@ source "$REPO_ROOT/scripts/release_lib.sh"   # parse_version_code_props / expect
 
 RELEASE_DIR="$REPO_ROOT/release"
 REPO_PROPS="$REPO_ROOT/gradle.properties"
-OUT_APK_DIR="$REPO_ROOT/app/build/outputs/apk/foss/release"
+OUT_APK_DIR="$REPO_ROOT/app/build/outputs/apk/release"
 BUILD_GRADLE="$REPO_ROOT/app/build.gradle.kts"
 GRADLE_PROPS=$HOME/.gradle/gradle.properties
 SIGNING_KEYSTORE_PATH=$HOME/.config/alphagps/signing/release.jks
@@ -694,11 +694,11 @@ clean_compose_residue() {
 clean_compose_residue
 
 # ─── 构建 ────────────────────────────────────────────────────────────────
-log "构建 :app:assembleFossRelease（versionName=$EMBED_NAME）"
+log "构建 :app:assembleRelease（versionName=$EMBED_NAME）"
 export SIGNING_KEYSTORE_PATH SIGNING_KEY_ALIAS
 export SIGNING_KEY_PASSWORD=$DSH_KEY_PASSWORD
 export SIGNING_STORE_PASSWORD=$DSH_KEYSTORE_PASSWORD
-./gradlew --no-daemon :app:assembleFossRelease --console=plain || fail "构建失败"
+./gradlew --no-daemon :app:assembleRelease --console=plain || fail "构建失败"
 restore_gradle || fail "构建成功但版本注入还原失败（备份保留在 $GRADLE_BAK，请人工恢复）"
 trap - EXIT
 # 注入 helper 只注入 versionName；还原后 gradle.properties 的 code 必须与注入前一致
@@ -709,10 +709,10 @@ EXPECT_CODE_AFTER=$(parse_version_code_props "$REPO_PROPS") \
   || fail "构建前后 gradle.properties versionCode 不一致（$EXPECT_CODE → $EXPECT_CODE_AFTER），fail-closed"
 
 OUT_APK=""
-for cand in "$OUT_APK_DIR/app-foss-release.apk" "$OUT_APK_DIR/app-foss-release-unsigned.apk"; do
+for cand in "$OUT_APK_DIR/app-release.apk" "$OUT_APK_DIR/app-release-unsigned.apk"; do
   [[ -f "$cand" ]] && OUT_APK=$cand && break
 done
-[[ -n "$OUT_APK" ]] || fail "构建后未找到产物（$OUT_APK_DIR/app-foss-release[.apk|-unsigned.apk]）"
+[[ -n "$OUT_APK" ]] || fail "构建后未找到产物（$OUT_APK_DIR/app-release[.apk|-unsigned.apk]）"
 [[ "$OUT_APK" != *-unsigned.apk ]] || warn "产物为 unsigned（签名配置未生效；断言大概率失败）"
 pass "构建完成: $OUT_APK"
 

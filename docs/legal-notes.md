@@ -77,7 +77,7 @@
 | Timber | Apache-2.0 | 本机日志 |
 | Accompanist（permissions） | Apache-2.0 | |
 | diamondedge:logging | Apache-2.0（待核对） | 多平台日志门面 |
-| Google Play services location、Play Core review（review / review-ktx） | 待核对 | 仅 gplay 变体；foss 变体不包含；随 W2 后续清理评估 |
+| Google Play services location、Play Core review（review / review-ktx） | — | 已随 gplay 变体删除（flavor 合并为单一 foss 行为），不再出现在任何构建中 |
 
 > 上游使用的 Sentry（崩溃上报）相关组件已随 Sentry 移除（W2）从依赖中删除，不再列于此清单。
 

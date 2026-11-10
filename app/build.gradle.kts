@@ -90,19 +90,6 @@ android {
         }
     }
 
-    flavorDimensions += "distribution"
-    productFlavors {
-        // Play Store build: GMS fused location.
-        create("gplay") {
-            dimension = "distribution"
-            isDefault = true
-        }
-        // F-Droid build: no GMS, no Play libraries.
-        create("foss") {
-            dimension = "distribution"
-        }
-    }
-
     dependenciesInfo {
         // The dependency-info block is an encrypted blob only Google Play can read;
         // F-Droid rejects APKs that contain it.
@@ -152,9 +139,6 @@ dependencies {
     implementation(libs.logging)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.accompanist.permissions)
-
-    // Proprietary bits stay out of the foss (F-Droid) flavor.
-    "gplayImplementation"(libs.google.play.services.location)
 
     implementation(libs.material)
 
