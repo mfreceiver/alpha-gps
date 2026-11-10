@@ -145,6 +145,7 @@ import cameragps.sharednew.generated.resources.wifi_remote_viewer_position
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_retry
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_select
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_transfer_wait
+import com.diamondedge.logging.logging
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
 import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferState
@@ -172,6 +173,7 @@ import com.sasch.cameragps.sharednew.ui.theme.GlassLevel
 import com.sasch.cameragps.sharednew.ui.theme.LocalGlassRenderMode
 import com.sasch.cameragps.sharednew.ui.theme.WindowClass
 import com.sasch.cameragps.sharednew.ui.theme.currentWindowClass
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -391,7 +393,7 @@ internal fun WifiPhotoViewer(
                                 onClose = {
                                     drawerOpen = false
                                     // Focus returns to the strip that opened the drawer.
-                                    runCatching { stripFocus.requestFocus() }
+                                    requestFocusGuarded("details strip") { stripFocus.requestFocus() }
                                 },
                             )
                         }
@@ -708,7 +710,7 @@ private fun ViewerDetailsDrawer(details: ViewerDetails, histogram: FloatArray?, 
     val title = stringResource(Res.string.b1_details_title)
     // The drawer is its own accessibility pane (like CapsuleDialog) and takes focus on entry.
     val sheetFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { sheetFocus.requestFocus() } }
+    LaunchedEffect(Unit) { requestFocusGuarded("details drawer") { sheetFocus.requestFocus() } }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val maxSheetHeight = maxHeight * 0.75f
         Box(
@@ -1081,3 +1083,23 @@ private fun ViewerFilmstrip(
         }
     }
 }
+
+private val focusLog = logging("WifiPhotoViewer")
+
+/**
+ * Moves focus for accessibility (drawer entry / return to the strip). Compose throws
+ * [IllegalStateException] when the target is not attached yet or already left the composition —
+ * the only failure that is expected here (logged, the user just keeps the current focus). Anything
+ * else is a real bug and propagates instead of being swallowed; cancellation is always rethrown.
+ * Returns whether focus was requested.
+ */
+internal fun requestFocusGuarded(what: String, request: () -> Unit): Boolean =
+    try {
+        request()
+        true
+    } catch (cancelled: CancellationException) {
+        throw cancelled // on the JVM a CancellationException *is* an IllegalStateException
+    } catch (failure: IllegalStateException) {
+        focusLog.w { "focus request ($what) skipped: ${failure::class.simpleName}: ${failure.message}" }
+        false
+    }
