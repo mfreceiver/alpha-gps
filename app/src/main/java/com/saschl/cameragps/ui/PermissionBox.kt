@@ -58,6 +58,7 @@ import cameragps.sharednew.generated.resources.location_bluetooth_benefit_3
 import cameragps.sharednew.generated.resources.permission_background_gps
 import cameragps.sharednew.generated.resources.permission_bluetooth
 import cameragps.sharednew.generated.resources.permission_gps
+import cameragps.sharednew.generated.resources.permission_gps_coarse
 import cameragps.sharednew.generated.resources.permission_notifications
 import cameragps.sharednew.generated.resources.permissions_required_app_error
 import cameragps.sharednew.generated.resources.step1_desc
@@ -98,19 +99,9 @@ fun EnhancedLocationPermissionBox(
         mutableStateOf(PreferencesManager.isPermissionsIgnored(context))
     }
 
-    // Foreground location permissions
-    val foregroundLocationPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        listOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.POST_NOTIFICATIONS
-        )
-    } else {
-        listOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.BLUETOOTH_CONNECT,
-        )
-    }
+    // Foreground location permissions. Android 12+ requires ACCESS_COARSE_LOCATION to be
+    // requested together with ACCESS_FINE_LOCATION in the same runtime request.
+    val foregroundLocationPermissions = foregroundRuntimePermissions(Build.VERSION.SDK_INT)
 
     var hasUserDeniedPermission by remember { mutableStateOf(false) }
 
@@ -499,9 +490,29 @@ fun BluetoothConnectPermissionGate(
 /**
  * Gets a user-friendly description for what the permission is used for
  */
+/**
+ * Foreground runtime permissions requested together on the given [sdkInt] (Build.VERSION.SDK_INT).
+ *
+ * Android 12+ ignores a runtime request that asks for ACCESS_FINE_LOCATION without
+ * ACCESS_COARSE_LOCATION, so both are always requested in one shot; access is still
+ * gated on FINE being granted. POST_NOTIFICATIONS joins the same request on 33+.
+ */
+fun foregroundRuntimePermissions(sdkInt: Int): List<String> = buildList {
+    add(Manifest.permission.ACCESS_FINE_LOCATION)
+    add(Manifest.permission.ACCESS_COARSE_LOCATION)
+    add(Manifest.permission.BLUETOOTH_CONNECT)
+    if (sdkInt >= Build.VERSION_CODES.TIRAMISU) {
+        add(Manifest.permission.POST_NOTIFICATIONS)
+    }
+}
+
+/**
+ * Gets a user-friendly description for what the permission is used for
+ */
 fun getPermissionDescription(permission: String): StringResource? {
     return when (permission) {
         Manifest.permission.ACCESS_FINE_LOCATION -> Res.string.permission_gps
+        Manifest.permission.ACCESS_COARSE_LOCATION -> Res.string.permission_gps_coarse
         Manifest.permission.ACCESS_BACKGROUND_LOCATION -> Res.string.permission_background_gps
         Manifest.permission.BLUETOOTH_CONNECT -> Res.string.permission_bluetooth
         Manifest.permission.POST_NOTIFICATIONS -> Res.string.permission_notifications
