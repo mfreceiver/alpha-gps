@@ -399,6 +399,7 @@
     <string name="device_info_mtu_value">%1$d 字节</string>
     <string name="m0_dialog_close">关闭</string>
     <string name="m0_button_loading">正在加载</string>
+    <string name="m0_text_field_invalid">输入无效</string>
     <string name="m9_photo_transfer_title">照片传输</string>
     <string name="m9_download_format_hint">批量下载与单张下载都按此格式。</string>
     <string name="m9_download_format_jpeg_desc">只下载 JPG；没有 JPG 的照片会被跳过，并在汇总里提示。</string>

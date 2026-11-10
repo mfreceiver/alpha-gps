@@ -100,6 +100,7 @@ GlassTextField(value, onValueChange, modifier = Modifier, label: String? = null,
                supportingText: String? = null, isError = false, enabled = true, readOnly = false, singleLine = true,
                keyboardOptions, keyboardActions, visualTransformation, trailing: (@Composable () -> Unit)? = null)
 ```
+- 无障碍：编辑框节点本身带名称（contentDescription = `label`，无 label 时用 `placeholder`）、描述（空值时 placeholder 提示 + 非错误的 supportingText）与错误（`isError` 时 supportingText，缺省"输入无效"）；可见的 label/placeholder/supportingText 不再单独朗读，trailing 保持独立节点。**必须给 `label` 或 `placeholder`**，否则读屏得到无名编辑框。映射见 `glassTextFieldA11y`。
 
 ### 顶栏（N5）
 ```kotlin
