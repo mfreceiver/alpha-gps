@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -18,6 +17,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 
 /**
  * A lazy list with a persistent scroll indicator and a small end gutter for it.
@@ -50,7 +50,7 @@ fun ScrollbarLazyColumn(
 /** Apply before verticalScroll so the indicator is drawn within the viewport. */
 @Composable
 fun Modifier.verticalScrollbar(state: ScrollIndicatorState?): Modifier {
-    val color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+    val color = AlphaTheme.colors.textSecondary.copy(alpha = 0.5f)
     return drawWithContent {
         drawContent()
         if (state == null) return@drawWithContent
