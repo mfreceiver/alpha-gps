@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AlphaGPS project icon, 1024x1024 rounded square (docs / README / About).
+     Same artwork as the adaptive foreground/background layers; the
+     foreground is drawn in 108-unit space and scaled x13 around the centre.
+     Original artwork drawn by mfreceiver for AlphaGPS. License: GPL-3.0. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>AlphaGPS icon</title>
+  <defs>
+    <clipPath id="shape">
+      <rect width="1024" height="1024" rx="228"/>
+    </clipPath>
+    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2F7BF0"/>
+      <stop offset="0.5" stop-color="#0B57D0"/>
+      <stop offset="1" stop-color="#062E6F"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="320" cy="266" r="660" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="pin" x1="52" y1="36" x2="52" y2="72" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#D3E3FD"/>
+    </linearGradient>
+    <radialGradient id="glass" cx="49.5" cy="45.5" r="10" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#A8C7FA"/>
+      <stop offset="0.55" stop-color="#0B57D0"/>
+      <stop offset="1" stop-color="#062E6F"/>
+    </radialGradient>
+  </defs>
+  <g clip-path="url(#shape)">
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+    <rect width="1024" height="1024" fill="url(#glow)"/>
+    <g fill="none" stroke="#FFFFFF" stroke-opacity="0.07" stroke-width="5">
+      <circle cx="512" cy="512" r="420"/>
+      <ellipse cx="512" cy="512" rx="190" ry="420"/>
+      <path d="M92 512H932M137 322H887M137 702H887"/>
+    </g>
+  </g>
+  <g transform="translate(-190 -190) scale(13)">
+    <path d="M32 40V35A3 3 0 0 1 35 32H40M68 32H73A3 3 0 0 1 76 35V40M76 68V73A3 3 0 0 1 73 76H68M40 76H35A3 3 0 0 1 32 73V68" fill="none" stroke="#FFFFFF" stroke-opacity="0.92" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M56.82 32.18A17.5 17.5 0 0 1 68.82 44.18" fill="none" stroke="#FFC857" stroke-width="3" stroke-linecap="round"/>
+    <path d="M52 73C48.36 67.94 39 58.06 39 50A13 13 0 0 1 65 50C65 58.06 55.64 67.94 52 73Z" fill="#062E6F" fill-opacity="0.28"/>
+    <path d="M52 72C48.36 66.94 39 57.06 39 49A13 13 0 0 1 65 49C65 57.06 55.64 66.94 52 72Z" fill="url(#pin)"/>
+    <circle cx="52" cy="49" r="9.8" fill="#062E6F"/>
+    <circle cx="52" cy="49" r="7.6" fill="url(#glass)"/>
+    <circle cx="52" cy="49" r="2.9" fill="#062E6F" fill-opacity="0.85"/>
+    <path d="M47.29 48.39A5.02 5.02 0 0 1 51.54 44.14" fill="none" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="1.5" stroke-linecap="round"/>
+    <circle cx="55.2" cy="52.2" r="1" fill="#7FE3F0"/>
+  </g>
+</svg>
