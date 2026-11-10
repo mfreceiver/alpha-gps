@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -76,13 +77,34 @@ class LocationTransmissionStateTest {
         assertFalse(f.manager.isTransmitting.value)
     }
 
+    @Test
+    fun reportsOnlyAcceptedPacketsAsQueuedAndNeverTheirContent() = runTest {
+        val f = Fixture(backgroundScope)
+        f.manager.onDeviceReady("A")
+        runCurrent()
+        f.source.locations.emit(fix())
+        runCurrent()
+        assertEquals(listOf("A"), f.queued)
+        f.port.acceptWrites = false
+        advanceTimeBy(SonyBluetoothConstants.LOCATION_UPDATE_INTERVAL_MS)
+        runCurrent()
+        assertEquals(listOf("A"), f.queued)
+        f.port.acceptWrites = true
+        advanceTimeBy(SonyBluetoothConstants.LOCATION_UPDATE_INTERVAL_MS)
+        runCurrent()
+        assertEquals(listOf("A", "A"), f.queued)
+    }
+
     private class Fixture(scope: CoroutineScope) {
         val source = FakeSource()
         val port = FakePort()
         val ready = mutableSetOf("A")
         var allowed = true
-        val manager =
-            LocationTransmissionManager(source, { ready }, { null }, port, scope, { allowed })
+        val queued = mutableListOf<String>()
+        val manager = LocationTransmissionManager(
+            source, { ready }, { null }, port, scope, { allowed },
+            onPacketQueued = { queued += it },
+        )
     }
 
     private class FakeSource : LocationSource {
