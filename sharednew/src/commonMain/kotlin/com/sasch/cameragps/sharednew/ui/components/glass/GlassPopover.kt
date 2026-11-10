@@ -26,6 +26,7 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +36,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
@@ -45,6 +48,7 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -102,18 +106,27 @@ fun popoverPosition(
     return IntOffset(x, y)
 }
 
-/** Bounds (in root coordinates) of the element a popover / tooltip is attached to. */
+/**
+ * Bounds (in root coordinates) of the element a popover / tooltip is attached to, and its focus
+ * requester — keyboard focus returns there when the popover closes.
+ */
 @Stable
 class GlassAnchorState {
     var bounds: Rect? by mutableStateOf(null)
         internal set
+
+    internal val focusRequester = FocusRequester()
 }
 
 @Composable
 fun rememberGlassAnchor(): GlassAnchorState = remember { GlassAnchorState() }
 
-/** Records this element's bounds into [state] — put it on the button that opens the popover. */
-fun Modifier.glassAnchor(state: GlassAnchorState): Modifier = onGloballyPositioned { state.bounds = it.boundsInRoot() }
+/**
+ * Records this element's bounds into [state] and makes it (or the first focusable element inside)
+ * the focus return target — put it on the button that opens the popover.
+ */
+fun Modifier.glassAnchor(state: GlassAnchorState): Modifier =
+    onGloballyPositioned { state.bounds = it.boundsInRoot() }.focusRequester(state.focusRequester)
 
 /**
  * Full-size overlay box that places its single child next to [anchor] via [popoverPosition]. It
@@ -166,6 +179,10 @@ internal fun AnchoredBox(
  * (never a platform `Popup`). Tap outside or system back calls [onDismissRequest]. Opens with a
  * short fade + offset. Without a [GlassBackground] above it, it renders nothing.
  *
+ * Focus (like the platform `Popup(focusable = true)` it replaces): on open keyboard focus moves onto
+ * the panel and the page cannot take it back; on close it returns to [anchor] if the page had focus.
+ * [paneTitle] (optional) names the pane for accessibility services.
+ *
  * ```
  * val anchor = rememberGlassAnchor()
  * GlassIconButton(icon, "More", { open = true }, Modifier.glassAnchor(anchor))
@@ -179,10 +196,12 @@ fun GlassPopover(
     anchor: GlassAnchorState,
     modifier: Modifier = Modifier,
     placement: PopoverPlacement = PopoverPlacement.BelowEnd,
+    paneTitle: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val host = LocalGlassOverlayHost.current ?: return
     if (!expanded) return
+    SideEffect { host.focusMemory.noteAnchor { tryFocus { anchor.focusRequester.requestFocus() } } }
     GlassOverlay(host) {
         NavigationBackHandler(
             state = rememberNavigationEventState(NavigationEventInfo.None),
@@ -196,6 +215,7 @@ fun GlassPopover(
                 val enter = remember { Animatable(0f) }
                 LaunchedEffect(Unit) { enter.animateTo(1f, tween(160)) }
                 val up = placement == PopoverPlacement.AboveEnd || placement == PopoverPlacement.AboveStart
+                val panelFocus = rememberModalPanelFocus(host)
                 GlassSurface(
                     modifier = modifier
                         .widthIn(min = 180.dp, max = 320.dp)
@@ -204,7 +224,11 @@ fun GlassPopover(
                             translationY = (1f - enter.value) * (if (up) 8.dp else (-8).dp).toPx()
                         }
                         .pointerInput(Unit) { detectTapGestures { } }
-                        .semantics { isTraversalGroup = true },
+                        .semantics {
+                            isTraversalGroup = true
+                            if (paneTitle != null) this.paneTitle = paneTitle
+                        }
+                        .modalPanelFocus(panelFocus),
                     level = GlassLevel.Modal,
                     shape = AlphaShapes.popover,
                 ) {
@@ -241,8 +265,9 @@ fun GlassMenu(
     items: List<GlassMenuItem>,
     modifier: Modifier = Modifier,
     placement: PopoverPlacement = PopoverPlacement.BelowEnd,
+    paneTitle: String? = null,
 ) {
-    GlassPopover(expanded, onDismissRequest, anchor, modifier, placement) {
+    GlassPopover(expanded, onDismissRequest, anchor, modifier, placement, paneTitle) {
         items.forEach { item -> GlassMenuRow(item, onDismissRequest) }
     }
 }

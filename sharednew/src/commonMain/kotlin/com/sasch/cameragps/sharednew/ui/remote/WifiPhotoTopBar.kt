@@ -164,6 +164,7 @@ private fun WifiGridOptionsPopover(
         onDismissRequest = onDismiss,
         anchor = anchor,
         modifier = Modifier.width(248.dp),
+        paneTitle = stringResource(Res.string.mw_view_options),
     ) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
