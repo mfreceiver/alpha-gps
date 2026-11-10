@@ -1,6 +1,5 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -84,9 +82,12 @@ import cameragps.sharednew.generated.resources.wifi_remote_wifi_disabled
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteFailure
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressCircle
 import com.sasch.cameragps.sharednew.ui.components.glass.glass
+import com.sasch.cameragps.sharednew.ui.components.glass.glassProgressColors
 import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import com.sasch.cameragps.sharednew.ui.theme.GlassLevel
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.StringResource
@@ -174,14 +175,14 @@ internal fun WifiConnectionOverlay(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    title, style = MaterialTheme.typography.titleMedium, maxLines = 1,
+                    title, style = AlphaType.Heading, maxLines = 1,
                     overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-                    color = if (ended) AlphaTheme.colors.error else AlphaTheme.colors.onSurface,
+                    color = if (ended) AlphaTheme.colors.danger else AlphaTheme.colors.textPrimary,
                 )
                 Text(
-                    hint, style = MaterialTheme.typography.bodyMedium, minLines = 2, maxLines = 2,
+                    hint, style = AlphaType.Body, minLines = 2, maxLines = 2,
                     overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-                    color = AlphaTheme.colors.onSurfaceVariant,
+                    color = AlphaTheme.colors.textSecondary,
                 )
             }
             Spacer(Modifier.height(8.dp))
@@ -218,25 +219,30 @@ private fun frameTexts(frame: WifiConnectionFrame, networkPermissionMessage: Str
 @Composable
 private fun FrameIcon(frame: WifiConnectionFrame) {
     val colors = AlphaTheme.colors
+    // Remaining segments use the GlassProgress track so the ring reads as the same progress family.
+    val todo = glassProgressColors(colors, onPhoto = false).first
     when (frame) {
         is WifiConnectionFrame.Failed, WifiConnectionFrame.Unsupported -> Icon(
             painterResource(Res.drawable.mw_error_24px), contentDescription = null,
-            tint = colors.error, modifier = Modifier.size(FailureIcon)
+            tint = colors.danger, modifier = Modifier.size(FailureIcon)
         )
         WifiConnectionFrame.Closing -> {
-            SpinningRing(colors.outline)
+            // Neutral indeterminate ring at the step ring's size (N8 GlassProgressCircle).
+            GlassProgressCircle(
+                Modifier.size(RingRadius * 2 + RingStroke), color = colors.textMuted, strokeWidth = RingStroke,
+            )
             Icon(
                 painterResource(Res.drawable.mw_wifi_off_24px), null,
-                tint = colors.onSurfaceVariant, modifier = Modifier.size(StepIcon)
+                tint = colors.textSecondary, modifier = Modifier.size(StepIcon)
             )
         }
         WifiConnectionFrame.Ready -> {
-            StepRing(done = WifiConnectStep.entries.size, current = null, doneColor = colors.success, todo = colors.outlineVariant)
+            StepRing(done = WifiConnectStep.entries.size, current = null, doneColor = colors.success, todo = todo)
             Icon(painterResource(Res.drawable.check_24px), null, tint = colors.success, modifier = Modifier.size(StepIcon))
         }
         is WifiConnectionFrame.Progress -> {
-            StepRing(done = frame.step.ordinal, current = frame.step.ordinal, doneColor = colors.primary, todo = colors.outlineVariant)
-            Icon(stepIcon(frame.step), null, tint = colors.primary, modifier = Modifier.size(StepIcon))
+            StepRing(done = frame.step.ordinal, current = frame.step.ordinal, doneColor = colors.accent, todo = todo)
+            Icon(stepIcon(frame.step), null, tint = colors.accent, modifier = Modifier.size(StepIcon))
         }
     }
 }
@@ -278,22 +284,6 @@ private fun StepRing(done: Int, current: Int?, doneColor: Color, todo: Color) {
     }
 }
 
-/** Neutral reverse-spinning ring of the closing frame. */
-@Composable
-private fun SpinningRing(color: Color) {
-    val angle by rememberInfiniteTransition(label = "closing").animateFloat(
-        360f, 0f, infiniteRepeatable(tween(1200, easing = LinearEasing)), label = "angle"
-    )
-    Canvas(Modifier.size(RingRadius * 2 + RingStroke)) {
-        val diameter = RingRadius.toPx() * 2
-        val topLeft = Offset((size.width - diameter) / 2, (size.height - diameter) / 2)
-        drawArc(
-            color, startAngle = angle, sweepAngle = 270f, useCenter = false, topLeft = topLeft,
-            size = Size(diameter, diameter), style = Stroke(RingStroke.toPx(), cap = StrokeCap.Round)
-        )
-    }
-}
-
 @Composable
 private fun FrameAction(
     frame: WifiConnectionFrame, permission: Boolean, onCancel: () -> Unit, onAppSettings: (() -> Unit)?,
@@ -320,8 +310,8 @@ private fun FrameAction(
                 modifier = Modifier.fillMaxWidth(),
             )
             else -> Text(
-                stringResource(Res.string.mw_connect_tap_to_return), style = MaterialTheme.typography.bodyMedium,
-                color = AlphaTheme.colors.onSurfaceVariant,
+                stringResource(Res.string.mw_connect_tap_to_return), style = AlphaType.Body,
+                color = AlphaTheme.colors.textSecondary,
             )
         }
         WifiConnectionFrame.Closing -> Unit
