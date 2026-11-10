@@ -11,6 +11,7 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
 import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
+import com.sasch.cameragps.sharednew.remote.wifi.captureDownloadSize
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -39,14 +40,37 @@ class WifiPhotoViewerModelTest {
     // ---- extended read trigger --------------------------------------------------------------------
 
     @Test
-    fun onlyParametersOrLensNeedTheExtendedRead() {
-        for (histogram in listOf(false, true)) for (params in listOf(false, true)) for (lens in listOf(false, true)) {
-            assertEquals(
-                params || lens,
-                viewerNeedsExtendedMetadata(ViewerInfoOptions(histogram, params, lens)),
-                "histogram=$histogram params=$params lens=$lens",
-            )
-        }
+    fun theExtendedReadRunsOnlyWhileTheDetailsAreVisible() {
+        assertFalse(viewerWantsExtendedMetadata(portrait = true, drawerOpen = false), "portrait, drawer closed: basic only")
+        assertTrue(viewerWantsExtendedMetadata(portrait = true, drawerOpen = true), "opening the drawer starts the read")
+        assertTrue(viewerWantsExtendedMetadata(portrait = false, drawerOpen = false), "B / C always show the side panel")
+    }
+
+    // ---- details drawer gesture ---------------------------------------------------------------------
+
+    @Test
+    fun onlyTheLowerPartOfThePhotoOpensTheDrawer() {
+        val height = 1000f
+        assertFalse(inDetailsSwipeZone(0f, height), "the top of the photo belongs to the pager")
+        assertFalse(inDetailsSwipeZone(height * (1f - DETAILS_SWIPE_ZONE_FRACTION) - 1f, height))
+        assertTrue(inDetailsSwipeZone(height * (1f - DETAILS_SWIPE_ZONE_FRACTION), height))
+        assertTrue(inDetailsSwipeZone(height - 1f, height), "the info strip lies inside the zone")
+        assertFalse(inDetailsSwipeZone(height + 1f, height))
+        assertFalse(inDetailsSwipeZone(0f, 0f), "no layout yet: no zone")
+    }
+
+    @Test
+    fun onlyASteepUpwardSwipeOpensAndASteepDownwardDragCloses() {
+        val d = 40f
+        assertTrue(detailsSwipeOpens(dx = 0f, dy = -d, distance = d))
+        assertTrue(detailsSwipeOpens(dx = 20f, dy = -60f, distance = d), "a slightly slanted swipe still opens")
+        assertFalse(detailsSwipeOpens(dx = 0f, dy = -(d - 1f), distance = d), "too short")
+        assertFalse(detailsSwipeOpens(dx = 0f, dy = d, distance = d), "downwards")
+        assertFalse(detailsSwipeOpens(dx = 80f, dy = -60f, distance = d), "a page swipe (mostly horizontal) never opens")
+        assertFalse(detailsSwipeOpens(dx = -50f, dy = -60f, distance = d), "below the steepness")
+        assertTrue(detailsSwipeCloses(dx = 0f, dy = d, distance = d))
+        assertFalse(detailsSwipeCloses(dx = 0f, dy = -d, distance = d), "upwards keeps it open")
+        assertFalse(detailsSwipeCloses(dx = 90f, dy = 50f, distance = d), "sideways keeps it open")
     }
 
     // ---- info strip --------------------------------------------------------------------------------
@@ -60,93 +84,95 @@ class WifiPhotoViewerModelTest {
     }
 
     @Test
-    fun stripShowsJpegResolutionAndTheDefaultFormatSizeOnce() {
-        val jpegOnly = viewerInfoStrip(pair, WifiFormatPolicy.JpegOnly, PhotoMetadataState.Idle, ViewerInfoOptions())
-        assertEquals("JPG + RAW", jpegOnly.formatText)
-        assertEquals("7008×4672", jpegOnly.resolutionText, "the JPEG's size, never the RAW object info")
-        assertEquals(6_600_000, jpegOnly.sizeBytes)
-        assertFalse(jpegOnly.noJpeg)
-        val original = viewerInfoStrip(pair, WifiFormatPolicy.Original, PhotoMetadataState.Idle, ViewerInfoOptions())
-        assertEquals(54_600_000, original.sizeBytes, "Original downloads every file: the sum")
-        assertEquals(ViewerExtrasState.None, original.extras)
+    fun stripShowsFormatAndTheDefaultFormatDownloadSizeOnce() {
+        assertEquals(ViewerInfoStrip("JPG + RAW", 6_600_000, noJpeg = false), viewerInfoStrip(pair, WifiFormatPolicy.JpegOnly))
+        assertEquals(54_600_000, viewerInfoStrip(pair, WifiFormatPolicy.Original).sizeBytes, "Original downloads every file: the sum")
     }
 
     @Test
-    fun saveStatusDoesNotChangeTheShownSize() {
-        // The plan of captureDetails drops saved files; the strip keeps the intended size.
-        val strip = viewerInfoStrip(jpgOnly, WifiFormatPolicy.JpegOnly, PhotoMetadataState.Idle, ViewerInfoOptions())
-        assertEquals(6_600_000, strip.sizeBytes)
+    fun stripSizeIsTheSameNumberAsTheGridTagAndTheBatchButton() {
+        for (policy in WifiFormatPolicy.entries) for (capture in listOf(pair, rawOnly, jpgOnly)) {
+            assertEquals(captureDownloadSize(capture, policy).bytes, viewerInfoStrip(capture, policy).sizeBytes, "$policy ${capture.id}")
+        }
     }
 
     @Test
     fun rawOnlyUnderJpegOnlyIsMarkedAndShowsTheRawSize() {
-        val strip = viewerInfoStrip(rawOnly, WifiFormatPolicy.JpegOnly, PhotoMetadataState.Idle, ViewerInfoOptions())
-        assertTrue(strip.noJpeg)
+        val strip = viewerInfoStrip(rawOnly, WifiFormatPolicy.JpegOnly)
+        assertTrue(strip.noJpeg, "shown as \"Only RAW\", never downloaded silently")
         assertEquals("RAW", strip.formatText)
-        assertNull(strip.resolutionText, "RAW shows just RAW")
         assertEquals(48_000_000, strip.sizeBytes)
-        assertFalse(viewerInfoStrip(rawOnly, WifiFormatPolicy.Original, PhotoMetadataState.Idle, ViewerInfoOptions()).noJpeg)
+        assertFalse(viewerInfoStrip(rawOnly, WifiFormatPolicy.Original).noJpeg)
+    }
+
+    // ---- details -----------------------------------------------------------------------------------
+
+    @Test
+    fun detailsListEveryFileWithItsOwnSizeJpgFirst() {
+        val details = viewerDetails(pair, PhotoMetadataState.Idle)
+        assertEquals("DSC1.JPG", details.filename)
+        assertEquals("JPG + RAW", details.formatText)
+        assertEquals(
+            listOf(ViewerFileEntry("JPG", "DSC1.JPG", 6_600_000), ViewerFileEntry("RAW", "DSC1.ARW", 48_000_000)),
+            details.files,
+        )
+        assertEquals("7008×4672", details.resolutionText, "the JPEG's size, never the RAW object info")
+        assertTrue(details.exif.isEmpty())
+        assertFalse(details.loading)
+    }
+
+    @Test
+    fun unreadableValuesAreLeftOut() {
+        val details = viewerDetails(rawOnly, PhotoMetadataState.Ready(metadata(2, format = PhotoFormat.Raw)))
+        assertNull(details.resolutionText, "RAW-only: no trusted pixel size")
+        assertNull(details.capturedAt, "no capture time in the catalog")
+        assertTrue(details.exif.isEmpty(), "RAW has no readable EXIF")
+        assertEquals(listOf(ViewerFileEntry("RAW", "DSC1.ARW", 48_000_000)), details.files)
     }
 
     @Test
     fun resolutionFallsBackToTheMetadataOfThePreviewFile() {
         val bare = WifiCameraCapture("b", listOf(jpg.copy(width = null, height = null)))
-        val ready = PhotoMetadataState.Ready(metadata(1))
-        assertEquals("6000×4000", viewerInfoStrip(bare, WifiFormatPolicy.JpegOnly, ready, ViewerInfoOptions()).resolutionText)
-        val stale = PhotoMetadataState.Ready(metadata(99))
-        assertNull(viewerInfoStrip(bare, WifiFormatPolicy.JpegOnly, stale, ViewerInfoOptions()).resolutionText,
+        assertEquals("6000×4000", viewerDetails(bare, PhotoMetadataState.Ready(metadata(1))).resolutionText)
+        assertNull(viewerDetails(bare, PhotoMetadataState.Ready(metadata(99))).resolutionText,
             "metadata of another photo (late swipe) is ignored")
     }
 
     @Test
-    fun extrasFollowTheTogglesAndTheReadState() {
-        val all = ViewerInfoOptions(showHistogram = true, showExifParams = true, showLens = true)
-        val loading = viewerInfoStrip(jpgOnly, WifiFormatPolicy.JpegOnly, PhotoMetadataState.Loading(1, metadata(1)), all)
-        assertEquals(ViewerExtrasState.Loading, loading.extras)
-        assertNull(loading.exifParams)
+    fun shootingParametersFollowTheReadState() {
+        val loading = viewerDetails(jpgOnly, PhotoMetadataState.Loading(1, metadata(1)))
+        assertTrue(loading.loading)
+        assertTrue(loading.exif.isEmpty())
+        assertFalse(viewerDetails(jpgOnly, PhotoMetadataState.Loading(99, metadata(99))).loading, "another photo's read")
 
-        val ready = viewerInfoStrip(jpgOnly, WifiFormatPolicy.JpegOnly, PhotoMetadataState.Ready(metadata(1, sampleExif)), all)
-        assertEquals(ViewerExtrasState.Ready, ready.extras)
-        assertEquals("f/2.8  1/250s  ISO 400  35mm  +0.3 EV", ready.exifParams)
-        assertEquals("FE 24-70mm F2.8 GM II", ready.lens)
-        assertTrue(ready.showHistogram)
-
-        val lensOnly = viewerInfoStrip(
-            jpgOnly, WifiFormatPolicy.JpegOnly, PhotoMetadataState.Ready(metadata(1, sampleExif)),
-            ViewerInfoOptions(showLens = true),
+        val ready = viewerDetails(jpgOnly, PhotoMetadataState.Ready(metadata(1, sampleExif)))
+        assertFalse(ready.loading)
+        assertEquals(
+            listOf(
+                ViewerExifField.Aperture to "f/2.8",
+                ViewerExifField.Shutter to "1/250s",
+                ViewerExifField.Iso to "ISO 400",
+                ViewerExifField.ExposureBias to "+0.3 EV",
+                ViewerExifField.FocalLength to "35mm",
+                ViewerExifField.Lens to "FE 24-70mm F2.8 GM II",
+            ),
+            ready.exif,
         )
-        assertNull(lensOnly.exifParams)
-        assertEquals("FE 24-70mm F2.8 GM II", lensOnly.lens)
-        assertFalse(lensOnly.showHistogram)
 
-        val off = viewerInfoStrip(jpgOnly, WifiFormatPolicy.JpegOnly, PhotoMetadataState.Ready(metadata(1, sampleExif)), ViewerInfoOptions())
-        assertEquals(ViewerExtrasState.None, off.extras)
-        assertNull(off.exifParams)
-        assertNull(off.lens)
+        val failed = viewerDetails(jpgOnly, PhotoMetadataState.Unavailable(1, PhotoMetadataFailureReason.Timeout, metadata(1)))
+        assertFalse(failed.loading)
+        assertTrue(failed.exif.isEmpty(), "a failed read hides the rows instead of leaving them empty")
+        assertEquals(listOf(ViewerFileEntry("JPG", "DSC1.JPG", 6_600_000)), failed.files, "the basic data stays")
     }
 
     @Test
-    fun aFailedReadKeepsTheBasicLineAndDropsTheExtras() {
-        val all = ViewerInfoOptions(showHistogram = true, showExifParams = true, showLens = true)
-        val failed = viewerInfoStrip(
-            jpgOnly, WifiFormatPolicy.JpegOnly,
-            PhotoMetadataState.Unavailable(1, PhotoMetadataFailureReason.Timeout, metadata(1)), all,
+    fun exifRowsLeaveOutMissingValues() {
+        assertTrue(viewerExifRows(null).isEmpty())
+        assertTrue(viewerExifRows(metadata(1, PhotoExif())).isEmpty())
+        assertEquals(
+            listOf(ViewerExifField.Shutter to "2.5s", ViewerExifField.Iso to "ISO 100", ViewerExifField.Camera to "ILCE-7M4"),
+            viewerExifRows(metadata(1, PhotoExif(iso = 100, exposureTimeSeconds = 2.5, lensModel = " ", cameraModel = "ILCE-7M4"))),
         )
-        assertEquals(ViewerExtrasState.None, failed.extras)
-        assertNull(failed.exifParams)
-        assertEquals("JPG", failed.formatText)
-        assertEquals(6_600_000, failed.sizeBytes)
-        assertTrue(failed.showHistogram, "the histogram comes from the preview, not the read")
-        // RAW has no readable EXIF: the basic Ready result shows no extras either.
-        val rawReady = viewerInfoStrip(rawOnly, WifiFormatPolicy.Original, PhotoMetadataState.Ready(metadata(2, format = PhotoFormat.Raw)), all)
-        assertEquals(ViewerExtrasState.None, rawReady.extras)
-    }
-
-    @Test
-    fun exifParamsLeaveOutMissingValues() {
-        assertNull(viewerExifParamsText(null))
-        assertNull(viewerExifParamsText(metadata(1, PhotoExif())))
-        assertEquals("2.5s  ISO 100", viewerExifParamsText(metadata(1, PhotoExif(iso = 100, exposureTimeSeconds = 2.5))))
     }
 
     // ---- download button ---------------------------------------------------------------------------

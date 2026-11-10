@@ -410,14 +410,6 @@
     <string name="m9_photo_transfer_title">照片传输</string>
     <string name="m9_download_format_hint">批量下载与单张下载都按此格式。</string>
     <string name="m9_download_format_jpeg_desc">只下载 JPG；没有 JPG 的照片会被跳过，并在汇总里提示。</string>
-    <string name="m9_viewer_info_title">预览页信息</string>
-    <string name="m9_viewer_histogram">显示直方图</string>
-    <string name="m9_viewer_histogram_desc">显示照片的亮度直方图。</string>
-    <string name="m9_viewer_exif_params">显示拍摄参数</string>
-    <string name="m9_viewer_exif_params_desc">光圈、快门、ISO、焦距、曝光补偿。</string>
-    <string name="m9_viewer_lens">显示镜头信息</string>
-    <string name="m9_viewer_lens_desc">镜头型号等镜头信息。</string>
-    <string name="m9_viewer_info_note">这些信息仅在预览页的信息区显示。开启任意一项后，进入预览会额外读取一次照片头部数据，轻微增加与相机的通信。</string>
     <string name="m9_logs_copy">复制日志</string>
     <string name="m9_logs_copied">已复制 %1$d 条日志</string>
     <string name="m9_logs_copied_latest">已复制最新的 %1$d 条日志（仅复制最新部分）</string>
@@ -587,4 +579,17 @@
     <string name="a1_address_hidden">已隐藏</string>
     <string name="b1_tile_size">%1$s MB</string>
     <string name="b1_tile_size_not_downloaded">%1$s MB，不包含在仅 JPG 下载中</string>
+    <string name="b1_details_title">照片详情</string>
+    <string name="b1_details_open">查看照片详情</string>
+    <string name="b1_details_close">关闭照片详情</string>
+    <string name="b1_detail_captured">拍摄时间</string>
+    <string name="b1_detail_format">格式</string>
+    <string name="b1_detail_files">文件</string>
+    <string name="b1_detail_resolution">分辨率</string>
+    <string name="b1_exif_aperture">光圈</string>
+    <string name="b1_exif_shutter">快门</string>
+    <string name="b1_exif_iso">ISO</string>
+    <string name="b1_exif_bias">曝光补偿</string>
+    <string name="b1_exif_focal">焦距</string>
+    <string name="b1_exif_camera">相机</string>
 </resources>

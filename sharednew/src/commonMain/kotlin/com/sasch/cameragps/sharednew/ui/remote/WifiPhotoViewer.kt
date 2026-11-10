@@ -1,5 +1,36 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.only
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
+import cameragps.sharednew.generated.resources.b1_details_close
+import cameragps.sharednew.generated.resources.b1_details_open
+import cameragps.sharednew.generated.resources.b1_details_title
+import cameragps.sharednew.generated.resources.b1_detail_captured
+import cameragps.sharednew.generated.resources.b1_detail_files
+import cameragps.sharednew.generated.resources.b1_detail_format
+import cameragps.sharednew.generated.resources.b1_detail_resolution
+import cameragps.sharednew.generated.resources.b1_exif_aperture
+import cameragps.sharednew.generated.resources.b1_exif_bias
+import cameragps.sharednew.generated.resources.b1_exif_camera
+import cameragps.sharednew.generated.resources.b1_exif_focal
+import cameragps.sharednew.generated.resources.b1_exif_iso
+import cameragps.sharednew.generated.resources.b1_exif_shutter
+import cameragps.sharednew.generated.resources.chevron_right_24px
+import cameragps.sharednew.generated.resources.close_24px
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -107,7 +138,6 @@ import cameragps.sharednew.generated.resources.wifi_remote_viewer_position
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_retry
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_select
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_transfer_wait
-import com.sasch.cameragps.sharednew.remote.wifi.PhotoMetadataState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
 import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferState
@@ -150,17 +180,19 @@ private val PortraitStripMaxWidth = 560.dp
 private val WideStripMaxWidth = 420.dp
 
 private val StripShape = RoundedCornerShape(20.dp)
+private val DrawerShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
 private val FilmstripCell = 40.dp
 private val FilmstripShape = RoundedCornerShape(6.dp)
 private val WhiteSoft = Color.White.copy(alpha = 0.72f)
 
 /**
  * Full-screen viewer of the open day (design v3 pages 20–21): top bar (name, capture time, k / N),
- * status tags, the photo pager, the translucent info strip (format · resolution · the one file size,
- * plus the optional parameter / lens / histogram blocks of [infoOptions]), the filmstrip, the single
- * download button and the selection check box. Always dark. Layout follows [currentWindowClass]:
- * A portrait = chrome above / below the photo; B near-square and C landscape = photo left and a
- * details panel on the right carrying the optional blocks and the download button.
+ * status tags, the photo pager, the single-layer glass info strip (format · the size the default
+ * download format fetches), the filmstrip, the single download button and the selection check box.
+ * Always dark. Layout follows [currentWindowClass]: A portrait = chrome above / below the photo, the
+ * details (all readable metadata + histogram) in a bottom drawer opened by swiping up from the lower
+ * photo area or tapping the strip; B near-square and C landscape = photo left and the same details
+ * in a panel on the right with the download button.
  */
 @Composable
 internal fun WifiPhotoViewer(
@@ -168,7 +200,6 @@ internal fun WifiPhotoViewer(
     viewModel: WifiRemoteViewModel,
     onDownload: (List<WifiPhotoDownload>) -> Unit,
     defaultDownloadFormatJpeg: Boolean = false,
-    infoOptions: ViewerInfoOptions = ViewerInfoOptions(),
 ) {
     val browser = state.photoBrowser
     val transfer = state.imageTransfer
@@ -185,12 +216,15 @@ internal fun WifiPhotoViewer(
             viewModel.stopViewerMetadata()
         }
     }
-    // Basic metadata is free; the extended read only runs for the parameter / lens blocks. Re-asked
-    // after every settled swipe (the controller cancels the previous read) and after a download,
-    // which interrupts a pending read.
-    val needsExtended = viewerNeedsExtendedMetadata(infoOptions)
-    LaunchedEffect(viewModel.viewedPhotoIndex, needsExtended, browser.pageRevision, transfer.busy) {
-        if (!transfer.busy) viewModel.showViewerMetadata(infoOptions)
+    val portrait = currentWindowClass() == WindowClass.Portrait
+    var drawerOpen by rememberSaveable { mutableStateOf(false) }
+    // Basic metadata is free; the extended read only runs while the details are visible (drawer open,
+    // or the wide layouts' panel). Re-asked after every settled swipe (the controller cancels the
+    // previous read), after a download (which interrupts a pending read) and when the drawer opens or
+    // closes — closing re-asks for the basic data only, which cancels a pending extended read.
+    val detailsVisible = viewerWantsExtendedMetadata(portrait, drawerOpen)
+    LaunchedEffect(viewModel.viewedPhotoIndex, detailsVisible, browser.pageRevision, transfer.busy) {
+        if (!transfer.busy) viewModel.showViewerMetadata(extended = detailsVisible)
     }
     CameraGpsTheme(darkTheme = true, glassRenderMode = LocalGlassRenderMode.current) {
         key(browser.offset) {
@@ -246,15 +280,16 @@ internal fun WifiPhotoViewer(
             val shownPreview = preview?.takeIf { it.handle == current?.preview?.handle }
             val shownImage = shownPreview?.image ?: current?.let { thumbnails[it.thumbnail.handle] }
             var histogram by remember { mutableStateOf<FloatArray?>(null) }
-            LaunchedEffect(shownImage, infoOptions.showHistogram) {
+            LaunchedEffect(shownImage, detailsVisible) {
                 histogram = null
                 val image = shownImage
-                if (infoOptions.showHistogram && image != null) {
+                if (detailsVisible && image != null) {
                     // Down-sampled and off the main thread: a preview can be several megapixels.
                     histogram = withContext(Dispatchers.Default) { image.luminanceHistogram() }
                 }
             }
-            val info = current?.let { viewerInfoStrip(it, policy, metadataState, infoOptions) }
+            val info = current?.let { viewerInfoStrip(it, policy) }
+            val details = current?.let { viewerDetails(it, metadataState) }
             val download = current?.let {
                 viewerDownloadState(it, policy, browser.savedDownloads, transfer, browser.loading)
             }
@@ -271,6 +306,7 @@ internal fun WifiPhotoViewer(
                 },
                 selectedCount = viewModel.selectedPhotoIds.size,
                 info = info,
+                details = details,
                 histogram = histogram,
                 download = download,
                 transfer = transfer,
@@ -280,6 +316,7 @@ internal fun WifiPhotoViewer(
                 onToggleSelected = { value -> current?.let { viewModel.setPhotoSelected(it.id, value) } },
                 onDownload = { downloads -> viewModel.downloadSingleCapture(downloads, onDownload) },
                 onCancel = { controller.cancelPhotoOperation(viewModel.identifier) },
+                onOpenDetails = if (portrait) ({ drawerOpen = true }) else null,
             )
             val backdrop = rememberGlassBackdrop()
             val photo: @Composable (Modifier) -> Unit = { modifier ->
@@ -300,8 +337,8 @@ internal fun WifiPhotoViewer(
                     modifier = modifier.glassSource(backdrop),
                 )
             }
-            val strip: @Composable (Modifier, Boolean) -> Unit = { modifier, extras ->
-                parts.info?.let { ViewerInfoStripBar(it, parts.histogram, extras, modifier) }
+            val strip: @Composable (Modifier) -> Unit = { modifier ->
+                parts.info?.let { ViewerInfoStripBar(it, parts.onOpenDetails, modifier) }
             }
             val film: @Composable (Modifier) -> Unit = { modifier ->
                 ViewerFilmstrip(
@@ -321,6 +358,16 @@ internal fun WifiPhotoViewer(
                         WindowClass.NearSquare -> WideViewer(parts, photo, strip, film, landscape = false)
                         WindowClass.Landscape -> WideViewer(parts, photo, strip, film, landscape = true)
                     }
+                    val shownDetails = parts.details
+                    AnimatedVisibility(
+                        visible = portrait && drawerOpen && shownDetails != null,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                    ) {
+                        if (shownDetails != null) {
+                            ViewerDetailsDrawer(shownDetails, parts.histogram, onClose = { drawerOpen = false })
+                        }
+                    }
                 }
             }
         }
@@ -334,6 +381,7 @@ private class ViewerParts(
     val position: String?,
     val selectedCount: Int,
     val info: ViewerInfoStrip?,
+    val details: ViewerDetails?,
     val histogram: FloatArray?,
     val download: ViewerDownloadState?,
     val transfer: WifiImageTransferState,
@@ -343,25 +391,30 @@ private class ViewerParts(
     val onToggleSelected: (Boolean) -> Unit,
     val onDownload: (List<WifiPhotoDownload>) -> Unit,
     val onCancel: () -> Unit,
+    /** Opens the portrait details drawer; null in the wide layouts (their panel is always shown). */
+    val onOpenDetails: (() -> Unit)?,
 )
 
-/** A — tall portrait: top bar + status tags, photo with the strip over its bottom, filmstrip, actions. */
+/**
+ * A — tall portrait: top bar + status tags, photo with the strip over its bottom, filmstrip, actions.
+ * An upward swipe that starts in the lower [DETAILS_SWIPE_ZONE_FRACTION] of the photo area (where the
+ * strip lies) opens the details drawer; see [detailsSwipeUpToOpen].
+ */
 @Composable
 private fun PortraitViewer(
     parts: ViewerParts,
     photo: @Composable (Modifier) -> Unit,
-    strip: @Composable (Modifier, Boolean) -> Unit,
+    strip: @Composable (Modifier) -> Unit,
     film: @Composable (Modifier) -> Unit,
 ) {
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
         ViewerTopBar(parts)
         ViewerStatusTags(parts, Modifier.padding(start = 16.dp, bottom = 4.dp))
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        Box(Modifier.weight(1f).fillMaxWidth().detailsSwipeUpToOpen(parts.onOpenDetails)) {
             photo(Modifier.fillMaxSize())
             strip(
                 Modifier.align(Alignment.BottomCenter).padding(horizontal = 12.dp, vertical = 8.dp)
                     .widthIn(max = PortraitStripMaxWidth).fillMaxWidth(),
-                true,
             )
         }
         film(Modifier.fillMaxWidth().padding(top = 4.dp))
@@ -379,13 +432,14 @@ private fun PortraitViewer(
 /**
  * B near-square (photo yields width to a 360 dp details panel; strip bottom-left, filmstrip its own
  * row) and C landscape (top bar over the photo with the tags merged into it; strip and filmstrip
- * share the bottom row). The panel carries the optional blocks, the download button and the check box.
+ * share the bottom row). The panel carries the details (same content as the portrait drawer), the
+ * download button and the check box.
  */
 @Composable
 private fun WideViewer(
     parts: ViewerParts,
     photo: @Composable (Modifier) -> Unit,
-    strip: @Composable (Modifier, Boolean) -> Unit,
+    strip: @Composable (Modifier) -> Unit,
     film: @Composable (Modifier) -> Unit,
     landscape: Boolean,
 ) {
@@ -405,7 +459,7 @@ private fun WideViewer(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        strip(Modifier.weight(1f).widthIn(max = WideStripMaxWidth), false)
+                        strip(Modifier.weight(1f).widthIn(max = WideStripMaxWidth))
                         film(Modifier.weight(1f))
                     }
                 } else {
@@ -416,7 +470,6 @@ private fun WideViewer(
                         strip(
                             Modifier.align(Alignment.BottomStart).padding(12.dp)
                                 .widthIn(max = WideStripMaxWidth).fillMaxWidth(),
-                            false,
                         )
                     }
                     film(Modifier.fillMaxWidth().padding(vertical = 6.dp))
@@ -537,92 +590,234 @@ private fun ViewerPager(
     }
 }
 
-/** Translucent info strip: format · resolution · size, plus the optional blocks when [showExtras]. */
+/**
+ * Single-layer glass info strip: "JPG + RAW · 24.6 MB" on one viewer-glass layer, no tag chips. The
+ * size is what the default download format fetches (the grid tag's number, with its unit here). With
+ * [onOpenDetails] (portrait) the strip is a button opening the details drawer, marked by a chevron.
+ */
 @Composable
 private fun ViewerInfoStripBar(
     info: ViewerInfoStrip,
-    histogram: FloatArray?,
-    showExtras: Boolean,
+    onOpenDetails: (() -> Unit)?,
     modifier: Modifier,
 ) {
     GlassSurface(
         modifier = modifier, level = GlassLevel.Viewer, shape = StripShape,
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+        onClick = onOpenDetails,
+        onClickLabel = onOpenDetails?.let { stringResource(Res.string.b1_details_open) },
+        contentPadding = PaddingValues(start = 14.dp, end = if (onOpenDetails != null) 8.dp else 14.dp, top = 8.dp, bottom = 8.dp),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            ViewerBasicLine(info)
-            if (showExtras) ViewerCompactExtras(info, histogram)
+        val sizeLabel = stringResource(Res.string.m7_viewer_file_size)
+        val size = formatByteSize(info.sizeBytes)
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            val format = info.formatText
+            if (format != null) Text(
+                if (info.noJpeg) stringResource(Res.string.m7_viewer_only_format, format) else format,
+                color = if (info.noJpeg) AlphaTheme.colors.warning else Color.White,
+                style = MaterialTheme.typography.labelLarge, maxLines = 1,
+            )
+            if (format != null && info.sizeBytes > 0) {
+                Text("·", color = WhiteSoft, style = MaterialTheme.typography.labelLarge)
+            }
+            if (info.sizeBytes > 0) Text(
+                size, color = WhiteSoft, style = MaterialTheme.typography.labelLarge, maxLines = 1,
+                modifier = Modifier.semantics { contentDescription = "$sizeLabel $size" },
+            )
+            Spacer(Modifier.weight(1f))
+            if (onOpenDetails != null) Image(
+                painterResource(Res.drawable.chevron_right_24px), contentDescription = null,
+                modifier = Modifier.size(20.dp).rotate(-90f),
+                colorFilter = ColorFilter.tint(WhiteSoft),
+            )
         }
     }
 }
 
-@Composable
-private fun ViewerBasicLine(info: ViewerInfoStrip) {
-    val sizeLabel = stringResource(Res.string.m7_viewer_file_size)
-    val size = formatByteSize(info.sizeBytes)
-    Row(
-        Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        val format = info.formatText
-        if (format != null) InfoTag(
-            if (info.noJpeg) stringResource(Res.string.m7_viewer_only_format, format) else format,
-            style = InfoTagStyle.OnPhoto,
-            contentColor = if (info.noJpeg) AlphaTheme.colors.warning else Color.Unspecified,
-        )
-        info.resolutionText?.let {
-            Text(it, color = WhiteSoft, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+/**
+ * Opens the details drawer on an upward swipe that starts in the lower part of the photo area
+ * ([inDetailsSwipeZone]) and is clearly vertical ([detailsSwipeOpens]). It observes the pointer without
+ * consuming it until the swipe qualifies, so the pager keeps horizontal page swipes (once the pager
+ * consumes a drag, this gesture gives up) and taps still reach the strip.
+ */
+private fun Modifier.detailsSwipeUpToOpen(onOpen: (() -> Unit)?): Modifier {
+    if (onOpen == null) return this
+    return pointerInput(onOpen) {
+        val distance = DETAILS_SWIPE_DISTANCE_DP.dp.toPx()
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            if (!inDetailsSwipeZone(down.position.y, size.height.toFloat())) return@awaitEachGesture
+            while (true) {
+                val event = awaitPointerEvent()
+                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                if (!change.pressed || change.isConsumed) break
+                val moved = change.position - down.position
+                if (detailsSwipeOpens(moved.x, moved.y, distance)) {
+                    change.consume()
+                    onOpen()
+                    break
+                }
+            }
         }
-        Spacer(Modifier.weight(1f))
-        Text(
-            size, color = Color.White, style = MaterialTheme.typography.labelLarge, maxLines = 1,
-            modifier = Modifier.semantics { contentDescription = "$sizeLabel $size" },
-        )
     }
 }
 
-/** Parameter / lens rows with the histogram on their right (full width when it is alone). */
+/**
+ * Portrait details: a viewer-glass bottom drawer over a scrim. Closes on Back (before the viewer
+ * itself), a tap on the scrim, the close button or a downward drag on its handle.
+ */
 @Composable
-private fun ViewerCompactExtras(info: ViewerInfoStrip, histogram: FloatArray?) {
-    val hasText = info.extras != ViewerExtrasState.None
-    val graph = histogram?.takeIf { info.showHistogram }
-    if (!hasText && graph == null) return
-    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (hasText) Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            ViewerExtrasText(info)
-        }
-        if (graph != null) HistogramGraph(
-            graph,
-            if (hasText) Modifier.width(92.dp).height(36.dp) else Modifier.weight(1f).height(30.dp),
+private fun ViewerDetailsDrawer(details: ViewerDetails, histogram: FloatArray?, onClose: () -> Unit) {
+    NavigationBackHandler(
+        state = rememberNavigationEventState(NavigationEventInfo.None),
+        isBackEnabled = true,
+        onBackCompleted = onClose,
+    )
+    val closeLabel = stringResource(Res.string.b1_details_close)
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val maxSheetHeight = maxHeight * 0.75f
+        Box(
+            Modifier.fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.4f))
+                .pointerInput(onClose) { detectTapGestures { onClose() } }
         )
+        GlassSurface(
+            modifier = Modifier.align(Alignment.BottomCenter)
+                .widthIn(max = PortraitStripMaxWidth).fillMaxWidth()
+                .heightIn(max = maxSheetHeight)
+                // Taps on the sheet's plain areas must not fall through to the scrim (which closes).
+                .pointerInput(Unit) { detectTapGestures { } },
+            level = GlassLevel.Viewer,
+            shape = DrawerShape,
+            contentPadding = PaddingValues(0.dp),
+        ) {
+            Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
+                Row(
+                    Modifier.fillMaxWidth().detailsDragDownToClose(onClose)
+                        .padding(start = 20.dp, end = 8.dp, top = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Box(
+                            Modifier.align(Alignment.CenterHorizontally).padding(start = 48.dp)
+                                .size(width = 36.dp, height = 4.dp)
+                                .background(Color.White.copy(alpha = 0.35f), AlphaShapes.capsule)
+                        )
+                        Text(
+                            stringResource(Res.string.b1_details_title), color = Color.White,
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                    GlassIconButton(
+                        painterResource(Res.drawable.close_24px),
+                        contentDescription = closeLabel,
+                        onClick = onClose,
+                        container = GlassLevel.Viewer,
+                    )
+                }
+                Column(
+                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                        .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    ViewerDetailsContent(details, histogram)
+                }
+            }
+        }
     }
 }
 
+/** Closes the drawer on a downward, clearly vertical drag ([detailsSwipeCloses]) of its handle row. */
+private fun Modifier.detailsDragDownToClose(onClose: () -> Unit): Modifier = pointerInput(onClose) {
+    val distance = DETAILS_SWIPE_DISTANCE_DP.dp.toPx()
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        while (true) {
+            val event = awaitPointerEvent()
+            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+            if (!change.pressed || change.isConsumed) break
+            val moved = change.position - down.position
+            if (detailsSwipeCloses(moved.x, moved.y, distance)) {
+                change.consume()
+                onClose()
+                break
+            }
+        }
+    }
+}
+
+/**
+ * The details shared by the portrait drawer and the wide side panel: name and capture time, format
+ * and every file with its own size, resolution, the shooting parameters read from EXIF (placeholder
+ * bars while the read is pending) and the histogram of the shown preview. What is unknown is left out.
+ */
 @Composable
-private fun ViewerExtrasText(info: ViewerInfoStrip) {
-    when (info.extras) {
-        ViewerExtrasState.Loading -> {
+private fun ColumnScope.ViewerDetailsContent(details: ViewerDetails, histogram: FloatArray?) {
+    details.filename?.let {
+        Text(it, color = Color.White, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+    details.capturedAt?.let { DetailRow(stringResource(Res.string.b1_detail_captured), it) }
+    details.formatText?.let { DetailRow(stringResource(Res.string.b1_detail_format), it) }
+    if (details.files.isNotEmpty()) PanelBlock(stringResource(Res.string.b1_detail_files)) {
+        details.files.forEach { file ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(file.format, color = Color.White, style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(44.dp))
+                Text(
+                    file.filename, color = WhiteSoft, style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                )
+                if (file.bytes > 0) Text(formatByteSize(file.bytes), color = Color.White, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            }
+        }
+    }
+    details.resolutionText?.let { DetailRow(stringResource(Res.string.b1_detail_resolution), it) }
+    if (details.loading) {
+        PanelBlock(stringResource(Res.string.m7_viewer_shooting_params)) {
             val loading = stringResource(Res.string.m7_viewer_metadata_loading)
             Column(
-                Modifier.semantics { contentDescription = loading },
+                Modifier.fillMaxWidth().semantics { contentDescription = loading },
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 PlaceholderBar(Modifier.fillMaxWidth(0.8f))
                 PlaceholderBar(Modifier.fillMaxWidth(0.5f))
             }
         }
-        ViewerExtrasState.Ready -> {
-            info.exifParams?.let {
-                Text(it, color = Color.White, style = MaterialTheme.typography.labelMedium, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis)
-            }
-            info.lens?.let {
-                Text(it, color = WhiteSoft, style = MaterialTheme.typography.labelSmall, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis)
-            }
+    } else if (details.exif.isNotEmpty()) {
+        PanelBlock(stringResource(Res.string.m7_viewer_shooting_params)) {
+            details.exif.forEach { (field, value) -> DetailRow(exifFieldLabel(field), value) }
         }
-        ViewerExtrasState.None -> Unit
+    }
+    histogram?.let {
+        PanelBlock(stringResource(Res.string.m7_viewer_histogram)) {
+            HistogramGraph(it, Modifier.fillMaxWidth().height(72.dp))
+        }
+    }
+}
+
+@Composable
+private fun exifFieldLabel(field: ViewerExifField): String = stringResource(
+    when (field) {
+        ViewerExifField.Aperture -> Res.string.b1_exif_aperture
+        ViewerExifField.Shutter -> Res.string.b1_exif_shutter
+        ViewerExifField.Iso -> Res.string.b1_exif_iso
+        ViewerExifField.ExposureBias -> Res.string.b1_exif_bias
+        ViewerExifField.FocalLength -> Res.string.b1_exif_focal
+        ViewerExifField.Lens -> Res.string.m7_viewer_lens
+        ViewerExifField.Camera -> Res.string.b1_exif_camera
+    }
+)
+
+/** "Label        value" on one line; the label soft, the value white and right-aligned. */
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(label, color = WhiteSoft, style = AlphaTextStyles.statusLabel)
+        Spacer(Modifier.weight(1f))
+        Text(value, color = Color.White, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -648,7 +843,7 @@ private fun HistogramGraph(bins: FloatArray, modifier: Modifier) {
     }
 }
 
-/** Right-hand panel of the B / C layouts: optional blocks on top, download and check box below. */
+/** Right-hand panel of the B / C layouts: the details on top, download and check box below. */
 @Composable
 private fun ViewerDetailsPanel(parts: ViewerParts, modifier: Modifier) {
     GlassSurface(
@@ -660,40 +855,13 @@ private fun ViewerDetailsPanel(parts: ViewerParts, modifier: Modifier) {
                 Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                val info = parts.info
-                if (info != null) ViewerPanelExtras(info, parts.histogram)
+                parts.details?.let { ViewerDetailsContent(it, parts.histogram) }
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { ViewerDownloadArea(parts) }
                 ViewerSelectionToggle(parts)
             }
         }
-    }
-}
-
-@Composable
-private fun ColumnScope.ViewerPanelExtras(info: ViewerInfoStrip, histogram: FloatArray?) {
-    when (info.extras) {
-        ViewerExtrasState.Loading -> PanelBlock(stringResource(Res.string.m7_viewer_shooting_params)) {
-            ViewerExtrasText(info)
-        }
-        ViewerExtrasState.Ready -> {
-            info.exifParams?.let { params ->
-                PanelBlock(stringResource(Res.string.m7_viewer_shooting_params)) {
-                    Text(params, color = Color.White, style = AlphaTextStyles.statusValue)
-                }
-            }
-            info.lens?.let { lens ->
-                PanelBlock(stringResource(Res.string.m7_viewer_lens)) {
-                    Text(lens, color = Color.White, style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-        }
-        ViewerExtrasState.None -> Unit
-    }
-    val graph = histogram?.takeIf { info.showHistogram }
-    if (graph != null) PanelBlock(stringResource(Res.string.m7_viewer_histogram)) {
-        HistogramGraph(graph, Modifier.fillMaxWidth().height(72.dp))
     }
 }
 
@@ -739,6 +907,8 @@ private fun ViewerDownloadArea(parts: ViewerParts) {
             else -> CapsuleButton(
                 text = stringResource(Res.string.wifi_remote_download),
                 onClick = { parts.onDownload(download.downloads) },
+                // Frosted glass tinted with primary (not an opaque light-blue fill) over the photo.
+                role = CapsuleRole.GlassPrimary,
                 icon = painterResource(Res.drawable.download_24px),
                 enabled = download.enabled,
             )
@@ -861,10 +1031,8 @@ private fun ViewerFilmstrip(
                     },
             ) {
                 thumbnails[capture.thumbnail.handle]?.let {
-                    Image(
-                        it, contentDescription = null, contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize().alpha(if (isCurrent) 1f else 0.62f),
-                    )
+                    // Fitted whole like the grid tiles: the strip never crops a photo.
+                    FittedThumbnail(it, Modifier.fillMaxSize().alpha(if (isCurrent) 1f else 0.62f))
                 }
             }
         }

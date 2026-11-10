@@ -342,13 +342,15 @@ ends. A browse/download interrupts a pending read; failures only yield `Unavaila
 preview or download state. RAW/HEIF stay basic.
 
 **Viewer use.** The full-screen viewer (`WifiPhotoViewer`) requests the shown capture's preview file
-through `WifiRemoteViewModel.showViewerMetadata(options)` on entry and after every settled swipe, and
-calls `stopViewerMetadata()` (→ `cancelMetadata`) when it closes. `extended` is set only when the
-"shooting parameters" or "lens" viewer preference is on (`viewerNeedsExtendedMetadata`); with all three
-preferences off, or only the histogram on, the viewer uses basic data and never reads the original. The
-histogram is computed from the decoded preview bitmap on `Dispatchers.Default` (rows sampled so at most
-~40 000 pixels are read). No request is made while a transfer is busy; `Unavailable` just drops the
-extended block from the info strip.
+through `WifiRemoteViewModel.showViewerMetadata(extended)` on entry, after every settled swipe and when
+the details open or close, and calls `stopViewerMetadata()` (→ `cancelMetadata`) when it closes.
+`extended` is true only while the photo details are visible (`viewerWantsExtendedMetadata`): always in
+the near-square / landscape layouts (side panel), in portrait only while the details drawer is open
+(swipe up from the lower part of the photo, or tap the info strip). Closing the drawer re-requests the
+basic data, which cancels a pending extended read; with the drawer closed the viewer never reads the
+original. The histogram is computed only while the details are visible, from the decoded preview
+bitmap on `Dispatchers.Default` (rows sampled so at most ~40 000 pixels are read). No request is made
+while a transfer is busy; `Unavailable` just hides the shooting parameter rows of the details.
 
 ## Coroutines and threads
 
