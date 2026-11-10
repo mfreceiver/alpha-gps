@@ -59,9 +59,10 @@
 - 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiPhotoViewer.kt` 竖屏下载行（`ViewerDownloadArea`，约 :456、:921）；预览根背景 `:372`。
 
 ### 27. 页内弹层焦点：真机验证与剩余缺口
-- 做什么：组件级焦点已实现（`GlassOverlayFocus.kt`：Popover/Menu/`CapsuleDialog`/`GlassBottomSheet` 打开时焦点移入面板容器、模态期间底页焦点组拒绝进入、关闭回 `glassAnchor` 或打开前的焦点项；`GlassPopover`/`GlassMenu` 可传 `paneTitle`）。剩余：①在设备/模拟器上跑 `app/src/androidTest/.../ui/components/GlassOverlayFocusTest.kt` 并用外接键盘/方向键实测（同 #23 ⑰）；②焦点落在面板容器而非首个条目，键盘用户需多按一次——真机评估是否改为直接聚焦首个可聚焦条目（Compose 对 focusGroup 的 requestFocus 行为需真机确认）；③面板内 Tab 到末项后不循环（底页拒绝进入，焦点停住），评估是否需要循环；④无 `GlassBackground` 时 `CapsuleDialog` 走平台 `Dialog` 回退，焦点由窗口管理，不经过焦点记忆。
-- 验收：①通过；②③有结论（改或记录为接受）；不引入系统窗口；`OverlayFocusMemoryTest` 仍通过。
-- 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/components/glass/GlassOverlayFocus.kt`、`GlassBackground.kt`（底页焦点组 + 关闭恢复）、`GlassPopover.kt`；基线行为为 `PopupProperties(focusable = true)`。
+- 做什么：组件级焦点已实现（`GlassOverlayFocus.kt`）：Popover/Menu/`CapsuleDialog`/`GlassBottomSheet` 打开时焦点移入面板容器；**多层模态叠层仅最顶层可获焦**——底页与被上层模态盖住的下层弹层共用同一层门控（焦点组拒绝进入 + 读屏隐藏，`overlayLayerGate`/`layerCovered`）；关闭**逐层恢复**（`OverlayFocusMemory` 栈）：关上层回下层的锚点/打开前焦点项/面板容器，关最后一层回 `glassAnchor` 或打开前底页焦点项，菜单→对话框同帧替换时对话框接管菜单的返回目标，乱序关闭（先关下层）时上层接管下层的返回目标；`GlassPopover`/`GlassMenu` 可传 `paneTitle`。剩余：①在设备/模拟器上跑 `app/src/androidTest/.../ui/components/GlassOverlayFocusTest.kt`（单菜单、对话框内菜单两层叠加、菜单→对话框替换、先关下层、无 `GlassBackground` 回退；目前仅编译）；②外接键盘 Tab/方向键与 TalkBack 逐层实测：对话框内再开菜单/确认框时，Tab/方向键与读屏滑动都到不了下层对话框和底页，关上层回到下层打开它的按钮、再关回到页面上的原按钮；触屏打开则关闭后不出现焦点框（同 #23 ⑰）；③焦点落在面板容器而非首个条目，键盘用户需多按一次——真机评估是否改为直接聚焦首个可聚焦条目（Compose 对 focusGroup 的 requestFocus 行为需真机确认）；④面板内 Tab 到末项后不循环（下层拒绝进入，焦点停住），评估是否需要循环；⑤非模态叠层（Snackbar、tooltip）在最顶层模态之上时仍可获焦，在其下方则与下层一样被隔离——真机确认 Snackbar 动作按钮在对话框打开时的可达性可接受。
+- 现状说明：无 `GlassBackground` 时 `CapsuleDialog` 走平台 `Dialog` 回退，新焦点逻辑**不作用于回退路径**（无叠层 entry → 面板不加 focusable、不请求焦点、不经焦点记忆），保持 0.2.1 行为，焦点由窗口管理（`GlassOverlayFocusTest.dialogWithoutGlassBackgroundKeepsTheWindowFallbackFocus` 待真机跑）。
+- 验收：①②通过；③④⑤有结论（改或记录为接受）；不引入系统窗口；`OverlayFocusMemoryTest` 仍通过。
+- 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/components/glass/GlassOverlayFocus.kt`、`GlassOverlayHost.kt`（层门控、栈式返回）、`GlassBackground.kt`（底页门控 + settle）、`GlassPopover.kt`；基线行为为叠加的 `PopupProperties(focusable = true)` / `Dialog` 窗口。
 
 ## P3
 
