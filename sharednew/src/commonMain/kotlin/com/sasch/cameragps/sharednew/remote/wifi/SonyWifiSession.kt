@@ -165,6 +165,11 @@ private class SonyWifiConnection(
         }
     }
 
+    override suspend fun readBatteryPercent(): Int? {
+        val session = current ?: return null
+        return SonyBatteryReader(session.ptp.commands, session.ready).read()
+    }
+
     override suspend fun prepareToDisconnect() {
         current?.transfer?.closeBrowser()
     }

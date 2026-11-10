@@ -28,6 +28,7 @@ fun createAndroidWifiRemoteController(
             try { automatic.open(id, sessionScope, phase) }
             catch (_: SecurityException) { throw WifiRemoteConnectException(WifiRemoteFailure.NetworkPermissionDenied) }
         },
+        onBatteryRead = orchestrator.liveStatus::onBattery,
     )
 }
 
