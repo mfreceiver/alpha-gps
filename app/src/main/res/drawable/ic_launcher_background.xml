@@ -1,11 +1,68 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- AlphaGPS adaptive icon: background layer (full bleed).
+     Converted from docs/brand/alpha-gps-icon-background.svg (108x108, same coordinates).
+     Original artwork drawn by mfreceiver for AlphaGPS. License: GPL-3.0. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Flat solid background -->
+
+    <!-- primary blue diagonal gradient -->
+    <path android:pathData="M0,0H108V108H0Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:endX="108"
+                android:endY="108"
+                android:startX="0"
+                android:startY="0"
+                android:type="linear">
+                <item
+                    android:color="#FF2F7BF0"
+                    android:offset="0" />
+                <item
+                    android:color="#FF0B57D0"
+                    android:offset="0.5" />
+                <item
+                    android:color="#FF062E6F"
+                    android:offset="1" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- soft top-left glow (white, 22% to 0%) -->
+    <path android:pathData="M0,0H108V108H0Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="34"
+                android:centerY="28"
+                android:gradientRadius="70"
+                android:type="radial">
+                <item
+                    android:color="#38FFFFFF"
+                    android:offset="0" />
+                <item
+                    android:color="#00FFFFFF"
+                    android:offset="1" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- faint globe graticule: circle r44, meridian ellipse 20x44, three parallels -->
     <path
-        android:fillColor="#2B2B2B"
-        android:pathData="M0,0h108v108h-108z"/>
+        android:pathData="M10,54A44,44 0,1 0,98 54A44,44 0,1 0,10 54Z"
+        android:strokeWidth="0.6"
+        android:strokeAlpha="0.07"
+        android:strokeColor="#FFFFFF" />
+    <path
+        android:pathData="M34,54A20,44 0,1 0,74 54A20,44 0,1 0,34 54Z"
+        android:strokeWidth="0.6"
+        android:strokeAlpha="0.07"
+        android:strokeColor="#FFFFFF" />
+    <path
+        android:pathData="M10,54H98M14.5,34H93.5M14.5,74H93.5"
+        android:strokeWidth="0.6"
+        android:strokeAlpha="0.07"
+        android:strokeColor="#FFFFFF" />
 </vector>
