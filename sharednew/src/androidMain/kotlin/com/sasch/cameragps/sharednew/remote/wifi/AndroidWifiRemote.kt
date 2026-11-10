@@ -5,7 +5,6 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
-import android.os.Build
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionOrchestrator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
@@ -18,21 +17,17 @@ fun createAndroidWifiRemoteController(
     browseOnly: () -> Boolean = { true },
 ): WifiRemoteController {
     val connector = AndroidWifiRemoteConnector(context.applicationContext, browseOnly)
-    val automatic = if (Build.VERSION.SDK_INT >= 29) AutomaticWifiRemoteConnector(
+    val automatic = AutomaticWifiRemoteConnector(
         orchestrator::prepareCameraWifi,
         { credentials -> AndroidCameraNetworkRequest(context.applicationContext, credentials) },
         connector::openOnNetwork,
-    ) else null
-    val manualSetup = if (Build.VERSION.SDK_INT < 29) AndroidManualWifiSetup(
-        context.applicationContext, orchestrator::prepareCameraWifi, connector::openOnNetwork,
-    ) else null
+    )
     return WifiRemoteController(scope, orchestrator.registry, connector,
         orchestrator::claimWifiControls, orchestrator::releaseWifiControls,
-        automatic?.let { delegate -> WifiAutomaticConnector { id, sessionScope, phase ->
-            try { delegate.open(id, sessionScope, phase) }
+        WifiAutomaticConnector { id, sessionScope, phase ->
+            try { automatic.open(id, sessionScope, phase) }
             catch (_: SecurityException) { throw WifiRemoteConnectException(WifiRemoteFailure.NetworkPermissionDenied) }
-        }
-        }, manualSetup
+        },
     )
 }
 
