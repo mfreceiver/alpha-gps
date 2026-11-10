@@ -3,6 +3,7 @@
     <string name="foreground_service_notification">正在向 %1$d 台相机传输位置数据</string>
     <string name="scan_for_devices">点击查找并关联您的相机</string>
     <string name="permission_gps">访问精确位置</string>
+    <string name="permission_gps_coarse">访问大致位置</string>
     <string name="permission_background_gps">允许应用在后台访问位置</string>
     <string name="permission_bluetooth">允许应用建立蓝牙连接</string>
     <string name="permission_notifications">允许应用发送通知</string>
@@ -109,7 +110,7 @@
     <string name="is_there_documenation">有文档说明吗？</string>
     <string name="is_there_documenation_answer">有的！请访问 GitHub 页面。\n应用的问题请到 GitHub Issues 反馈：</string>
     <string name="how_about_privacy">隐私保护如何？</string>
-    <string name="how_about_privacy_answer">本应用不会收集或上传任何数据，也没有崩溃上报或统计功能。您的位置信息仅通过蓝牙写入您自己的相机，不会被永久存储，相机断开连接后位置采集即会停止。通过相机 Wi-Fi 下载的照片仅保存在本机。不会向开发者或任何第三方发送任何内容。</string>
+    <string name="how_about_privacy_answer">本应用不会收集或上传任何数据，也没有崩溃上报或统计功能。应用不单独保存定位历史或轨迹；您的位置只用于通过蓝牙写入您自己的相机，相机断开连接后位置采集即会停止。用相机拍摄的照片可能包含相机写入的定位信息。通过相机 Wi-Fi 下载的照片仅保存在本机。不会向开发者或任何第三方发送任何内容。</string>
     <string name="app_standby_title">待机</string>
     <string name="app_standby_content">等待相机连接</string>
     <string name="enable_auto_start_description">开启后设备重启时自动重连所有已保存且启用的相机；应用更新后的自动重连仅受应用总开关控制。</string>
