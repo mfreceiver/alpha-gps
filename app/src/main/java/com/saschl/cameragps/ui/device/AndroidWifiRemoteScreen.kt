@@ -95,6 +95,7 @@ fun AndroidWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
             permission.launch(required.toTypedArray())
         } else if (host == null) startCameraSetup() else controller.connect(identifier, host)
     }
+    var gridOptions by remember { mutableStateOf(PreferencesManager.getWifiGridOptions(context)) }
     WifiRemoteScreen(model, onConnect = { connect(it) }, onConnectAutomatically = { connect(null) },
         autoConnectOnEntry = !entryConnectAttempted,
         isExperimentalNoticeAcknowledged = {
@@ -114,6 +115,11 @@ fun AndroidWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
         onDownloadPhotos = { downloads -> controller.downloadPhotos(identifier, downloads) },
         onWifiSettings = { context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) },
         defaultDownloadFormatJpeg = PreferencesManager.isWifiDefaultDownloadFormatJpeg(context),
+        gridOptions = gridOptions,
+        onGridOptionsChange = {
+            gridOptions = it
+            PreferencesManager.setWifiGridOptions(context, it)
+        },
         onClose = close)
 }
 

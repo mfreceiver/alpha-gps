@@ -1,22 +1,23 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -24,9 +25,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -34,28 +35,19 @@ import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import cameragps.sharednew.generated.resources.Res
-import cameragps.sharednew.generated.resources.wifi_connection_failed
-import cameragps.sharednew.generated.resources.wifi_remote_address_failed
+import cameragps.sharednew.generated.resources.arrow_back_24px
+import cameragps.sharednew.generated.resources.back
 import cameragps.sharednew.generated.resources.wifi_remote_approval
 import cameragps.sharednew.generated.resources.wifi_remote_auto_connect
 import cameragps.sharednew.generated.resources.wifi_remote_auto_setup
-import cameragps.sharednew.generated.resources.wifi_remote_bluetooth_required
 import cameragps.sharednew.generated.resources.wifi_remote_browse
 import cameragps.sharednew.generated.resources.wifi_remote_browse_unsupported
-import cameragps.sharednew.generated.resources.wifi_remote_close
 import cameragps.sharednew.generated.resources.wifi_remote_closing
 import cameragps.sharednew.generated.resources.wifi_remote_connect
 import cameragps.sharednew.generated.resources.wifi_remote_connected
-import cameragps.sharednew.generated.resources.wifi_remote_credentials_failed
 import cameragps.sharednew.generated.resources.wifi_remote_disconnect
-import cameragps.sharednew.generated.resources.wifi_remote_failed
-import cameragps.sharednew.generated.resources.wifi_remote_invalid_ip
 import cameragps.sharednew.generated.resources.wifi_remote_ip
-import cameragps.sharednew.generated.resources.wifi_remote_join_failed
-import cameragps.sharednew.generated.resources.wifi_remote_join_wifi
 import cameragps.sharednew.generated.resources.wifi_remote_joining
-import cameragps.sharednew.generated.resources.wifi_remote_location_required
-import cameragps.sharednew.generated.resources.wifi_remote_lost
 import cameragps.sharednew.generated.resources.wifi_remote_manual
 import cameragps.sharednew.generated.resources.wifi_remote_opening
 import cameragps.sharednew.generated.resources.wifi_remote_other_camera
@@ -66,12 +58,10 @@ import cameragps.sharednew.generated.resources.wifi_remote_preparing
 import cameragps.sharednew.generated.resources.wifi_remote_settings
 import cameragps.sharednew.generated.resources.wifi_remote_setup
 import cameragps.sharednew.generated.resources.wifi_remote_setup_detect_address
-import cameragps.sharednew.generated.resources.wifi_remote_setup_failed
 import cameragps.sharednew.generated.resources.wifi_remote_shutdown_requested
 import cameragps.sharednew.generated.resources.wifi_remote_shutdown_unavailable
 import cameragps.sharednew.generated.resources.wifi_remote_shutdown_unconfirmed
 import cameragps.sharednew.generated.resources.wifi_remote_title
-import cameragps.sharednew.generated.resources.wifi_remote_wifi_disabled
 import com.diamondedge.logging.logging
 import com.sasch.cameragps.sharednew.remote.wifi.SonyImageTransfer
 import com.sasch.cameragps.sharednew.remote.wifi.WifiBatchSummary
@@ -82,13 +72,20 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiDownloadPlan
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoBrowserState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteController
-import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteFailure
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemotePhase
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiShutdownStatus
+import com.sasch.cameragps.sharednew.remote.wifi.formatBadge
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import com.sasch.cameragps.sharednew.remote.wifi.planDownloads
 import com.sasch.cameragps.sharednew.remote.wifi.toSummary
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassBackground
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import kotlinx.coroutines.delay
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -173,7 +170,9 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
             if (viewedPhotoIndex != index) controller.clearPhotoTransferResult(identifier)
             viewedPhotoIndex = index
             controller.showPhotoPreview(identifier, captures[index - browser.offset].preview.handle)
-        } else if (!browser.loading && !state.imageTransfer.busy) {
+        } else if (!browser.grouped && !browser.loading && !state.imageTransfer.busy) {
+            // Only the legacy flat browser still pages; a day of the grouped browser is complete
+            // (offset 0, never `hasMore`), so the viewer simply stops at its first / last capture.
             val offset = when {
                 index == browser.offset - 1 && browser.offset > 0 -> maxOf(
                     0,
@@ -185,17 +184,51 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
             }
             controller.clearPhotoTransferResult(identifier)
             viewedPhotoIndex = index
-            val dateKey = browser.dateKey
-            if (browser.grouped && dateKey != null) {
-                // Same day, neighbouring page: bound to this view so a late page can't replace it.
-                controller.browseDate(
-                    identifier, dateKey, offset, preferredPhotoIndex = index,
-                    expectedRevision = browser.pageRevision
-                )
-            } else {
-                controller.browsePhotos(identifier, offset, preferredPhotoIndex = index)
-            }
+            controller.browsePhotos(identifier, offset, preferredPhotoIndex = index)
         }
+    }
+
+    // ---- Day view interface (grid now, full-screen viewer later) ----------------------------------
+
+    /**
+     * The captures of the open day in grid order (newest first) — the whole day, never a page. Empty
+     * on the day list or while no browser is open. Index `i` here is the viewer's [viewedPhotoIndex].
+     */
+    internal fun dayCaptures(): List<WifiCameraCapture> {
+        val browser = controller.sessions.value[identifier.uppercase()]?.wifiRemote?.photoBrowser
+            ?: return emptyList()
+        if (!browser.open) return emptyList()
+        return groupCameraPhotos(browser.photos)
+    }
+
+    /** The capture the viewer shows, or null when it is closed. */
+    internal fun viewedCapture(): WifiCameraCapture? {
+        val index = viewedPhotoIndex ?: return null
+        val browser = controller.sessions.value[identifier.uppercase()]?.wifiRemote?.photoBrowser
+            ?: return null
+        return dayCaptures().getOrNull(index - browser.offset)
+    }
+
+    fun isPhotoSelected(captureId: String): Boolean = captureId in selectedPhotos
+
+    /**
+     * Sets (rather than toggles) the selection of a capture of the open day — the viewer's check box.
+     * Same rules as [togglePhotoSelection]; a no-op when the state already matches.
+     */
+    fun setPhotoSelected(captureId: String, selected: Boolean) {
+        if (isPhotoSelected(captureId) != selected) togglePhotoSelection(captureId)
+    }
+
+    /** Format tag and planned size of one capture under [policy], for the viewer's info line. */
+    internal fun captureDetails(capture: WifiCameraCapture, policy: WifiFormatPolicy): WifiCaptureDetails {
+        val saved = controller.sessions.value[identifier.uppercase()]?.wifiRemote?.photoBrowser?.savedDownloads
+            ?: emptySet()
+        return WifiCaptureDetails(
+            format = capture.formatBadge(),
+            totalBytes = capture.files.sumOf { it.size },
+            isProtected = capture.isProtected,
+            plan = planDownloads(listOf(capture), policy, saved),
+        )
     }
 
     /**
@@ -210,15 +243,6 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         if (browser.loading || state.imageTransfer.busy) return
         noteBatchCompletion()
         controller.browseDate(identifier, dateKey, expectedRevision = browser.pageRevision)
-    }
-
-    /** Page change inside the open day, bound to the view it was issued from. */
-    fun openDatePage(offset: Int) {
-        val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return
-        val browser = state.photoBrowser
-        val dateKey = browser.dateKey ?: return
-        if (!browser.grouped || browser.loading || state.imageTransfer.busy) return
-        controller.browseDate(identifier, dateKey, offset, expectedRevision = browser.pageRevision)
     }
 
     /** Set when Back was pressed while a load or transfer made leaving impossible; auto-dismissed by the UI. */
@@ -258,17 +282,6 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         recordBatchSummary(null)
         selectedPhotos = if (captureId in selectedPhotos) selectedPhotos - captureId
         else selectedPhotos + (captureId to capture)
-    }
-
-    fun selectAllPhotos() {
-        val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return
-        if (!state.photoBrowser.open || state.photoBrowser.loading || state.imageTransfer.busy) return
-        selectionGestureToken++
-        liveSelectionSession = null
-        // "Select all on this page" unions with selections kept from other pages.
-        recordBatchSummary(null)
-        selectedPhotos = selectedPhotos +
-                groupCameraPhotos(state.photoBrowser.photos).associateBy { it.id }
     }
 
     private fun WifiPhotoBrowserState.identity() =
@@ -336,25 +349,20 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         selectionGestureToken++
         liveSelectionSession = null
         selectedPhotos = emptyMap()
-        showBatchOptions = false
         recordBatchSummary(null)
     }
 
-    /** The Original-format batch sheet is open (raised by the top bar's download action). */
-    internal var showBatchOptions by mutableStateOf(false)
-
-    internal fun dismissBatchOptions() {
-        showBatchOptions = false
-    }
-
-    /** The download plan of the current cross-page selection under [policy] (see [planDownloads]). */
+    /** The download plan of the current cross-day selection under [policy] (see [planDownloads]). */
     internal fun batchPlan(policy: WifiFormatPolicy, state: WifiRemoteState): WifiDownloadPlan =
         planDownloads(selectedPhotos.values.toList(), policy, state.photoBrowser.savedDownloads)
 
     /**
-     * The top bar's download action for the selection. JPG-only starts the download of the plan's
-     * JPEGs right away (remembering the skip counts for the result line); Original opens the
-     * confirmation sheet. A plan with nothing to download never submits an empty download: it records
+     * The floating download action for the selection. Downloads straight away in the format the
+     * settings name — JPG-only fetches the plan's JPEGs (captures without one are skipped and
+     * counted), Original every original file — with no format question in between. The plan's skip
+     * counts are remembered for the "downloaded N, skipped M" result line; recording it also drops
+     * any earlier (possibly already settled) batch summary, so an old result can never re-appear
+     * after this batch. A plan with nothing to download never submits an empty download: it records
      * a local, already-settled "downloaded 0, skipped N" summary so the tap is not silent. Nothing
      * happens for an empty selection or while a transfer is still busy.
      */
@@ -366,21 +374,17 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         if (selectedPhotos.isEmpty()) return
         if (state.imageTransfer.busy) return
         val plan = batchPlan(policy, state)
-        when {
-            plan.files.isEmpty() -> {
-                // A local no-op result must be visible even when the previous transfer ended
-                // Failed or Cancelled: that terminal line would otherwise keep masking the fresh
-                // "downloaded 0, skipped N" summary (only Idle/Saved results are shown alongside
-                // one). Clearing resets to Idle; busy is already excluded above and no Saved is
-                // faked for the plan itself.
-                controller.clearPhotoTransferResult(identifier)
-                recordBatchSummary(plan.toSummary())
-            }
-            policy == WifiFormatPolicy.JpegOnly -> {
-                recordBatchSummary(plan.toSummary())
-                onDownload(plan.downloads)
-            }
-            else -> showBatchOptions = true
+        if (plan.files.isEmpty()) {
+            // A local no-op result must be visible even when the previous transfer ended
+            // Failed or Cancelled: that terminal line would otherwise keep masking the fresh
+            // "downloaded 0, skipped N" summary (only Idle/Saved results are shown alongside
+            // one). Clearing resets to Idle; busy is already excluded above and no Saved is
+            // faked for the plan itself.
+            controller.clearPhotoTransferResult(identifier)
+            recordBatchSummary(plan.toSummary())
+        } else {
+            recordBatchSummary(plan.toSummary())
+            onDownload(plan.downloads)
         }
     }
 
@@ -428,20 +432,6 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     }
 
     /**
-     * Original-format batch download entry (the format sheet's confirm). Drops any batch
-     * summary first, exactly like [downloadSingleCapture]: the summary describes a previous
-     * JpegOnly batch, and a leftover one must neither re-show after this batch nor settle
-     * off this batch's own Saved result.
-     */
-    internal fun downloadOriginalBatch(
-        downloads: List<WifiPhotoDownload>,
-        onDownload: (List<WifiPhotoDownload>) -> Unit,
-    ) {
-        recordBatchSummary(null)
-        onDownload(downloads)
-    }
-
-    /**
      * Latches the current batch summary as complete if the transfer finished it. Must be
      * called before anything clears the transfer result (preview/viewer round-trips);
      * does nothing when no batch is pending or it already settled.
@@ -484,6 +474,25 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
      */
     var browseOnly: Boolean = false
 
+    /**
+     * The day list has been shown on this connection (the first catalog read finished, or failed and
+     * shows "read again"). From then on a catalog read — refresh — keeps the list on screen instead
+     * of covering it with the connection overlay again. Reset with the connection.
+     */
+    var catalogShown by mutableStateOf(false)
+        private set
+
+    /** Marks [catalogShown] once a ready session's browser is open and no longer reading. */
+    fun noteCatalogShown() {
+        val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote
+        if (state == null || state.phase != WifiRemotePhase.Ready) {
+            catalogShown = false
+            return
+        }
+        val browser = state.photoBrowser
+        if (browser.open && (!browser.loading || browser.failed)) catalogShown = true
+    }
+
     /** Guards the browse-only auto-enter so it fires once per connection, not after every close. */
     private var autoEnteredBrowser = false
 
@@ -500,6 +509,7 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote
         if (state == null || state.phase != WifiRemotePhase.Ready) {
             autoEnteredBrowser = false
+            catalogShown = false
             return
         }
         if (!browseOnly || autoEnteredBrowser || state.photoBrowser.open || !state.canTransferImages) return
@@ -529,11 +539,12 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
                 val busy = state.photoBrowser.loading || state.imageTransfer.busy
                 if (browseOnly) {
                     // Browse-only has no remote-shooting screen to go "back" to: leaving
-                    // the browser means ending the session and returning to the caller
+                    // the browser means ending the Wi-Fi session and returning to the caller
                     // (the device screen) — not to a "connect" page the user would have to
-                    // click through again. While a transfer or catalog load is in flight
-                    // the controllers would ignore it anyway — wait.
-                    if (!busy) {
+                    // click through again. Reading the day list is still part of connecting
+                    // (the overlay's cancel), so it ends the session too; only a running
+                    // download has to be cancelled explicitly first.
+                    if (!state.imageTransfer.busy) {
                         controller.disconnect(identifier)
                         onClose()
                     } else {
@@ -567,29 +578,20 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
                      openingSessionMessage: String = stringResource(Res.string.wifi_remote_opening),
                      onAppSettings: (() -> Unit)? = null,
                      defaultDownloadFormatJpeg: Boolean = false,
+                     gridOptions: WifiGridOptions = WifiGridOptions(),
+                     onGridOptionsChange: (WifiGridOptions) -> Unit = {},
                      onDownloadPhotos: (List<WifiPhotoDownload>) -> Unit = { downloads ->
                          viewModel.controller.downloadPhotos(viewModel.identifier, downloads)
                      }
 ) {
     var noticeAcknowledged by remember { mutableStateOf(isExperimentalNoticeAcknowledged()) }
-    if (!noticeAcknowledged) {
-        WifiRemoteExperimentalNotice(
-            onContinue = {
-                onAcknowledgeExperimentalNotice()
-                noticeAcknowledged = true
-            },
-            onCancel = onClose,
-        )
-    }
     val controller = viewModel.controller
     val sessions by controller.sessions.collectAsState()
     val owner by controller.owner.collectAsState()
     val id = viewModel.identifier.uppercase()
     val state = sessions[id]?.wifiRemote ?: WifiRemoteState()
     val ready = state.phase == WifiRemotePhase.Ready
-    val busy = state.phase !in setOf(WifiRemotePhase.Idle, WifiRemotePhase.Failed)
     val otherCamera = owner != null && owner != id
-    var manual by remember { mutableStateOf(!controller.supportsAutomaticConnection && !controller.supportsManualSetup) }
     // Deliberately not saveable: "once" means once per screen entry, so leaving and
     // re-entering allows a fresh automatic attempt (e.g. after a Failed session);
     // within one entry the flag prevents a retry loop.
@@ -611,12 +613,15 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
         isBackEnabled = true,
         onBackCompleted = back,
     )
-    // Browse-only: as soon as the session is ready, walk straight into the photo
-    // browser — there is no live view or shutter to show first. The once-per-connection
-    // guard lives in the ViewModel: leaving the browser (back) must not re-open it.
+    // Browse-only: as soon as the session is ready, walk straight into the day list — there is
+    // no live view or shutter to show first. The once-per-connection guard lives in the
+    // ViewModel: leaving the browser (back) must not re-open it.
     viewModel.browseOnly = true
     LaunchedEffect(ready, state.photoBrowser.open, state.canTransferImages) {
         viewModel.maybeAutoEnterBrowser()
+    }
+    LaunchedEffect(ready, state.photoBrowser.open, state.photoBrowser.loading, state.photoBrowser.dates) {
+        viewModel.noteCatalogShown()
     }
     LaunchedEffect(
         ready,
@@ -627,131 +632,206 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
     ) {
         viewModel.reconcilePhotoSelection()
     }
-    if (viewModel.viewedPhotoIndex != null && ready && state.photoBrowser.open) {
-        WifiPhotoViewer(state, viewModel, onDownloadPhotos, defaultDownloadFormatJpeg)
-        return
+    // The connection overlay (automatic connection only): the frame is a pure mapping of the
+    // controller state; the green "ready" frame is held briefly after the catalog read.
+    val frame = if (!controller.supportsAutomaticConnection) null else wifiConnectionFrame(
+        state,
+        awaitingAutoConnect = autoConnectOnEntry && !autoConnectAttempted && noticeAcknowledged && !otherCamera,
+        catalogShown = viewModel.catalogShown,
+    )
+    var readingCatalog by remember { mutableStateOf(false) }
+    var holdReady by remember { mutableStateOf(false) }
+    LaunchedEffect(frame) {
+        when {
+            frame == WifiConnectionFrame.Progress(WifiConnectStep.ReadCatalog) -> readingCatalog = true
+            frame == null && readingCatalog && ready -> {
+                readingCatalog = false
+                holdReady = true
+                delay(CONNECTION_READY_HOLD_MS)
+                holdReady = false
+            }
+            frame != null -> readingCatalog = false
+        }
     }
-    Scaffold(topBar = {
-        if (state.photoBrowser.open) {
-            WifiPhotoBrowserTopBar(
-                state, viewModel, WifiFormatPolicy.of(defaultDownloadFormatJpeg),
-                onDownloadPhotos, onBack = back, onClose = onClose
+    val shownFrame = frame ?: if (holdReady && ready) WifiConnectionFrame.Ready else null
+    GlassBackground(contentIsBackdropSource = false) {
+        if (!noticeAcknowledged) {
+            WifiRemoteExperimentalNotice(
+                onContinue = {
+                    onAcknowledgeExperimentalNotice()
+                    noticeAcknowledged = true
+                },
+                onCancel = onClose,
             )
-        } else TopAppBar(title = { Text(stringResource(Res.string.wifi_remote_title)) }, navigationIcon = {
-            TextButton(onClick = back) { Text(stringResource(Res.string.wifi_remote_close)) }
-        })
-    }) { padding ->
-        Column(
-            // The photo grid gets a tighter frame so the photos use the screen.
-            Modifier.fillMaxSize().padding(padding)
-                .padding(if (state.photoBrowser.open) 8.dp else 16.dp),
-            verticalArrangement = Arrangement.spacedBy(if (state.photoBrowser.open) 8.dp else 16.dp)
-        ) {
-            if (state.photoBrowser.open) {
-                browserStateHolder.SaveableStateProvider("photos") {
-                    WifiPhotoBrowser(state, viewModel, onDownloadPhotos, defaultDownloadFormatJpeg)
-                }
-                return@Column
-            }
-            // Connect actions (formerly the live-view placeholder): still the primary
-            // way to establish the session before the photo browser takes over.
-            if (!busy && (controller.supportsAutomaticConnection || controller.supportsManualSetup)) {
-                Button(onClick = onConnectAutomatically, enabled = !otherCamera) {
-                    Text(
-                        stringResource(
-                            if (controller.supportsAutomaticConnection) Res.string.wifi_remote_auto_connect
-                            else Res.string.wifi_remote_prepare_only
+        }
+        when {
+            shownFrame != null -> WifiConnectionOverlay(
+                frame = shownFrame,
+                networkPermissionMessage = networkPermissionMessage,
+                // Cancel ends the attempt and goes back to the device page; so does leaving a
+                // failure (entering again is the retry).
+                onCancel = {
+                    controller.disconnect(id)
+                    onClose()
+                },
+                onDismiss = onClose,
+                onAppSettings = onAppSettings,
+                modifier = Modifier.systemBarsPadding(),
+            )
+
+            viewModel.viewedPhotoIndex != null && ready && state.photoBrowser.open ->
+                WifiPhotoViewer(state, viewModel, onDownloadPhotos, defaultDownloadFormatJpeg)
+
+            state.photoBrowser.open -> Scaffold(
+                containerColor = Color.Transparent,
+                contentWindowInsets = WindowInsets.statusBars,
+                topBar = {
+                    WifiPhotoBrowserTopBar(state, viewModel, gridOptions, onGridOptionsChange, onBack = back)
+                },
+            ) { padding ->
+                Box(Modifier.fillMaxSize().padding(padding)) {
+                    browserStateHolder.SaveableStateProvider("photos") {
+                        WifiPhotoBrowser(
+                            state, viewModel, onDownloadPhotos, defaultDownloadFormatJpeg, gridOptions
                         )
+                    }
+                }
+            }
+
+            else -> WifiConnectionControls(
+                state = state, viewModel = viewModel, otherCamera = otherCamera,
+                onConnect = onConnect, onConnectAutomatically = onConnectAutomatically,
+                onWifiSettings = onWifiSettings, onBack = back, wifiSettingsLabel = wifiSettingsLabel,
+                networkPermissionMessage = networkPermissionMessage,
+                openingSessionMessage = openingSessionMessage,
+            )
+        }
+    }
+}
+
+/**
+ * The plain connection page: the manual / non-automatic path (IP entry, manual network join) and
+ * the rare idle state outside the overlay (another camera holds Wi-Fi, a finished session). The
+ * automatic path never stops here — its progress is the overlay.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WifiConnectionControls(
+    state: WifiRemoteState,
+    viewModel: WifiRemoteViewModel,
+    otherCamera: Boolean,
+    onConnect: (String) -> Unit,
+    onConnectAutomatically: () -> Unit,
+    onWifiSettings: () -> Unit,
+    onBack: () -> Unit,
+    wifiSettingsLabel: String,
+    networkPermissionMessage: String,
+    openingSessionMessage: String,
+) {
+    val controller = viewModel.controller
+    val id = viewModel.identifier.uppercase()
+    val ready = state.phase == WifiRemotePhase.Ready
+    val busy = state.phase !in setOf(WifiRemotePhase.Idle, WifiRemotePhase.Failed)
+    var manual by remember { mutableStateOf(!controller.supportsAutomaticConnection && !controller.supportsManualSetup) }
+    Scaffold(
+        containerColor = Color.Transparent,
+        topBar = {
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                title = { Text(stringResource(Res.string.wifi_remote_title)) },
+                navigationIcon = {
+                    GlassIconButton(
+                        painterResource(Res.drawable.arrow_back_24px),
+                        contentDescription = stringResource(Res.string.back),
+                        onClick = onBack,
                     )
-                }
+                },
+            )
+        },
+    ) { padding ->
+        Column(
+            Modifier.fillMaxSize().padding(padding).padding(16.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (!busy && (controller.supportsAutomaticConnection || controller.supportsManualSetup)) {
+                CapsuleButton(
+                    text = stringResource(
+                        if (controller.supportsAutomaticConnection) Res.string.wifi_remote_auto_connect
+                        else Res.string.wifi_remote_prepare_only
+                    ),
+                    onClick = onConnectAutomatically,
+                    enabled = !otherCamera,
+                )
+                Text(
+                    stringResource(
+                        if (controller.supportsAutomaticConnection) Res.string.wifi_remote_auto_setup
+                        else Res.string.wifi_remote_prepare_only_hint
+                    ),
+                    color = AlphaTheme.colors.onSurfaceVariant,
+                )
+                CapsuleButton(
+                    text = stringResource(Res.string.wifi_remote_manual),
+                    onClick = { manual = !manual },
+                    role = CapsuleRole.Secondary,
+                )
             }
-                        val controls: @Composable (Modifier) -> Unit = { modifier ->
-                Column(modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (!busy) {
-                        if (controller.supportsAutomaticConnection || controller.supportsManualSetup) {
-                            Text(
-                                stringResource(
-                                    if (controller.supportsAutomaticConnection) Res.string.wifi_remote_auto_setup
-                                    else Res.string.wifi_remote_prepare_only_hint
-                                )
-                            )
-                            TextButton(onClick = { manual = !manual }) {
-                                Text(stringResource(Res.string.wifi_remote_manual))
-                            }
-                        }
-                        if (manual) {
-                            Text(
-                                stringResource(
-                                    if (controller.supportsAddressDiscovery) Res.string.wifi_remote_setup_detect_address
-                                    else Res.string.wifi_remote_setup
-                                )
-                            )
-                            OutlinedButton(onClick = onWifiSettings) { Text(wifiSettingsLabel) }
-                            OutlinedTextField(value = viewModel.host, onValueChange = { viewModel.host = it.take(64) },
-                                label = { Text(stringResource(Res.string.wifi_remote_ip)) }, singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                            Button(
-                                onClick = { onConnect(viewModel.host) },
-                                enabled = (controller.supportsAddressDiscovery || viewModel.host.isNotBlank()) && !otherCamera
-                            ) {
-                                Text(stringResource(Res.string.wifi_remote_connect))
-                            }
-                        }
-                    }
-                    if (otherCamera) Text(stringResource(Res.string.wifi_remote_other_camera))
-                    if (state.phase == WifiRemotePhase.Idle) {
-                        val shutdownMessage = when (state.wifiShutdown) {
-                            WifiShutdownStatus.Requested -> Res.string.wifi_remote_shutdown_requested
-                            WifiShutdownStatus.Unavailable -> Res.string.wifi_remote_shutdown_unavailable
-                            WifiShutdownStatus.Unconfirmed -> Res.string.wifi_remote_shutdown_unconfirmed
-                            WifiShutdownStatus.NotRequested -> null
-                        }
-                        shutdownMessage?.let { Text(stringResource(it)) }
-                    }
-                    if (state.phase == WifiRemotePhase.OpeningSession) Text(openingSessionMessage)
-                    if (state.phase == WifiRemotePhase.PreparingCamera) Text(stringResource(Res.string.wifi_remote_preparing))
-                    state.manualNetwork?.let { credentials ->
-                        WifiManualJoin(
-                            credentials, onWifiSettings,
-                            onContinue = { controller.continueManualConnection(id) })
-                    }
-                    if (state.phase == WifiRemotePhase.AwaitingNetworkApproval) Text(stringResource(Res.string.wifi_remote_approval))
-                    if (state.phase == WifiRemotePhase.JoiningNetwork) Text(stringResource(Res.string.wifi_remote_joining))
-                    if (state.phase == WifiRemotePhase.Closing) Text(stringResource(Res.string.wifi_remote_closing))
-                    state.failure?.let { failure ->
-                        Text(if (failure == WifiRemoteFailure.NetworkPermissionDenied) networkPermissionMessage else stringResource(when (failure) {
-                            WifiRemoteFailure.InvalidAddress -> Res.string.wifi_remote_invalid_ip
-                            WifiRemoteFailure.JoinCameraWifi -> Res.string.wifi_remote_join_wifi
-                            WifiRemoteFailure.NetworkPermissionDenied -> Res.string.wifi_remote_permission
-                            WifiRemoteFailure.NetworkConnectionFailed -> Res.string.wifi_connection_failed
-                            WifiRemoteFailure.NetworkLost -> Res.string.wifi_remote_lost
-                            WifiRemoteFailure.BluetoothRequired -> Res.string.wifi_remote_bluetooth_required
-                            WifiRemoteFailure.CameraSetupFailed -> Res.string.wifi_remote_setup_failed
-                            WifiRemoteFailure.CameraCredentialsUnavailable -> Res.string.wifi_remote_credentials_failed
-                            WifiRemoteFailure.NetworkJoinFailed -> Res.string.wifi_remote_join_failed
-                            WifiRemoteFailure.CameraAddressUnavailable -> Res.string.wifi_remote_address_failed
-                            WifiRemoteFailure.WifiDisabled -> Res.string.wifi_remote_wifi_disabled
-                            WifiRemoteFailure.LocationServicesRequired -> Res.string.wifi_remote_location_required
-                            else -> Res.string.wifi_remote_failed
-                        }), color = MaterialTheme.colorScheme.error)
-                    }
-                    if (noticeAcknowledged && onAppSettings != null) {
-                        WifiConnectionHelp(state.failure, onAppSettings)
-                    }
-                    if (ready) {
-                        Text(stringResource(Res.string.wifi_remote_connected, state.cameraName))
-                        if (state.canTransferImages) OutlinedButton(
-                            onClick = { controller.browseDates(id) }
-                        ) {
-                            Text(stringResource(Res.string.wifi_remote_browse))
-                        } else Text(stringResource(Res.string.wifi_remote_browse_unsupported))
-                    }
-                    if (busy) OutlinedButton(onClick = { controller.disconnect(id) }, enabled = state.phase != WifiRemotePhase.Closing) {
-                        Text(stringResource(Res.string.wifi_remote_disconnect))
-                    }
-                }
+            if (!busy && manual) {
+                Text(
+                    stringResource(
+                        if (controller.supportsAddressDiscovery) Res.string.wifi_remote_setup_detect_address
+                        else Res.string.wifi_remote_setup
+                    )
+                )
+                CapsuleButton(text = wifiSettingsLabel, onClick = onWifiSettings, role = CapsuleRole.Secondary)
+                OutlinedTextField(
+                    value = viewModel.host, onValueChange = { viewModel.host = it.take(64) },
+                    label = { Text(stringResource(Res.string.wifi_remote_ip)) }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                CapsuleButton(
+                    text = stringResource(Res.string.wifi_remote_connect),
+                    onClick = { onConnect(viewModel.host) },
+                    enabled = (controller.supportsAddressDiscovery || viewModel.host.isNotBlank()) && !otherCamera,
+                )
             }
-            controls(Modifier.fillMaxWidth().weight(1f))
+            if (otherCamera) Text(stringResource(Res.string.wifi_remote_other_camera))
+            if (state.phase == WifiRemotePhase.Idle) {
+                val shutdownMessage = when (state.wifiShutdown) {
+                    WifiShutdownStatus.Requested -> Res.string.wifi_remote_shutdown_requested
+                    WifiShutdownStatus.Unavailable -> Res.string.wifi_remote_shutdown_unavailable
+                    WifiShutdownStatus.Unconfirmed -> Res.string.wifi_remote_shutdown_unconfirmed
+                    WifiShutdownStatus.NotRequested -> null
+                }
+                shutdownMessage?.let { Text(stringResource(it), color = AlphaTheme.colors.onSurfaceVariant) }
+            }
+            if (state.phase == WifiRemotePhase.OpeningSession) Text(openingSessionMessage)
+            if (state.phase == WifiRemotePhase.PreparingCamera) Text(stringResource(Res.string.wifi_remote_preparing))
+            state.manualNetwork?.let { credentials ->
+                WifiManualJoin(
+                    credentials, onWifiSettings,
+                    onContinue = { controller.continueManualConnection(id) })
+            }
+            if (state.phase == WifiRemotePhase.AwaitingNetworkApproval) Text(stringResource(Res.string.wifi_remote_approval))
+            if (state.phase == WifiRemotePhase.JoiningNetwork) Text(stringResource(Res.string.wifi_remote_joining))
+            if (state.phase == WifiRemotePhase.Closing) Text(stringResource(Res.string.wifi_remote_closing))
+            state.failure?.let { failure ->
+                Text(wifiFailureMessage(failure, networkPermissionMessage), color = AlphaTheme.colors.error)
+            }
+            if (ready) {
+                Text(stringResource(Res.string.wifi_remote_connected, state.cameraName))
+                if (state.canTransferImages) CapsuleButton(
+                    text = stringResource(Res.string.wifi_remote_browse),
+                    onClick = { controller.browseDates(id) },
+                    role = CapsuleRole.Tonal,
+                ) else Text(stringResource(Res.string.wifi_remote_browse_unsupported))
+            }
+            if (busy) CapsuleButton(
+                text = stringResource(Res.string.wifi_remote_disconnect),
+                onClick = { controller.disconnect(id) },
+                role = CapsuleRole.Secondary,
+                enabled = state.phase != WifiRemotePhase.Closing,
+            )
         }
     }
 }
