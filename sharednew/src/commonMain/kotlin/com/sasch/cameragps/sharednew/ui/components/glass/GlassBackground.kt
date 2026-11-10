@@ -60,8 +60,9 @@ fun GlassBackground(
                 content = content,
             )
             // A modal layer closed: focus back to what it covered, layer by layer (anchor / saved child).
+            // Keyed on the modal overlays; settles against the ones live when it runs.
             val modalEntries = overlayHost.modalEntries()
-            LaunchedEffect(modalEntries) { overlayHost.focusMemory.settle(modalEntries) }
+            LaunchedEffect(modalEntries) { overlayHost.focusMemory.settle(overlayHost.modalEntries()) }
             GlassOverlayLayer(overlayHost)
         }
     }

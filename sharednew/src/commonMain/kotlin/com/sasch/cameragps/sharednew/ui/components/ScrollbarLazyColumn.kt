@@ -17,6 +17,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import com.sasch.cameragps.sharednew.ui.components.glass.overlayFocusLevel
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 
 /**
@@ -39,7 +40,10 @@ fun ScrollbarLazyColumn(
     LazyColumn(
         modifier = modifier
             .verticalScrollbar(state.scrollIndicatorState)
-            .padding(end = scrollbarGutter),
+            .padding(end = scrollbarGutter)
+            // Focus level of the overlay system: closing a dialog returns keyboard focus to the
+            // row inside the list that opened it (GlassOverlayFocus.kt).
+            .overlayFocusLevel(),
         state = state,
         contentPadding = contentPadding,
         verticalArrangement = verticalArrangement,
