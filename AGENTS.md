@@ -17,9 +17,9 @@
 - `docs/todo.md` 待办；`docs/wifi-architecture.md` Wi-Fi 架构；`docs/design/` 界面设计方案（索引 `docs/design/README.md`，当前生效版本 v3）。设计里的待开发拆分不复制进 todo，开发时再按上面的纪律入 todo。
 
 ## 构建与发版要点
-- 开发分支 `feature/browse-only-download`，远端 `primary`（`https://forge.example.com:443/owner/alphagps.git`）；`origin` 是上游 Saschl/alpha-gps，仅用于 fetch，同步方式：fetch → main 快进 → merge（不 rebase）进功能分支。
+- 开发分支 `feature/browse-only-download`；主发布仓库地址（host/仓库路径/本机远端名）**不入库**，见本机 `scripts/release.local.env`（已 .gitignore，格式示例见入库的 `scripts/release.local.env.example`，也可用环境变量 `ALPHAGPS_PRIMARY_HOST/REPO/REMOTE`）；公开地址只写 GitHub：https://github.com/mfreceiver/alpha-gps（Issues：/issues）。**任何入库文件/代码/注释/测试不得出现主发布仓库的主机名、端口、仓库路径或其产品名。** `origin` 是上游 Saschl/alpha-gps，仅用于 fetch，同步方式：fetch → main 快进 → merge（不 rebase）进功能分支。
 - 包名 `cn.vectory.alphagps`（与上游 `com.saschl.cameragps` 共存），签名复用统一密钥，证书 SHA256 `18ff24c5...97d7`。
-- 发版：`scripts/release_build.sh <X.Y.Z>` 构建归档并打 tag，`--publish-only` 推送并发布 Primary forge Release。**versionCode 只在仓库根 `gradle.properties` 的 `alphagps.versionCode` 一处 bump**；发版脚本对该平面文件做严格解析（key 恰好一行、整行精确匹配 canonical 正整数），断言 APK 并校验相对上一发布 tag 递增（`scripts/release_lib.sh`，不再解析 Kotlin 源码；v0.1.0–v0.1.2 用内置历史表）。发版属对外动作，须用户确认。
+- 发版：`scripts/release_build.sh <X.Y.Z>` 构建归档并打 tag，`--publish-only` 推送并发布到主仓库（release.local.env 配置）。**versionCode 只在仓库根 `gradle.properties` 的 `alphagps.versionCode` 一处 bump**；发版脚本对该平面文件做严格解析（key 恰好一行、整行精确匹配 canonical 正整数），断言 APK 并校验相对上一发布 tag 递增（`scripts/release_lib.sh`，不再解析 Kotlin 源码；v0.1.0–v0.1.2 用内置历史表）。发版属对外动作，须用户确认。
 - iOS 目标默认禁用（`gradle.properties` 的 `alphagps.enableIos=false`），源码保留；Linux 无法编译 iOS。
 - 验证命令：`./gradlew --no-daemon :sharednew:testAndroidHostTest :app:testFossDebugUnitTest :app:assembleFossDebug :app:compileFossDebugAndroidTestKotlin`。
 - 本机 `local.properties` 的 `sdk.dir=/home/user/Android/Sdk` 不入库（已被 .gitignore 忽略）。
