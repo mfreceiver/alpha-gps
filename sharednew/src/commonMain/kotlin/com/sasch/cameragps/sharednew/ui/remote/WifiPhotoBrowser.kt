@@ -28,10 +28,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -60,6 +57,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
@@ -118,8 +116,10 @@ import com.sasch.cameragps.sharednew.remote.wifi.thumbnailWindow
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
-import com.sasch.cameragps.sharednew.ui.components.glass.glass
-import com.sasch.cameragps.sharednew.ui.components.glass.glassContentColor
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassCheckbox
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressCircle
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressLinear
+import com.sasch.cameragps.sharednew.ui.components.glass.glassCheckboxColors
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleSize
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassFloatingBar
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
@@ -127,7 +127,7 @@ import com.sasch.cameragps.sharednew.ui.components.glass.InfoTag
 import com.sasch.cameragps.sharednew.ui.components.glass.InfoTagStyle
 import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
-import com.sasch.cameragps.sharednew.ui.theme.GlassLevel
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import cameragps.sharednew.generated.resources.wifi_remote_back_busy
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -249,16 +249,16 @@ internal fun WifiPhotoBrowser(
         Column(Modifier.fillMaxSize()) {
             // One thin progress line for everything that is loading: the catalog or the thumbnails.
             // An active transfer takes precedence — the thumbnail loader is held during it anyway.
-            Box(Modifier.fillMaxWidth().height(3.dp)) {
+            Box(Modifier.fillMaxWidth().height(4.dp)) {
                 if (browserProgressVisible(browser.loading, thumbnailsLoading, transfer.busy)) {
-                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                    GlassProgressLinear(Modifier.fillMaxWidth())
                 }
             }
             if (viewModel.backBlockedNotice) {
                 Text(
                     stringResource(Res.string.wifi_remote_back_busy),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AlphaTheme.colors.error,
+                    style = AlphaType.Caption,
+                    color = AlphaTheme.colors.danger,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                 )
                 LaunchedEffect(Unit) {
@@ -331,7 +331,8 @@ internal fun WifiPhotoBrowser(
                                     if (browser.failed) Res.string.wifi_remote_browser_failed
                                     else Res.string.wifi_remote_browser_empty
                                 ),
-                                color = if (browser.failed) AlphaTheme.colors.error else AlphaTheme.colors.onSurfaceVariant,
+                                style = AlphaType.Body,
+                                color = if (browser.failed) AlphaTheme.colors.danger else AlphaTheme.colors.textSecondary,
                                 modifier = Modifier.padding(16.dp).alpha(if (browser.failed || !browser.loading) 1f else 0f),
                             )
                         }
@@ -398,7 +399,8 @@ internal fun WifiPhotoBrowser(
                                 Res.string.wifi_remote_batch_summary, summary.downloaded,
                                 summary.skippedCount, skipReasonsText(summary.skipped)
                             ),
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = AlphaType.Body,
+                            color = AlphaTheme.colors.textPrimary,
                         )
                     }
                 }
@@ -408,8 +410,8 @@ internal fun WifiPhotoBrowser(
                             Res.string.wifi_remote_batch_skip_hint,
                             plan.skippedCount, skipReasonsText(plan.skipped)
                         ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AlphaTheme.colors.onSurface,
+                        style = AlphaType.Caption,
+                        color = AlphaTheme.colors.textPrimary,
                         textAlign = TextAlign.Center,
                     )
                     // A plan with nothing in it stays tappable: the tap records the
@@ -498,8 +500,8 @@ private fun PhotoGridTile(
             if (isSelected) {
                 Box(
                     Modifier.fillMaxSize()
-                        .background(AlphaTheme.colors.primary.copy(alpha = 0.22f))
-                        .border(3.dp, AlphaTheme.colors.primary, shape)
+                        .background(AlphaTheme.colors.accent.copy(alpha = 0.22f))
+                        .border(3.dp, AlphaTheme.colors.accent, shape)
                 )
             }
             if (options.showSize) {
@@ -562,7 +564,7 @@ private fun PhotoGridTile(
                 selected = isSelected
             }.padding(inset),
             contentAlignment = checkboxCorner,
-        ) { SelectionCheck(isSelected) }
+        ) { GlassCheckbox(isSelected, onCheckedChange = null, onPhoto = true) }
         val previewLabel = stringResource(Res.string.wifi_remote_preview_photo)
         val previewCorner = tileCorner(TileElement.Preview).alignment
         Box(
@@ -573,14 +575,19 @@ private fun PhotoGridTile(
             ).semantics { contentDescription = previewLabel }.padding(inset),
             contentAlignment = previewCorner,
         ) {
-            // Small square glass button inside the larger touch target.
+            // The GlassTileAction badge (Viewer-glass square + white rim, like an unchecked
+            // GlassCheckbox) drawn inside this tile's own 40 dp corner target (the range-selection
+            // hit test reserves exactly that corner), so the component's 48 dp target is not used.
+            val badge = glassCheckboxColors(ToggleableState.Off, AlphaTheme.colors, onPhoto = true)
             Box(
-                Modifier.size(TILE_BADGE_DP.dp).glass(GlassLevel.Float, SquareBadgeShape, shadow = false),
+                Modifier.size(TILE_BADGE_DP.dp)
+                    .background(badge.fill, TileBadgeShape)
+                    .border(1.dp, badge.rim ?: Color.Transparent, TileBadgeShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     painterResource(Res.drawable.search_24px), contentDescription = null,
-                    tint = glassContentColor(GlassLevel.Float), modifier = Modifier.size(15.dp)
+                    tint = AlphaTheme.colors.onPhoto, modifier = Modifier.size(15.dp)
                 )
             }
         }
@@ -636,26 +643,8 @@ private class RangeDragState {
 /** Touch target of the checkbox / preview overlays on a grid tile. */
 private val TileActionSize = TILE_ACTION_DP.dp
 
-/** Small corner radius: the overlays read as squares, not circles. */
-private val SquareBadgeShape = RoundedCornerShape(3.dp)
-
-/** Square check box at a tile corner: hollow when unselected, filled with a tick when selected. */
-@Composable
-internal fun SelectionCheck(selected: Boolean, modifier: Modifier = Modifier) {
-    Box(
-        modifier.size(TILE_BADGE_DP.dp).clip(SquareBadgeShape).then(
-            if (selected) Modifier.background(MaterialTheme.colorScheme.primary)
-            else Modifier.background(AlphaTheme.colors.thumbnailBadgeScrim)
-                .border(2.dp, AlphaTheme.colors.thumbnailBadgeStroke, SquareBadgeShape)
-        ),
-        contentAlignment = Alignment.Center
-    ) {
-        if (selected) Icon(
-            painterResource(Res.drawable.check_24px), contentDescription = null,
-            tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp)
-        )
-    }
-}
+/** Shape of the preview badge: the same rounded square as [GlassCheckbox] (radius 7). */
+private val TileBadgeShape = RoundedCornerShape(7.dp)
 
 /**
  * Grid thumbnail: the whole picture fitted into the square frame and centred (never cropped). The
@@ -668,10 +657,14 @@ private fun PhotoTile(image: ImageBitmap?, loading: Boolean) {
         if (image != null) {
             FittedThumbnail(image, Modifier.fillMaxSize())
         } else if (loading) {
-            CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+            GlassProgressCircle(onPhoto = true)
         } else {
-            Text(stringResource(Res.string.wifi_remote_preview_unavailable),
-                style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(4.dp))
+            // On the near-black thumbnail frame in both themes, hence the photo-overlay colour.
+            Text(
+                stringResource(Res.string.wifi_remote_preview_unavailable),
+                style = AlphaType.Tag, color = AlphaTheme.colors.onPhotoSecondary,
+                textAlign = TextAlign.Center, modifier = Modifier.padding(4.dp),
+            )
         }
     }
 }
@@ -684,24 +677,26 @@ internal fun PhotoTransferStatus(transfer: WifiImageTransferState) {
                 Res.string.wifi_remote_batch_progress,
                 transfer.completedFiles,
                 transfer.totalFiles
-            )
+            ),
+            style = AlphaType.Label, color = AlphaTheme.colors.textPrimary,
         )
     }
     when (transfer.status) {
         WifiImageTransferStatus.Downloading -> {
-            Text(stringResource(Res.string.wifi_remote_transfer_progress, transfer.filename))
-            LinearProgressIndicator(progress = {
-                if (transfer.totalBytes > 0) transfer.bytesReceived.toFloat() / transfer.totalBytes else 0f
-            }, modifier = Modifier.fillMaxWidth())
+            StatusText(stringResource(Res.string.wifi_remote_transfer_progress, transfer.filename))
+            GlassProgressLinear(
+                Modifier.fillMaxWidth(),
+                progress = if (transfer.totalBytes > 0) transfer.bytesReceived.toFloat() / transfer.totalBytes else 0f,
+            )
         }
         WifiImageTransferStatus.Converting -> {
-            Text(stringResource(Res.string.wifi_remote_converting_jpeg))
-            LinearProgressIndicator(Modifier.fillMaxWidth())
+            StatusText(stringResource(Res.string.wifi_remote_converting_jpeg))
+            GlassProgressLinear(Modifier.fillMaxWidth())
         }
-        WifiImageTransferStatus.ConversionFailed -> Text(stringResource(Res.string.wifi_remote_conversion_failed))
-        WifiImageTransferStatus.Saved -> Text(stringResource(Res.string.wifi_remote_transfer_saved, transfer.filename))
+        WifiImageTransferStatus.ConversionFailed -> StatusText(stringResource(Res.string.wifi_remote_conversion_failed))
+        WifiImageTransferStatus.Saved -> StatusText(stringResource(Res.string.wifi_remote_transfer_saved, transfer.filename))
         WifiImageTransferStatus.Failed -> Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
+            StatusText(
                 stringResource(
                     when (transfer.failureReason) {
                         WifiTransferFailureReason.CatalogChanged -> Res.string.wifi_remote_transfer_failed_catalog_changed
@@ -719,14 +714,20 @@ internal fun PhotoTransferStatus(transfer: WifiImageTransferState) {
             ) {
                 Text(
                     stringResource(Res.string.wifi_remote_transfer_failed_redownload_copy),
-                    style = MaterialTheme.typography.bodySmall
+                    style = AlphaType.Caption, color = AlphaTheme.colors.textSecondary,
                 )
             }
         }
-        WifiImageTransferStatus.Cancelled -> Text(stringResource(Res.string.wifi_remote_transfer_cancelled))
-        WifiImageTransferStatus.PermissionDenied -> Text(stringResource(Res.string.wifi_remote_storage_permission))
+        WifiImageTransferStatus.Cancelled -> StatusText(stringResource(Res.string.wifi_remote_transfer_cancelled))
+        WifiImageTransferStatus.PermissionDenied -> StatusText(stringResource(Res.string.wifi_remote_storage_permission))
         WifiImageTransferStatus.Idle -> Unit
     }
+}
+
+/** One line of [PhotoTransferStatus] on the floating glass bar. */
+@Composable
+private fun StatusText(text: String) {
+    Text(text, style = AlphaType.Body, color = AlphaTheme.colors.textPrimary)
 }
 
 /**
