@@ -4,9 +4,8 @@ import com.sasch.cameragps.sharednew.remote.wifi.UNKNOWN_DATE_KEY
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteFailure
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemotePhase
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
-import androidx.compose.ui.graphics.Color
+import com.sasch.cameragps.sharednew.remote.wifi.formatSizeNumber
 import kotlinx.datetime.LocalDate
-import kotlin.math.abs
 
 // ---- Connection overlay ----------------------------------------------------------------------
 
@@ -111,17 +110,11 @@ data class WifiGridOptions(
 // ---- Capture tags ----------------------------------------------------------------------------
 
 /**
- * The grid's size tag: megabytes (binary MB) with one decimal, rounded half up, **without** the unit
- * ("6.6"); anything below 0.1 MB reads "<0.1". Null for an unknown (zero) size — no tag then.
- * The number is [captureDownloadSize] — what a download under the current default format fetches.
+ * The grid's size tag: the shared unitless size number ([formatSizeNumber] — one decimal, rounded
+ * half up, no unit). Null for an unknown (zero) size — no tag then. The number is
+ * [captureDownloadSize] — what a download under the current default format fetches.
  */
-internal fun formatSizeTag(bytes: Long): String? {
-    if (bytes <= 0) return null
-    val mb = 1024L * 1024L
-    if (bytes * 10 < mb) return "<0.1"
-    val tenths = (bytes * 10 + mb / 2) / mb
-    return "${tenths / 10}.${tenths % 10}"
-}
+internal fun formatSizeTag(bytes: Long): String? = formatSizeNumber(bytes)
 
 // ---- Grid tile layout --------------------------------------------------------------------------
 
@@ -149,41 +142,6 @@ internal const val TILE_BADGE_DP = 22
 
 /** Gap between every corner element's visible part and the frame edges (the same on all four). */
 internal const val TILE_CORNER_INSET_DP = 6
-
-/**
- * Fill of a tile's square frame, visible around a photo fitted inside it: a pale glass-like veil
- * (white based, never black) so the uncovered parts read as glass rather than as dark borders.
- */
-internal fun tileFrameColor(dark: Boolean): Color =
-    if (dark) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.55f)
-
-// ---- Thumbnail letterbox -----------------------------------------------------------------------
-
-/** Black bars thinner than this are not treated as letterboxing. */
-internal const val LETTERBOX_MIN_BAR_PX = 2
-
-/** A pixel this dark (every channel ≤ 20 of 255) counts as letterbox black. */
-internal fun isLetterboxBlack(argb: Int): Boolean =
-    (argb shr 16 and 0xff) <= 20 && (argb shr 8 and 0xff) <= 20 && (argb and 0xff) <= 20
-
-/**
- * Camera thumbnails (PTP GetThumb, 160×120) carry baked-in black bars when the photo is not 4:3;
- * fitted into the frame those would read as black borders. Returns the picture's span along one
- * axis of [length] lines, given which lines are entirely black: the bars are only trimmed when both
- * sides have one (≥ [LETTERBOX_MIN_BAR_PX], within 2 px of each other — the camera centres the
- * picture) and at least half of the image remains; otherwise the whole span is kept.
- */
-internal fun letterboxSpan(length: Int, isBlackLine: (Int) -> Boolean): IntRange {
-    var start = 0
-    while (start < length && isBlackLine(start)) start++
-    var end = length
-    while (end > start && isBlackLine(end - 1)) end--
-    val leading = start
-    val trailing = length - end
-    val symmetric = leading >= LETTERBOX_MIN_BAR_PX && trailing >= LETTERBOX_MIN_BAR_PX &&
-        abs(leading - trailing) <= 2
-    return if (symmetric && (end - start) * 2 >= length) start until end else 0 until length
-}
 
 // ---- Day list --------------------------------------------------------------------------------
 
