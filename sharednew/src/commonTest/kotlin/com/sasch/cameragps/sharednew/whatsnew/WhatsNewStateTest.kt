@@ -11,7 +11,7 @@ class WhatsNewStateTest {
     fun existingInstallWithoutTrackingSeesNotesUntilDismissed() {
         var stored: String? = null
         fun launch() =
-            WhatsNewState("v1.6.2", ReleasePlatform.Android, stored, false) { stored = it }
+            WhatsNewState("v1.6.2", stored, false) { stored = it }
 
         val state = launch()
         state.initialize()
@@ -27,26 +27,24 @@ class WhatsNewStateTest {
     @Test
     fun freshInstallEstablishesBaselineWithoutShowingNotes() {
         var stored: String? = null
-        val state = WhatsNewState("1.6.2", ReleasePlatform.Ios, stored, true) { stored = it }
+        val state = WhatsNewState("1.6.2", stored, true) { stored = it }
         state.initialize()
         assertFalse(state.pending)
         assertEquals("1.6.2", stored)
-        assertFalse(WhatsNewState("1.6.2", ReleasePlatform.Ios, stored, false) {}.pending)
+        assertFalse(WhatsNewState("1.6.2", stored, false) {}.pending)
     }
 
     @Test
     fun skippedVersionsShowCurrentRelease() {
-        for (platform in ReleasePlatform.entries) {
-            val state = WhatsNewState("1.7.0", platform, "1.4.0", false) {}
-            assertTrue(state.pending)
-            assertEquals("1.7.0", state.release?.version)
-        }
+        val state = WhatsNewState("1.7.0", "1.4.0", false) {}
+        assertTrue(state.pending)
+        assertEquals("1.7.0", state.release?.version)
     }
 
     @Test
     fun downgradeDoesNotShowOrOverwriteNewerBaselineEvenFromSettings() {
         var stored = "1.7.0"
-        val state = WhatsNewState("1.6.2", ReleasePlatform.Ios, stored, false) { stored = it }
+        val state = WhatsNewState("1.6.2", stored, false) { stored = it }
         state.initialize()
         state.dismiss()
         assertFalse(state.pending)
@@ -56,7 +54,7 @@ class WhatsNewStateTest {
     @Test
     fun releaseWithoutNotesDoesNotReuseOldContent() {
         var stored = "1.6.2"
-        val state = WhatsNewState("1.6.4", ReleasePlatform.Android, stored, false) { stored = it }
+        val state = WhatsNewState("1.6.4", stored, false) { stored = it }
         state.initialize()
         assertNull(state.release)
         assertFalse(state.pending)
@@ -73,22 +71,10 @@ class WhatsNewStateTest {
     }
 
     @Test
-    fun cameraFixReleaseShowsAfterUpgradeWithRx0NoteOnlyOnAndroid() {
-        val android = WhatsNewState("v1.7.1", ReleasePlatform.Android, "1.7.0", false) {}
-        val ios = WhatsNewState("1.7.1", ReleasePlatform.Ios, "1.7.0", false) {}
-        assertTrue(android.pending)
-        assertTrue(ios.pending)
-        assertEquals("1.7.1", android.release?.version)
-        assertEquals(2, android.release!!.highlights.size)
-        assertEquals(listOf(android.release!!.highlights.first()), ios.release!!.highlights)
-    }
-
-    @Test
-    fun iosPairingNotesAreOnlyIncludedOnIos() {
-        val android = ReleaseNotesCatalog.forVersion("v1.6.2", ReleasePlatform.Android)!!
-        val ios = ReleaseNotesCatalog.forVersion("1.6.2", ReleasePlatform.Ios)!!
-        assertEquals(android.highlights.first(), ios.highlights.first())
-        assertFalse(android.highlights.contains(ios.highlights.last()))
-        assertFalse(ios.highlights.contains(android.highlights.last()))
+    fun cameraFixReleaseShowsAfterUpgradeWithBothNotes() {
+        val state = WhatsNewState("v1.7.1", "1.7.0", false) {}
+        assertTrue(state.pending)
+        assertEquals("1.7.1", state.release?.version)
+        assertEquals(2, state.release!!.highlights.size)
     }
 }

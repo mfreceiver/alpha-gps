@@ -13,7 +13,7 @@
     <string name="pairing_preparation_search">Search for camera</string>
     <string name="pairing_preparation_searching">Searching for camera…</string>
     <string name="pairing_preparation_help">Need help?</string>
-    <!-- Renaming a camera. On iOS this opens Apple's system rename sheet. -->
+    <!-- Renaming a camera. -->
     <string name="rename_camera_title">Rename</string>
     <string name="rename_camera_label">Camera name</string>
     <string name="rename_camera_save">Save</string>
@@ -181,7 +181,6 @@
     <string name="guide_repair_description">Typical when the camera was set up with Sony's Creators' App or Imaging Edge Mobile before: the phone is already paired with the camera, so no new pairing is requested — but location transfer doesn't work properly with AlphaGPS. Removing the old pairing everywhere fixes this.</string>
     <string name="guide_repair_step_phone">Remove the camera from your phone's Bluetooth settings:</string>
     <string name="guide_repair_step_phone_path_android">Settings → Connected devices (Bluetooth) → your camera → Forget</string>
-    <string name="guide_repair_step_phone_path_ios">Settings → Bluetooth → ⓘ next to the camera → Forget This Device</string>
     <string name="guide_repair_step_camera">On the camera, delete the old pairing (older models don't have this menu item — there, pairing again simply replaces the old connection):</string>
     <string name="guide_repair_step_camera_path">MENU → Network → Bluetooth → Manage Paired Device</string>
     <string name="guide_repair_step_sony_app">If a Sony app is still installed, remove the camera there as well:</string>
@@ -197,7 +196,6 @@
     <string name="guide_accuracy_description">If photos are tagged with a position that is noticeably off, the app usually isn't allowed to use your precise location.</string>
     <string name="guide_accuracy_step_precise">Allow precise location for AlphaGPS:</string>
     <string name="guide_accuracy_step_precise_path_android">Settings → Apps → AlphaGPS → Permissions → Location → Use precise location</string>
-    <string name="guide_accuracy_step_precise_path_ios">Settings → Privacy &amp; Security → Location Services → AlphaGPS → Precise Location → On</string>
     <string name="guide_accuracy_step_battery">Exclude the app from battery optimization so transmission keeps running in the background: Settings → Apps → AlphaGPS → Battery → Unrestricted.</string>
     <string name="guide_startup_title">Camera starts slowly or its screen stays black</string>
     <string name="guide_startup_description">On some cameras, allowing smartphone connections while the camera is off can delay startup when AlphaGPS is enabled.</string>
@@ -296,18 +294,7 @@
     <string name="bluetooth_connect_grant_button">Grant Bluetooth Permission</string>
     <string name="bluetooth_connect_permanently_denied">Bluetooth permission has been permanently denied. Please open App Settings, navigate to Permissions → Nearby devices, and grant the permission manually.</string>
     <!-- Tip Jar -->
-    <string name="tip_jar">Tip Jar</string>
-    <string name="tip_jar_description">Enjoying the app? Tips help cover the Apple Developer Program fee ($99/year) required to keep this app on the App Store. It's completely optional — thank you for using AlphaGPS! ❤️</string>
-    <string name="tip_jar_loading">Loading…</string>
-    <string name="tip_jar_thank_you">Thank you so much for your support!</string>
-    <string name="tip_jar_unavailable">Tip options are not available right now.</string>
-    <string name="tip_jar_error_prefix">Something went wrong:</string>
-    <string name="tip_jar_dismiss">Dismiss</string>
     <!-- Donation prompt -->
-    <string name="donation_dialog_title">Enjoying AlphaGPS?</string>
-    <string name="donation_dialog_message">If the app helps your photography, a small donation helps keep development going. It is completely optional.</string>
-    <string name="donation_dialog_confirm">Support project</string>
-    <string name="donation_dialog_dismiss">Not now</string>
 
     <!-- In-app release notes. -->
     <string name="whats_new_title">What’s new</string>
@@ -319,7 +306,6 @@
     <string name="whats_new_170_wifi_remote">New experimental Wi-Fi feature for browsing and downloading photos. Currently validated only with the Sony α6700.\n\nTo open it, tap your camera in the device list, then tap “Wi-Fi photo transfer”.</string>
     <string name="whats_new_162_time">View and change automatic time correction in your camera’s details. This setting controls whether the camera adjusts its date and time using your phone.</string>
     <string name="whats_new_162_notifications">Location transmission notifications now update more reliably.</string>
-    <string name="whats_new_162_pairing">Updated camera pairing on iOS uses the system accessory picker. Previously paired cameras may need to be authorized again; the app will guide you through it.</string>
     <string name="welcome_next">Next</string>
     <string name="welcome_skip">Skip</string>
     <string name="welcome_page_position">Page %1$d of %2$d</string>
@@ -337,7 +323,7 @@
     <string name="welcome_ready_body">AlphaGPS needs precise location access to geotag your photos. Background access keeps location updates running while your phone is locked.</string>
 
     <string name="wifi_remote_experimental_title">Experimental Wi-Fi photo transfer</string>
-    <string name="wifi_remote_experimental_message">Wi-Fi photo transfer is experimental and has currently only been validated with the developer’s Sony α6700. Other camera models may behave differently.\n\nPlease report your camera model and test results on GitHub Issues. Include your phone’s operating system and version (Android or iOS).</string>
+    <string name="wifi_remote_experimental_message">Wi-Fi photo transfer is experimental and has currently only been validated with the developer’s Sony α6700. Other camera models may behave differently.\n\nPlease report your camera model and test results on GitHub Issues. Include your phone’s Android version.</string>
     <string name="wifi_remote_title">Wi-Fi photo transfer</string>
     <string name="wifi_remote_entry_hint">Browse and download photos from the camera</string>
     <string name="wifi_remote_setup">Start the camera’s smartphone Wi-Fi connection, disconnect Creators’ App, then join the camera’s Wi-Fi in phone settings. Enter the camera IP address.</string>
@@ -435,9 +421,6 @@
     <string name="wifi_remote_default_download_format_original">Original</string>
     <string name="wifi_remote_converting_jpeg">Converting to JPEG…</string>
     <string name="wifi_remote_conversion_failed">Could not create a JPEG copy. This phone may not support the HEIF format or have enough memory or storage. You can download the original HEIF instead.</string>
-    <string name="wifi_remote_ios_settings">App permissions</string>
-    <string name="wifi_remote_ios_permission">Allow Local Network access in the app’s Settings, then reconnect.</string>
-    <string name="wifi_remote_ios_opening">Connecting to camera… If iOS asks, allow Local Network access.</string>
     <string name="wifi_remote_default_download_format_jpeg_desc">RAW is hidden in the list, details and batches, and tapping Download saves the JPG. Photos that only have a RAW are the exception.</string>
     <string name="wifi_remote_default_download_format_original_desc">Shows all formats. You choose before downloading.</string>
     <string name="wifi_remote_download_format_size">Download %1$s (%2$s)</string>

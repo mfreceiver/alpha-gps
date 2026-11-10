@@ -61,7 +61,7 @@ export ALPHAGPS_PRIMARY_REPO=owner/alphagps
 export ALPHAGPS_PRIMARY_REMOTE=primary
 
 PROPS_TPL() { # $1=code → stdout（含无关属性行，贴近真实文件形态）
-  printf 'org.gradle.jvmargs=-Xmx4096m\nalphagps.enableIos=false\nalphagps.versionCode=%s\nkotlin.code.style=official\n' "$1"
+  printf 'org.gradle.jvmargs=-Xmx4096m\nalphagps.versionCode=%s\nkotlin.code.style=official\n' "$1"
 }
 
 # ── 沙箱 git 仓库（单调性/from_git 用；一律 $TMP 下构造，用后随 $TMP 删除）──

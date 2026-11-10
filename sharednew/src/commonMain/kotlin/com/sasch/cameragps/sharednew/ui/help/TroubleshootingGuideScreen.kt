@@ -35,7 +35,6 @@ import cameragps.sharednew.generated.resources.guide_accuracy_description
 import cameragps.sharednew.generated.resources.guide_accuracy_step_battery
 import cameragps.sharednew.generated.resources.guide_accuracy_step_precise
 import cameragps.sharednew.generated.resources.guide_accuracy_step_precise_path_android
-import cameragps.sharednew.generated.resources.guide_accuracy_step_precise_path_ios
 import cameragps.sharednew.generated.resources.guide_accuracy_title
 import cameragps.sharednew.generated.resources.guide_intro
 import cameragps.sharednew.generated.resources.guide_link_location_a6400
@@ -59,7 +58,6 @@ import cameragps.sharednew.generated.resources.guide_repair_step_camera_path
 import cameragps.sharednew.generated.resources.guide_repair_step_pair_again
 import cameragps.sharednew.generated.resources.guide_repair_step_phone
 import cameragps.sharednew.generated.resources.guide_repair_step_phone_path_android
-import cameragps.sharednew.generated.resources.guide_repair_step_phone_path_ios
 import cameragps.sharednew.generated.resources.guide_repair_step_sony_app
 import cameragps.sharednew.generated.resources.guide_repair_step_sony_app_path
 import cameragps.sharednew.generated.resources.guide_repair_title
@@ -68,8 +66,6 @@ import cameragps.sharednew.generated.resources.guide_startup_step_disable
 import cameragps.sharednew.generated.resources.guide_startup_title
 import com.sasch.cameragps.sharednew.ui.components.ScreenContent
 import com.sasch.cameragps.sharednew.ui.components.ScrollbarLazyColumn
-import com.sasch.cameragps.sharednew.util.KotlinPlatform
-import com.sasch.cameragps.sharednew.util.currentPlatform
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -92,7 +88,6 @@ private data class GuideSection(
  */
 @Composable
 fun TroubleshootingGuideContent(innerPadding: PaddingValues) {
-    val isAndroid = currentPlatform == KotlinPlatform.Android
     val sections = listOf(
         GuideSection(
             title = Res.string.guide_location_link_title,
@@ -119,8 +114,7 @@ fun TroubleshootingGuideContent(innerPadding: PaddingValues) {
             steps = listOf(
                 GuideStep(
                     Res.string.guide_repair_step_phone,
-                    if (isAndroid) Res.string.guide_repair_step_phone_path_android
-                    else Res.string.guide_repair_step_phone_path_ios
+                    Res.string.guide_repair_step_phone_path_android
                 ),
                 GuideStep(
                     Res.string.guide_repair_step_camera,
@@ -154,13 +148,10 @@ fun TroubleshootingGuideContent(innerPadding: PaddingValues) {
                 add(
                     GuideStep(
                         Res.string.guide_accuracy_step_precise,
-                        if (isAndroid) Res.string.guide_accuracy_step_precise_path_android
-                        else Res.string.guide_accuracy_step_precise_path_ios
+                        Res.string.guide_accuracy_step_precise_path_android
                     )
                 )
-                if (isAndroid) {
-                    add(GuideStep(Res.string.guide_accuracy_step_battery))
-                }
+                add(GuideStep(Res.string.guide_accuracy_step_battery))
             },
         ),
         GuideSection(

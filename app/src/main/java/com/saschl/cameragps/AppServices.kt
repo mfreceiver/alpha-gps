@@ -26,7 +26,7 @@ import kotlinx.coroutines.launch
  * App-scoped BLE/location graph (manual wiring — no DI framework). Owns the
  * shared orchestrator so the UI can observe it directly; [LocationSenderService]
  * borrows it for the duration of a foreground session and still tears BLE down
- * in its onDestroy. Android counterpart of iOS's `IosBluetoothController` object.
+ * in its onDestroy.
  *
  * First access must happen on the main thread (all current call sites do):
  * the orchestrator event subscription has to exist before the first connect.

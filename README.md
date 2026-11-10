@@ -21,7 +21,7 @@ It is not distributed through any app store — you build and install it yoursel
 - Companion-device based connection with a foreground service; optional “standby after the camera
   leaves” mode keeps the service ready to reconnect automatically.
 
-English and Simplified Chinese only. Android only (see [iOS](#ios-target-is-disabled) below).
+English and Simplified Chinese only. Android only.
 
 ## Supported cameras
 
@@ -90,13 +90,10 @@ mean the primary release already succeeded (it is not rolled back; fix the cause
 This fork ships only English (`values/`) and Simplified Chinese (`values-zh-rCN/`) — do not add
 other language directories.
 
-## iOS target is disabled
+## Android only
 
-This customization no longer ships iOS builds. The Gradle build does not register Apple targets;
-the switch lives in `gradle.properties` (`alphagps.enableIos=false`). The remaining iOS sources
-(`sharednew/src/iosMain`, `iosApp/`) are kept for potential future use; the Xcode project uses
-English/`Base` regions only, and `iosApp/alphagps/InfoPlist.xcstrings` still contains historical
-German translations that have not been cleaned up.
+This customization ships Android builds only. The iOS app (`iosApp/`), the `iosMain`/`iosTest`
+source sets and the Apple targets have been removed entirely from this repository.
 
 ## Source & acknowledgements
 

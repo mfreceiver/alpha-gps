@@ -70,12 +70,13 @@ HTTP carries the live-view image stream. An HTTP connection is not another PTP s
 The shared code owns ordering, state, and Sony protocol decisions. Platform code provides network
 access, byte I/O, image decoding where needed, and saving to the phone's photo library. These pieces
 are manually wired in
-[AndroidWifiRemote][android-wifi] and [IosWifiRemote][ios-wifi].
+[AndroidWifiRemote][android-wifi]. (This fork is Android-only; the former
+iOS platform wiring has been removed.)
 
 ## Connecting to a camera
 
 The platform app graph owns one [WifiRemoteController][controller]. Android's
-`AppServices` creates it; iOS's `IosBluetoothController` creates it. The shared
+`AppServices` creates it. The shared
 [Wi-Fi screen][screen] calls this controller through its platform host. The controller allows one
 Wi-Fi camera operation at a time and keeps ownership until cleanup finishes, so a new attempt cannot
 overlap a closing connection.
@@ -84,8 +85,8 @@ There are three entry paths:
 
 | Entry point                                                   | What happens before opening PTP                                                                                                                                                                  |
 |---------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `connectAutomatically()`                                      | BLE prepares the camera and reads credentials; the OS joins its Wi-Fi; the connector discovers its gateway address. Available on Android 10+ and iOS.                                            |
-| `connect(identifier, host)`                                   | The user has already joined the camera's Wi-Fi. Android can discover the address when the host is blank; iOS's direct manual connector requires an explicit address. |
+| `connectAutomatically()`                                      | BLE prepares the camera and reads credentials; the OS joins its Wi-Fi; the connector discovers its gateway address. Available on Android 10+.                                            |
+| `connect(identifier, host)`                                   | The user has already joined the camera's Wi-Fi. Android can discover the address when the host is blank. |
 
 > Historical note: `prepareManualConnection()` / `continueManualConnection()` implemented a manual
 > join-in-Settings fallback for Android 8–9. Since `minSdk` was raised to 31, Android 10+ automatic
@@ -100,9 +101,7 @@ connection.
 
 Android selects the camera Wi-Fi `Network` and uses its `socketFactory` for both PTP and HTTP. This
 keeps camera traffic on that network even when mobile data is also available. Gateway discovery uses
-that network's routes, not a hard-coded camera IP. iOS automatic setup uses
-`NEHotspotConfiguration`, checks the expected SSID, and discovers a gateway through a Wi-Fi path
-monitor.
+that network's routes, not a hard-coded camera IP.
 
 The controller claims BLE remote controls before connecting: existing BLE shutter sequences and
 remote probes finish cancellation so they do not compete with Wi-Fi shooting. This claim does not
@@ -265,8 +264,7 @@ write(bytes), repeatedly → prepare() → cancellation check → commit()
 
 On modern Android, the photo is written into a pending MediaStore entry. Commit closes the stream
 and clears `IS_PENDING`, exposing that same file to the gallery. Older Android uses a temporary file
-followed by rename and a media scan. On iOS, the app imports a temporary file into Photos, awaits
-success, then deletes the temporary file. Conversion adds temporary files that are cleaned up
+followed by rename and a media scan. Conversion adds temporary files that are cleaned up
 separately.
 
 Once commit starts it runs inside `NonCancellable`, allowing the app to determine whether the save
@@ -304,9 +302,7 @@ outlive the connection indefinitely.
 |------------------------------------------------------------|----------------------------------------------------------------------------------------------|
 | Shared session state, queue coordination, UI state updates | `Main.immediate`; callbacks deliver results into channels/flows.                             |
 | Android socket reads/writes and file I/O                   | `Dispatchers.IO`; blocking Java calls occupy a worker while the caller suspends.             |
-| iOS TCP I/O                                                | Network.framework callbacks feed channels; `receive()` suspends the coroutine while waiting. |
 | Frame and photo decoding                                   | `Dispatchers.Default`; Android HEIF conversion currently uses IO.                            |
-| iOS temporary-file preparation                             | `Dispatchers.Default`.                                                                       |
 
 `delay`, channel waits, and other cancellable suspension points normally notice cancellation
 themselves. Android's blocking `InputStream.read()` does not. Its adapter uses a one-second read
@@ -379,11 +375,11 @@ investigating that feature.
 | What stays alive when we switch modes?                        | [SonyWifiSession][sony-session]: `SonyWifiConnection`, private `Session`, `replaceSession`, `close`.                                      |
 | What opens the sockets versus the camera protocol session?    | [PtpIpSessionOpener][opener], then [SonyPtpInitializer][initializer].                                                                     |
 | How do requests stay ordered and responses find their caller? | [PtpIpCommandQueue][queue]: one worker, transaction IDs, deferred results; [PtpIpEventMonitor][events] for asynchronous events.           |
-| How does the phone join camera Wi-Fi?                         | [AutomaticWifiRemoteConnector][automatic], then [AndroidCameraNetworkRequest][android-network] or [IosCameraNetworkRequest][ios-network]. |
+| How does the phone join camera Wi-Fi?                         | [AutomaticWifiRemoteConnector][automatic], then [AndroidCameraNetworkRequest][android-network]. |
 | Where does live view start/stop?                              | [SonyLiveViewStream][liveview] and [CameraHttpTransport][http].                                                                           |
 | Why is a shutter command accepted but the UI uncertain?       | [SonyPtpShutter][shutter] and its capture-event wait.                                                                                     |
 | Which browsing operations are supported?                      | [SonyImageTransfer][transfer], [SonyContentCatalog][catalog], [SonyMtpObjectInfo][mtp].                                                   |
-| Where are native sockets and gallery saves?                   | [Android platform files][android-dir] and [iOS platform files][ios-dir].                                                                  |
+| Where are native sockets and gallery saves?                   | [Android platform files][android-dir].                                                                                                     |
 
 The [shared Wi-Fi tests][tests] are useful executable examples.
 `SonyWifiSessionTest` covers session replacement, cancellation, and preserving network ownership;
@@ -416,9 +412,6 @@ initialization, and preview layers respectively.
 [state]: ../sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/remote/wifi/WifiRemoteState.kt
 [screen]: ../sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiRemoteScreen.kt
 [android-wifi]: ../sharednew/src/androidMain/kotlin/com/sasch/cameragps/sharednew/remote/wifi/AndroidWifiRemote.kt
-[ios-wifi]: ../sharednew/src/iosMain/kotlin/com/sasch/cameragps/sharednew/remote/wifi/IosWifiRemote.kt
 [android-network]: ../sharednew/src/androidMain/kotlin/com/sasch/cameragps/sharednew/remote/wifi/AndroidCameraNetworkRequest.kt
-[ios-network]: ../sharednew/src/iosMain/kotlin/com/sasch/cameragps/sharednew/remote/wifi/IosCameraNetworkRequest.kt
 [android-dir]: ../sharednew/src/androidMain/kotlin/com/sasch/cameragps/sharednew/remote/wifi/
-[ios-dir]: ../sharednew/src/iosMain/kotlin/com/sasch/cameragps/sharednew/remote/wifi/
 [tests]: ../sharednew/src/commonTest/kotlin/com/sasch/cameragps/sharednew/remote/wifi/

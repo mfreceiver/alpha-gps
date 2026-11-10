@@ -15,12 +15,6 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
-// Personal customization switch: when false (default) no iOS targets, source sets,
-// KSP configurations or Apple plugins are registered, so Android builds never touch
-// them; all iOS sources stay on disk for clean upstream merges. Re-enable on a Mac
-// with -Palphagps.enableIos=true.
-val enableIos = providers.gradleProperty("alphagps.enableIos").orNull == "true"
-
 compose.resources {
     publicResClass = true
     generateResClass = always
@@ -250,35 +244,6 @@ kotlin {
         }
     }
 
-    // For iOS targets, this is also where you should
-    // configure native binary output. For more information, see:
-    // https://kotlinlang.org/docs/multiplatform-build-native-binaries.html#build-xcframeworks
-
-    // A step-by-step guide on how to include this library in an XCode
-    // project can be found here:
-    // https://developer.android.com/kotlin/multiplatform/migrate
-    val xcfName = "sharedKit"
-
-    /* iosX64 {
-         binaries.framework {
-             baseName = xcfName
-         }
-     }*/
-
-    if (enableIos) {
-        iosArm64 {
-            binaries.framework {
-                baseName = xcfName
-            }
-        }
-
-        iosSimulatorArm64 {
-            binaries.framework {
-                baseName = xcfName
-            }
-        }
-    }
-
     // Source set declarations.
     // Declaring a target automatically creates a source set with the same name. By default, the
     // Kotlin Gradle Plugin creates additional source sets that depend on each other, since it is
@@ -316,6 +281,7 @@ kotlin {
             }
         }
 
+
         androidMain {
             dependencies {
                 // Add Android-specific dependencies here. Note that this source set depends on
@@ -338,32 +304,12 @@ kotlin {
             }
         }
 
-        if (enableIos) {
-            iosTest {
-                kotlin.srcDir(generateHeifTestFixtures)
-            }
-        }
-
         if (sonyImageFixtures.isPresent) {
-            val fixtureTestTargets = if (enableIos) listOf("iosTest", "androidDeviceTest")
-            else listOf("androidDeviceTest")
-            for (target in fixtureTestTargets) {
+            for (target in listOf("androidDeviceTest")) {
                 getByName(target) {
                     kotlin.srcDir("src/cameraImageTest/kotlin")
                     kotlin.srcDir("src/${target.removeSuffix("Test")}CameraImageTest/kotlin")
                     kotlin.srcDir(generateSonyImageFixtures)
-                }
-            }
-        }
-
-        if (enableIos) {
-            iosMain {
-                dependencies {
-                // Add iOS-specific dependencies here. This a source set created by Kotlin Gradle
-                // Plugin (KGP) that each specific iOS target (e.g., iosX64) depends on as
-                // part of KMP’s default source set hierarchy. Note that this source set depends
-                // on common by default and will correctly pull the iOS artifacts of any
-                // KMP dependencies declared in commonMain.
                 }
             }
         }
@@ -373,10 +319,11 @@ kotlin {
 
 dependencies {
     add("kspAndroid", libs.androidx.room.compiler)
-    if (enableIos) {
-        add("kspIosSimulatorArm64", libs.androidx.room.compiler)
-        add("kspIosArm64", libs.androidx.room.compiler)
-    }
+    // Host (JVM) tests only. The android-attributed sqlite-bundled artifact that
+    // leaks in via commonMain carries Android natives; the -jvm variant extracts
+    // its own desktop native library, letting BundledSQLiteDriver (Room migration
+    // test) run on the JVM.
+    add("androidHostTestImplementation", "androidx.sqlite:sqlite-bundled-jvm:2.7.1")
 }
 
 room {

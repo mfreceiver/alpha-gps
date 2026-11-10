@@ -37,9 +37,10 @@ import kotlin.time.Duration.Companion.milliseconds
  * [RemoteControlCoordinator].
  *
  * This unifies what `LocationSenderService` (+ its adapter coordinators) did
- * on Android and what `IosBluetoothController`'s delegates/init-block did on
- * iOS. Platform shells only own sockets and lifecycle:
- * they feed connects/disconnects in via the transport and react to [events].
+ * on Android and what the iOS controller's delegates/init-block did on iOS
+ * (the iOS app has since been removed from this fork). Platform shells only
+ * own sockets and lifecycle: they feed connects/disconnects in via the
+ * transport and react to [events].
  *
  * Must be driven from a single-threaded [scope]
  * (`Dispatchers.Main.immediate` on both platforms).
