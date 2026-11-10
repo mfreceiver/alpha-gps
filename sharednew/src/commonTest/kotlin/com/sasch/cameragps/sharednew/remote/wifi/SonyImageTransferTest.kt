@@ -585,7 +585,7 @@ class SonyImageTransferTest : WifiLoggingTest() {
         assertEquals(null, transfer.thumbnail(3L))
         assertEquals(null, transfer.preview(3L))
         assertEquals(enumerated, transport.operations.size)
-        val pair = transfer.datePage("2024-05-01", 0)
+        val pair = transfer.dayPhotos("2024-05-01")
         assertEquals(setOf(1L, 2L), pair.photos.map { it.handle }.toSet())
         assertEquals(1, pair.totalObjects)
         assertEquals(false, pair.hasMore)
@@ -597,9 +597,9 @@ class SonyImageTransferTest : WifiLoggingTest() {
         assertTrue(transport.operations.any { it.first == 0x100a && it.second == listOf(1L) })
         // Downloads still resolve against the whole catalog, not just the displayed day.
         assertEquals(WifiImageTransferStatus.Saved, transfer.download(3L) {}.status)
-        assertEquals(listOf(3L), transfer.datePage("2024-05-02", 0).photos.map { it.handle })
-        assertEquals(listOf(4L), transfer.datePage(UNKNOWN_DATE_KEY, 0).photos.map { it.handle })
-        assertFailsWith<IllegalArgumentException> { transfer.datePage("2024-05-03", 0) }
+        assertEquals(listOf(3L), transfer.dayPhotos("2024-05-02").photos.map { it.handle })
+        assertEquals(listOf(4L), transfer.dayPhotos(UNKNOWN_DATE_KEY).photos.map { it.handle })
+        assertFailsWith<IllegalArgumentException> { transfer.dayPhotos("2024-05-03") }
         // Re-enumerating replaces the snapshot and forgets the displayed page.
         transfer.openCatalog()
         assertEquals(null, transfer.preview(4L))

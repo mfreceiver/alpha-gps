@@ -95,9 +95,14 @@ internal class CatalogSnapshot private constructor(
 
     fun capturesOn(dateKey: String): List<WifiCameraCapture>? = byDate[dateKey]
 
-    /** A slice of one day; the page's photos are what the session must treat as the displayed page. */
-    fun page(dateKey: String, offset: Int): CameraPhotoPage =
-        cameraPhotoPage(requireNotNull(byDate[dateKey]) { "Unknown catalog date" }, offset)
+    /**
+     * The whole day as one unpaged set (offset 0, never `hasMore`): its photos are what the session
+     * must treat as the displayed day — thumbnails and previews only answer for these handles.
+     */
+    fun day(dateKey: String): CameraPhotoPage {
+        val captures = requireNotNull(byDate[dateKey]) { "Unknown catalog date" }
+        return CameraPhotoPage(captures.flatMap { it.files }, 0, captures.size, false)
+    }
 
     companion object {
         val EMPTY = CatalogSnapshot(emptyList(), emptyMap())

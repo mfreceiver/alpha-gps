@@ -75,4 +75,17 @@ class ThumbnailBatchingTest {
         assertEquals(ThumbnailWindow(emptyList(), emptyList()), thumbnailWindow(listOf(1), 0, 40))
         assertEquals(listOf(0, 1), thumbnailWindow(listOf(-1, 0, 1, 1), 4, 2).visible)
     }
+
+    @Test
+    fun evictionDropsTheOldestOutsideTheDemandOnlyBeyondTheLimit() {
+        val cache = linkedMapOf<Long, Unit>().apply { (1L..5L).forEach { put(it, Unit) } }
+        assertEquals(emptyList(), thumbnailsToEvict(cache, emptySet(), limit = 5), "within the limit")
+        assertEquals(listOf(1L, 2L), thumbnailsToEvict(cache, emptySet(), limit = 3))
+        assertEquals(listOf(2L, 4L), thumbnailsToEvict(cache, setOf(1L, 3L), limit = 3), "demand is kept")
+        assertEquals(
+            listOf(5L), thumbnailsToEvict(cache, setOf(1L, 2L, 3L, 4L), limit = 1),
+            "never more than what is outside the demand"
+        )
+        assertEquals(300, THUMBNAIL_CACHE_LIMIT)
+    }
 }
