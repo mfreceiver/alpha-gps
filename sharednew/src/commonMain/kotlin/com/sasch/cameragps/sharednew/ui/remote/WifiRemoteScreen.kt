@@ -562,6 +562,24 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         logging("WifiRemoteViewModel").d { "Wi-Fi remote ViewModel cleared -> applying screen disposal policy" }
         controller.onRemoteScreenDisposed(identifier)
     }
+
+    // ---- Viewer metadata (M7) ---------------------------------------------------------------------
+
+    /**
+     * Asks for the metadata of the capture the viewer shows. Extended (a 64 KB read of the original)
+     * only when the info strip shows shooting parameters or the lens ([viewerNeedsExtendedMetadata]);
+     * otherwise the free catalog data only. The controller cancels the previous unfinished read, so
+     * calling this after every settled swipe is enough. No-op while the viewer is closed.
+     */
+    internal fun showViewerMetadata(options: ViewerInfoOptions) {
+        val capture = viewedCapture() ?: return
+        controller.loadMetadata(identifier, capture.metadataHandle, viewerNeedsExtendedMetadata(options))
+    }
+
+    /** Stops any pending metadata read and resets it (viewer closed or left composition). */
+    internal fun stopViewerMetadata() {
+        controller.cancelMetadata(identifier)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -580,6 +598,7 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
                      defaultDownloadFormatJpeg: Boolean = false,
                      gridOptions: WifiGridOptions = WifiGridOptions(),
                      onGridOptionsChange: (WifiGridOptions) -> Unit = {},
+                     viewerInfoOptions: ViewerInfoOptions = ViewerInfoOptions(),
                      onDownloadPhotos: (List<WifiPhotoDownload>) -> Unit = { downloads ->
                          viewModel.controller.downloadPhotos(viewModel.identifier, downloads)
                      }
@@ -680,7 +699,7 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
             )
 
             viewModel.viewedPhotoIndex != null && ready && state.photoBrowser.open ->
-                WifiPhotoViewer(state, viewModel, onDownloadPhotos, defaultDownloadFormatJpeg)
+                WifiPhotoViewer(state, viewModel, onDownloadPhotos, defaultDownloadFormatJpeg, viewerInfoOptions)
 
             state.photoBrowser.open -> Scaffold(
                 containerColor = Color.Transparent,

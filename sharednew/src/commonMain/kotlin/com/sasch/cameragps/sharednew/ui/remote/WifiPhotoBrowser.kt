@@ -29,7 +29,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -84,17 +83,12 @@ import cameragps.sharednew.generated.resources.wifi_remote_browser_failed
 import cameragps.sharednew.generated.resources.wifi_remote_batch_skip_hint
 import cameragps.sharednew.generated.resources.wifi_remote_batch_summary
 import cameragps.sharednew.generated.resources.wifi_remote_batch_summary_no_skip
-import cameragps.sharednew.generated.resources.wifi_remote_download_format_size
-import cameragps.sharednew.generated.resources.wifi_remote_photo_no_jpg
 import cameragps.sharednew.generated.resources.wifi_remote_preview_photo
 import cameragps.sharednew.generated.resources.wifi_remote_skip_no_jpg
 import cameragps.sharednew.generated.resources.wifi_remote_skip_saved
 import cameragps.sharednew.generated.resources.wifi_remote_skip_too_large
 import cameragps.sharednew.generated.resources.wifi_remote_conversion_failed
 import cameragps.sharednew.generated.resources.wifi_remote_converting_jpeg
-import cameragps.sharednew.generated.resources.wifi_remote_download
-import cameragps.sharednew.generated.resources.wifi_remote_download_saved
-import cameragps.sharednew.generated.resources.wifi_remote_download_too_large
 import cameragps.sharednew.generated.resources.wifi_remote_preview_unavailable
 import cameragps.sharednew.generated.resources.wifi_remote_storage_permission
 import cameragps.sharednew.generated.resources.wifi_remote_transfer_cancel
@@ -112,12 +106,10 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiTransferFailureReason
-import com.sasch.cameragps.sharednew.remote.wifi.WifiDownloadPlan
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
 import com.sasch.cameragps.sharednew.remote.wifi.WifiSkipReason
 import com.sasch.cameragps.sharednew.remote.wifi.formatBadge
 import com.sasch.cameragps.sharednew.remote.wifi.formatByteSize
-import com.sasch.cameragps.sharednew.remote.wifi.formatLabel
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import com.sasch.cameragps.sharednew.remote.wifi.shouldShowBatchSummary
 import com.sasch.cameragps.sharednew.remote.wifi.thumbnailWindow
@@ -624,44 +616,6 @@ private fun PhotoTile(image: ImageBitmap?, loading: Boolean) {
         } else {
             Text(stringResource(Res.string.wifi_remote_preview_unavailable),
                 style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(4.dp))
-        }
-    }
-}
-
-/**
- * The download button of one capture (viewer page / details), driven by the shared planner: one tap
- * downloads every file the plan lists (JPG-only: the JPEG; Original: all original files, JPG+RAW in one
- * go). A plan with nothing in it is never silent: the button is disabled and the reason is written
- * under it (no JPG, already saved, over the size limit).
- */
-@Composable
-internal fun PhotoDownloadAction(
-    plan: WifiDownloadPlan?, state: WifiRemoteState,
-    onDownload: (List<WifiPhotoDownload>) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val idle = !state.photoBrowser.loading && !state.imageTransfer.busy
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Button(
-            onClick = { if (plan != null) onDownload(plan.downloads) },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = idle && plan != null && plan.files.isNotEmpty(),
-        ) {
-            Text(
-                if (plan == null || plan.files.isEmpty()) stringResource(Res.string.wifi_remote_download)
-                else stringResource(
-                    Res.string.wifi_remote_download_format_size,
-                    plan.files.joinToString(" + ") { it.formatLabel }, formatByteSize(plan.totalBytes)
-                )
-            )
-        }
-        if (plan != null && plan.files.isEmpty()) {
-            when (plan.mainSkipReason) {
-                WifiSkipReason.NoJpeg -> Text(stringResource(Res.string.wifi_remote_photo_no_jpg))
-                WifiSkipReason.AlreadySaved -> Text(stringResource(Res.string.wifi_remote_download_saved))
-                WifiSkipReason.TooLarge -> Text(stringResource(Res.string.wifi_remote_download_too_large))
-                null -> Unit
-            }
         }
     }
 }
