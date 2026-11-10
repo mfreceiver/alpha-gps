@@ -72,7 +72,7 @@ PY
 }
 
 # assert_asset_url_trusted <url> <host[:port]> <owner/repo> <tag> <asset文件名>
-#   Primary forge 资产下载 URL 同源校验（纯函数、无网络），全部用 python3 urllib.parse
+#   主仓库资产下载 URL 同源校验（纯函数、无网络；GitHub 步骤的 browser_download_url 也复用），全部用 python3 urllib.parse
 #   解析（不用正则猜），fail-closed：
 #     - URL 非空、不含控制字符（<0x20/0x7f）、空白、反斜杠、'@'（userinfo 旁路）；
 #     - scheme 恰为 https；
@@ -373,5 +373,136 @@ assert_code_monotonic() {
     return 0
   done
   rl_warn "当前版本 $cur 之前找不到本定制版 tag——跳过 versionCode 单调性比较（仅警告）"
+  return 0
+}
+
+# ── 本地发布配置（主仓库参数外置；不入库）──────────────────────────────────────
+# 主发布仓库的主机/仓库路径/git 远端名不写进任何入库文件，改从本机 scripts/release.local.env
+# （已 .gitignore）或环境变量读取。文件格式：每行 `KEY=VALUE`；允许空行与以 '#' 开头的整行
+# 注释（注释内容可含中文，不被解释）；仅允许下列四个键；值只含 [A-Za-z0-9._:/-]；同键不得
+# 重复；不得含 CR/NUL/引号/空白/'$'/反引号/非 ASCII 值等。脚本**不 source 该文件**——逐行解析、逐值校验后再赋值，
+# 文件内容永远不会被当作 shell 代码执行（比“校验后 source”更严格）。
+#   ALPHAGPS_PRIMARY_HOST    主仓库 host[:port]
+#   ALPHAGPS_PRIMARY_REPO    主仓库 owner/repo
+#   ALPHAGPS_PRIMARY_REMOTE  本机 git 远端名（主仓库）
+#   ALPHAGPS_GITHUB_REMOTE   本机 git 远端名（GitHub；可选，默认 github）
+# 同名环境变量优先于文件（同样经过校验）。
+
+RL_CFG_EXAMPLE='示例（写入 scripts/release.local.env，该文件不入库；也可改用同名环境变量）：
+  ALPHAGPS_PRIMARY_HOST=forge.example.com:443
+  ALPHAGPS_PRIMARY_REPO=owner/alphagps
+  ALPHAGPS_PRIMARY_REMOTE=origin
+  # 可选（默认 github）：
+  # ALPHAGPS_GITHUB_REMOTE=github'
+
+# rl_cfg_py file <路径> → stdout 每行 KEY=VALUE（已校验）；rl_cfg_py value <KEY> <VALUE> → rc 0/1。
+# 任一违规 → stderr FAIL + 非零。
+rl_cfg_py() {
+  python3 - "$@" <<'PY'
+import re, sys
+
+CHARS = re.compile(r"[A-Za-z0-9._:/-]+")
+_remote = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+SHAPE = {
+    "ALPHAGPS_PRIMARY_HOST": re.compile(r"[A-Za-z0-9][A-Za-z0-9.-]*(:[0-9]{1,5})?"),
+    "ALPHAGPS_PRIMARY_REPO": re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*"),
+    "ALPHAGPS_PRIMARY_REMOTE": _remote,
+    "ALPHAGPS_GITHUB_REMOTE": _remote,
+}
+
+def die(msg):
+    sys.stderr.write(f"FAIL 本地发布配置: {msg}，fail-closed\n")
+    sys.exit(1)
+
+def check_value(key, val):
+    if key not in SHAPE:
+        die(f"不允许的键 '{key}'（仅允许 {', '.join(SHAPE)}）")
+    if not CHARS.fullmatch(val):
+        die(f"{key} 的值含非法字符（仅允许 [A-Za-z0-9._:/-]，且非空）")
+    if ".." in val:
+        die(f"{key} 的值含 '..'")
+    if not SHAPE[key].fullmatch(val):
+        die(f"{key} 的值形态非法（须以字母/数字开头，host[:port] / owner/repo / 远端名）")
+
+mode = sys.argv[1]
+if mode == "value":
+    check_value(sys.argv[2], sys.argv[3])
+    sys.exit(0)
+if mode != "file":
+    die(f"内部错误：未知模式 {mode}")
+try:
+    data = open(sys.argv[2], "rb").read()
+except OSError as e:
+    die(f"无法读取 {sys.argv[2]}: {e}")
+if b"\x00" in data:
+    die("文件含 NUL 字节")
+if b"\r" in data:
+    die("文件含 CR（要求纯 LF 行尾）")
+try:
+    text = data.decode("utf-8")
+except UnicodeDecodeError:
+    die("文件不是合法 UTF-8")
+lines = text.split("\n")
+if lines and lines[-1] == "":
+    lines.pop()
+seen = {}
+for n, line in enumerate(lines, 1):
+    if line == "" or line.startswith("#"):
+        continue
+    m = re.fullmatch(r"([A-Z][A-Z0-9_]*)=(.*)", line)
+    if not m:
+        die(f"第 {n} 行不是 KEY=VALUE 形式（键后不得有空白，不接受 export/引号）")
+    key, val = m.group(1), m.group(2)
+    check_value(key, val)
+    if key in seen:
+        die(f"第 {n} 行键 {key} 重复（首次出现在第 {seen[key]} 行）")
+    seen[key] = n
+    print(f"{key}={val}")
+PY
+}
+
+# rl_load_release_config <env文件路径> <need_primary: 1|0>
+#   解析顺序：同名环境变量（非空）> 文件 > 默认值（仅 GITHUB_REMOTE=github）。
+#   设置全局：PRIMARY_HOST / PRIMARY_REPO / PRIMARY_REMOTE / GITHUB_REMOTE。
+#   need_primary=1 且主仓库三项任一缺失 → fail-closed 并打印占位示例（绝不回退到任何内置真实值）。
+#   文件不存在不是错误（全部由环境变量提供即可）；文件存在但非法 → fail-closed。
+rl_load_release_config() {
+  local file=${1:-} need=${2:-1} line k v src missing=""
+  local -A fileval=()
+  local parsed
+  if [[ -n "$file" && ( -e "$file" || -L "$file" ) ]]; then
+    [[ -f "$file" && ! -L "$file" ]] \
+      || { rl_fail "本地发布配置: $file 必须是普通文件（非目录/符号链接），fail-closed"; return 1; }
+    parsed=$(rl_cfg_py file "$file") || return 1
+    while IFS= read -r line; do
+      [[ -n "$line" ]] || continue
+      fileval["${line%%=*}"]=${line#*=}
+    done <<<"$parsed"
+  fi
+  PRIMARY_HOST=""; PRIMARY_REPO=""; PRIMARY_REMOTE=""; GITHUB_REMOTE=""
+  for k in ALPHAGPS_PRIMARY_HOST ALPHAGPS_PRIMARY_REPO ALPHAGPS_PRIMARY_REMOTE ALPHAGPS_GITHUB_REMOTE; do
+    v=${!k:-}; src=env
+    if [[ -z "$v" ]]; then v=${fileval[$k]:-}; src=file; fi
+    if [[ -n "$v" && "$src" == env ]]; then
+      rl_cfg_py value "$k" "$v" || { rl_fail "本地发布配置: 环境变量 $k 的值非法"; return 1; }
+    fi
+    case "$k" in
+      ALPHAGPS_PRIMARY_HOST)   PRIMARY_HOST=$v ;;
+      ALPHAGPS_PRIMARY_REPO)   PRIMARY_REPO=$v ;;
+      ALPHAGPS_PRIMARY_REMOTE) PRIMARY_REMOTE=$v ;;
+      ALPHAGPS_GITHUB_REMOTE)  GITHUB_REMOTE=$v ;;
+    esac
+  done
+  [[ -n "$GITHUB_REMOTE" ]] || GITHUB_REMOTE=github
+  if [[ "$need" == 1 ]]; then
+    [[ -n "$PRIMARY_HOST" ]]   || missing+=" ALPHAGPS_PRIMARY_HOST"
+    [[ -n "$PRIMARY_REPO" ]]   || missing+=" ALPHAGPS_PRIMARY_REPO"
+    [[ -n "$PRIMARY_REMOTE" ]] || missing+=" ALPHAGPS_PRIMARY_REMOTE"
+    if [[ -n "$missing" ]]; then
+      rl_fail "本地发布配置缺失:${missing}（fail-closed；主仓库参数不内置于仓库）
+$RL_CFG_EXAMPLE"
+      return 1
+    fi
+  fi
   return 0
 }

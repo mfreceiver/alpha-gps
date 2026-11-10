@@ -7,8 +7,8 @@
 #   - 产物 app/build/outputs/apk/foss/release/app-foss-release.apk（签名可用时）归档为
 #     release/alpha-gps-<版本>.apk；release/ 只留最新版，SHA256SUMS 每次全量重生成
 #   - 断言：构建后必须调用 scripts/release_assert_apk.sh（签名者/证书钉定/包名/版本/权限）
-#   - 发布（--publish / --publish-only）：push 当前分支+tag 到 Primary forge remote "primary"
-#     （https://forge.example.com:443/owner/alphagps）→ Primary forge API 建 release（按 tag
+#   - 发布（--publish / --publish-only）：push 当前分支+tag 到主仓库 git 远端（PRIMARY_REMOTE）
+#     → 主仓库 /api/v1 REST 建 release（按 tag
 #     查询复用/404 新建）→ 上传本次 APK 单文件资产 → 资产对账
 #   - 硬红线：release 资产只上传本次 APK；任何 *.jks/*.keystore/*.p12/*.pass/*.key
 #     绝不上传；口令只经 env/curl 配置流传递，绝不进 argv/日志
@@ -38,9 +38,10 @@ SIGNING_KEYSTORE_PATH=$HOME/.config/dshdroid/signing/dshdroid.jks
 SIGNING_KEY_ALIAS=dshdroid
 PINNED_CERT_SHA256="18ff24c56bc52533c75ec709ea53497aa4323dac13c511979ac0a5fd7f9d97d7"
 # 本仓库 versionName 硬编码无 v 前缀（如 "0.1.0"），产物内嵌 versionName = v$VERSION_NAME
-PRIMARY_HOST=forge.example.com:443
-PRIMARY_REPO=owner/alphagps
-PRIMARY_REMOTE=primary
+# 主发布仓库参数（PRIMARY_HOST / PRIMARY_REPO / PRIMARY_REMOTE）不内置于仓库：从不入库的
+# scripts/release.local.env 或环境变量 ALPHAGPS_PRIMARY_HOST/REPO/REMOTE 读取（见
+# scripts/release_lib.sh rl_load_release_config；缺失 fail-closed 并打印占位示例）。
+LOCAL_ENV_FILE="$REPO_ROOT/scripts/release.local.env"
 
 # ─── 参数解析 ────────────────────────────────────────────────────────────
 ALLOW_DIRTY=0; PUBLISH=0; PUBLISH_ONLY=0; VERSION_NAME=""
@@ -60,6 +61,10 @@ done
 (( ALLOW_DIRTY + PUBLISH + PUBLISH_ONLY <= 1 )) || fail "--allow-dirty 仅限构建验证，不能与发布模式组合"
 [[ "$VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
   || fail "版本号必须是 X.Y.Z 语义化格式（如 1.7.3），当前: '${VERSION_NAME}'"
+
+# 主仓库参数外置：本机配置/环境变量，缺失或非法 fail-closed（本脚本所有模式都需要主仓库
+# 远端做版本唯一性/发布；-h/--help 已在上面提前退出，不受影响）
+rl_load_release_config "$LOCAL_ENV_FILE" 1 || exit 1
 
 EMBED_NAME="v$VERSION_NAME"          # 产物 manifest 期望 versionName（仓库惯例带 v）
 TAG_NAME="v$VERSION_NAME"
@@ -101,13 +106,13 @@ publish_release() {
   log "上传白名单: $APK_NAME（仅 APK；密钥/证书/口令文件绝不上传）"
 
   # 凭据预取（口令只经 stdin/配置流，绝不进 argv/环境）
-  log "Primary forge 凭据预取"
+  log "主仓库 凭据预取"
   local CRED GU GP
   CRED="$(printf 'protocol=https\nhost=%s\n\n' "$PRIMARY_HOST" | timeout 15 git credential fill)" \
-    || fail "Primary forge 凭据缺失/超时（git credential fill 15s 内未非交互返回 $PRIMARY_HOST 凭据）"
+    || fail "主仓库 凭据缺失/超时（git credential fill 15s 内未非交互返回 $PRIMARY_HOST 凭据）"
   GU="$(printf '%s' "$CRED" | sed -n 's/^username=//p')"
   GP="$(printf '%s' "$CRED" | sed -n 's/^password=//p')"
-  [[ -n "$GU" && -n "$GP" ]] || fail 'Primary forge 凭据不完整（username/password 缺失）'
+  [[ -n "$GU" && -n "$GP" ]] || fail '主仓库 凭据不完整（username/password 缺失）'
   local API="https://$PRIMARY_HOST/api/v1/repos/$PRIMARY_REPO"
   curl_config() {
     printf '%s\0%s\0' "$GU" "$GP" | python3 -c '
@@ -132,7 +137,7 @@ except Exception as e:
     sys.exit(1)
 PY
   }
-  # 兼容不回传资产 sha256 的 Primary forge：size 弱校验 + 全量下载重算 sha256 强校验（~20MB 可接受）
+  # 兼容不回传资产 sha256 的主仓库 forge：size 弱校验 + 全量下载重算 sha256 强校验（~20MB 可接受）
   verify_asset_by_download() {
     local vname="$1" vsize="$2" vdurl="$3" vlsha="$4"
     local dl="$WORK_DIR/asset_verify.bin" dsha lsize HTTP_CODE RC
@@ -149,7 +154,7 @@ PY
     RC=0
     # -q 必须是首参：忽略 ~/.curlrc（防本机配置注入 -L/代理改写目标）；--no-location
     # 显式不跟随重定向（3xx 表现为非 200 → fail-closed）；--proto 双保险确保即使被
-    # 重定向也只允许 https。Primary forge browser_download_url 直接返回附件字节，无 302 到
+    # 重定向也只允许 https。主仓库 browser_download_url 直接返回附件字节，无 302 到
     # 对象存储的场景，无需跟随。-K - 配置流只携带 user，不受 -q 影响。
     HTTP_CODE="$(curl_config | curl -q -K - -sS -m 300 --no-location --proto '=https' --proto-redir '=https' -o "$dl" -w '%{http_code}' "$vdurl")" || RC=$?
     [[ "$RC" -eq 0 && "$HTTP_CODE" == "200" ]] \
@@ -187,21 +192,21 @@ PY
   timeout 120 git push "$PRIMARY_REMOTE" "$BRANCH" || fail "git push $PRIMARY_REMOTE $BRANCH 失败"
   [[ "$SKIP_TAG_PUSH" -eq 1 ]] || { timeout 120 git push "$PRIMARY_REMOTE" "$TAG_NAME" || fail "git push $PRIMARY_REMOTE $TAG_NAME 失败"; }
 
-  # Primary forge release：publish-only 先按 tag 查询——200 复用 / 404 新建 / 其他 fail
-  log "Primary forge release"
+  # 主仓库 release：publish-only 先按 tag 查询——200 复用 / 404 新建 / 其他 fail
+  log "主仓库 release"
   local REL_ID="" GETF RC HTTP
   if [[ "$PUBLISH_ONLY" -eq 1 ]]; then
     GETF="$WORK_DIR/rel_get.json"; RC=0
     HTTP="$(curl_config | curl -K - -sS -m 30 -o "$GETF" -w '%{http_code}' "$API/releases/tags/$TAG_NAME")" || RC=$?
-    if [[ "$RC" -ne 0 ]]; then fail "Primary forge release 查询失败（curl rc=$RC, HTTP=${HTTP:-n/a}）"; fi
+    if [[ "$RC" -ne 0 ]]; then fail "主仓库 release 查询失败（curl rc=$RC, HTTP=${HTTP:-n/a}）"; fi
     if [[ "$HTTP" == "200" ]]; then
       REL_ID="$(python3 -c 'import json; print(json.load(open("'"$GETF"'")).get("id",""))' 2>/dev/null || true)"
-      [[ -n "$REL_ID" ]] || fail "Primary forge release 查询响应无 id"
-      log "Primary forge 已有 tag $TAG_NAME 的 release（id=$REL_ID）→ 复用并做资产对账"
+      [[ -n "$REL_ID" ]] || fail "主仓库 release 查询响应无 id"
+      log "主仓库 已有 tag $TAG_NAME 的 release（id=$REL_ID）→ 复用并做资产对账"
     elif [[ "$HTTP" != "404" ]]; then
-      fail "Primary forge release 查询失败: HTTP $HTTP"
+      fail "主仓库 release 查询失败: HTTP $HTTP"
     else
-      log "Primary forge 无 tag $TAG_NAME 的 release → 新建"
+      log "主仓库 无 tag $TAG_NAME 的 release → 新建"
     fi
   fi
   if [[ -z "$REL_ID" ]]; then
@@ -213,18 +218,18 @@ print(json.dumps({'tag_name': '$TAG_NAME', 'name': '$TAG_NAME', 'body': 'alpha-g
     RC=0
     HTTP="$(curl_config | curl -K - -sS -m 30 -o "$RESPF" -w '%{http_code}' \
       -X POST -H 'Content-Type: application/json' -d @"$BODYF" "$API/releases")" || RC=$?
-    if [[ "$RC" -ne 0 ]]; then head -c 300 "$RESPF" >&2 2>/dev/null || true; fail "Primary forge release 创建失败（curl rc=$RC, HTTP=${HTTP:-n/a}）"; fi
-    [[ "$HTTP" =~ ^2 ]] || { head -c 300 "$RESPF" >&2 2>/dev/null || true; fail "Primary forge release 创建失败: HTTP $HTTP"; }
+    if [[ "$RC" -ne 0 ]]; then head -c 300 "$RESPF" >&2 2>/dev/null || true; fail "主仓库 release 创建失败（curl rc=$RC, HTTP=${HTTP:-n/a}）"; fi
+    [[ "$HTTP" =~ ^2 ]] || { head -c 300 "$RESPF" >&2 2>/dev/null || true; fail "主仓库 release 创建失败: HTTP $HTTP"; }
     REL_ID="$(python3 -c 'import json; print(json.load(open("'"$RESPF"'")).get("id",""))' 2>/dev/null || true)"
-    [[ -n "$REL_ID" ]] || fail "Primary forge release 响应无 id（解析失败）"
+    [[ -n "$REL_ID" ]] || fail "主仓库 release 响应无 id（解析失败）"
   fi
 
   # 资产上传（幂等）：先查现有资产表；缺失 → 上传确认 2xx；同名 sha 一致 → 跳过
   local VF="$WORK_DIR/rel_assets.json" ASSET_LIST name lsha HTTP_CODE
   RC=0
   HTTP="$(curl_config | curl -K - -sS -m 30 -o "$VF" -w '%{http_code}' "$API/releases/$REL_ID")" || RC=$?
-  [[ "$RC" -eq 0 && "$HTTP" == "200" ]] || fail "Primary forge release 资产表查询失败: HTTP ${HTTP:-n/a}"
-  ASSET_LIST="$(parse_assets "$VF")" || fail "Primary forge release 资产表解析失败（fail-closed）"
+  [[ "$RC" -eq 0 && "$HTTP" == "200" ]] || fail "主仓库 release 资产表查询失败: HTTP ${HTTP:-n/a}"
+  ASSET_LIST="$(parse_assets "$VF")" || fail "主仓库 release 资产表解析失败（fail-closed）"
   lsha="$(awk -v f="release/$APK_NAME" '$2==f{print $1}' "$RELEASE_DIR/SHA256SUMS")"
   [[ -n "$lsha" ]] || fail "资产对账：release/$APK_NAME 无本地 SHA256SUMS 条目（fail-closed）"
   name="$APK_NAME"
@@ -266,7 +271,7 @@ print(json.dumps({'tag_name': '$TAG_NAME', 'name': '$TAG_NAME', 'body': 'alpha-g
     pass "资产对账通过: $name（远端 sha256 缺失，已下载重算一致）"
   fi
   rm -rf -- "$WORK_DIR"
-  log "Primary forge release: https://$PRIMARY_HOST/$PRIMARY_REPO/releases/tag/$TAG_NAME"
+  log "主仓库 release: https://$PRIMARY_HOST/$PRIMARY_REPO/releases/tag/$TAG_NAME"
 }
 
 # ─── 签名预检（fail-closed）──────────────────────────────────────────────

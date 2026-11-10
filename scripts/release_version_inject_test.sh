@@ -27,6 +27,11 @@ mkdir -p "$TMP/home/.gradle" "$TMP/home/.config/dshdroid/signing"
 printf 'DSH_KEYSTORE_PASSWORD=x\nDSH_KEY_PASSWORD=x\n' > "$TMP/home/.gradle/gradle.properties"
 printf 'placeholder\n' > "$TMP/home/.config/dshdroid/signing/dshdroid.jks"
 
+# 主仓库参数外置（scripts/release.local.env 不入库）：沙箱用环境变量注入占位值。
+export ALPHAGPS_PRIMARY_HOST=forge.example.com:443
+export ALPHAGPS_PRIMARY_REPO=owner/alphagps
+export ALPHAGPS_PRIMARY_REMOTE=primary
+
 PASS=0; FAILED=0
 check() { # check <desc> <expr...>
   local desc=$1; shift
@@ -141,7 +146,7 @@ setup_sandbox() { # $1=gradlew-body
   printf 'DSH_KEYSTORE_PASSWORD=x\nDSH_KEY_PASSWORD=x\n' > "$SB/home/.gradle/gradle.properties"
   printf 'placeholder\n' > "$SB/home/.config/dshdroid/signing/dshdroid.jks"
   ( cd "$SB" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm init )
-  # 本地 bare 仓库充当 "primary" 远端，ls-remote 走本地路径，无网络
+  # 本地 bare 仓库充当主仓库远端 "primary"，ls-remote 走本地路径，无网络
   rm -rf -- "$TMP/primary.git"
   git init -q --bare "$TMP/primary.git"
   ( cd "$SB" && git remote add primary "$TMP/primary.git" )
