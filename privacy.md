@@ -1,103 +1,64 @@
-**Privacy Policy**
+# Privacy Policy — AlphaGPS
 
-This privacy policy applies to the Alpha GPS for Geotagging app ("Application") for mobile devices,
-created by Saschl ("Service Provider") as an open‑source service. This service is provided "AS IS".
+**Publisher:** mfreceiver (AlphaGPS)
+**Effective date:** 2026-11-10
 
-**What Data Is Collected and Why**
+AlphaGPS is an open-source app (GPL-3.0), a personal customization of
+[Saschl/alpha-gps](https://github.com/Saschl/alpha-gps). It is not distributed through any app
+store.
 
-The Application is built with privacy by design. It **does not collect or sell any data for
-advertising, tracking, or other commercial purposes**.
+## In short
 
-The Application only processes data that is strictly necessary for:
+**AlphaGPS does not collect or upload any data.** There are no accounts, no analytics, no crash
+reporting, no advertising, and no SDKs that send data to third parties. Everything the app
+processes stays on your device or goes directly to the camera you paired with it.
 
-* Providing geotagging functionality for your Sony camera
-* Diagnosing crashes and technical problems
+## How data is used
 
-In particular, the Application may process:
+- **Location** — read only with your permission, and only to write GPS position and time to the
+  Sony camera you have paired with the app. Location is not uploaded anywhere and no location
+  history is kept.
+- **Bluetooth / nearby devices** — used only to discover, pair with and connect to your camera.
+  The app does not scan for or record other devices.
+- **Camera Wi-Fi / local network** — used only to connect to the camera's own Wi-Fi to browse and
+  download photos. Downloaded photos are saved to your device's gallery; nothing is uploaded.
+- **Notifications** — used only to show the connection and synchronization status of the
+  foreground service.
+- **Logs** — kept only on your device. The logs do not contain precise coordinates. Copying or
+  sharing logs is done by you, manually, and only if you decide to.
 
-* Basic technical information about your device and app, such as:
-    * Operating system version
-    * App version in use
-    * Device model
-    * Time spent in the Application
+## Permissions and what happens if you deny them
 
-* Diagnostic information for troubleshooting (via Sentry EU data centers), such as:
-    * Logs and stack traces
-    * Error messages and technical context at the time of a crash or failure
+| Permission | Purpose | If denied |
+|---|---|---|
+| Location (`ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION`, incl. background) | Read the phone's GPS position to write it to the camera | No location can be transmitted; photos will not be geotagged |
+| Bluetooth (`BLUETOOTH_CONNECT`) | Discover, pair with and connect to the camera | The camera cannot be found or connected |
+| Nearby Wi-Fi devices (`NEARBY_WIFI_DEVICES`) | Join/inspect the camera's Wi-Fi network | Automatic Wi-Fi connection to the camera is unavailable |
+| Local network / Wi-Fi state (`ACCESS_LOCAL_NETWORK`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_STATE`, `CHANGE_NETWORK_STATE`) | Connect to the camera's Wi-Fi and talk to it | Photos cannot be browsed or downloaded |
+| Notifications (`POST_NOTIFICATIONS`) | Show the foreground-service status notification | The status notification is not shown; syncing still works |
+| Companion device (`REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE`, `REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND`) | Keep the camera association and restart the service when the camera returns | Reconnection when the camera comes back is limited |
+| Boot (`RECEIVE_BOOT_COMPLETED`) | Restart the location service after reboot | Transmission does not resume after reboot |
+| Battery-optimization exemption (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`) | Keep the foreground service alive on aggressive vendor ROMs | Some devices may stop the service in the background |
+| Internet / network state | Talk to the camera over Wi-Fi; the app contacts no servers | Camera Wi-Fi features unavailable |
 
-**Location Data**
+Legacy permissions limited to old Android versions (`WRITE_EXTERNAL_STORAGE` up to SDK 28,
+`BLUETOOTH`/`BLUETOOTH_ADMIN` up to SDK 30) remain declared in the manifest for historical
+builds; current installations (Android 12+) do not use them.
 
-The Application collects your device's location only to provide geotagging functionality:
+## Data retention and deletion
 
-* Location is used to transfer GPS coordinates to your connected Sony camera.
-* Location data is **not** permanently stored by the Service Provider.
-* Location data is **not** transmitted to any third party other than as part of anonymous crash logs
-  where it is not needed and therefore not included.
-* Location collection stops as soon as the connection to the camera is disconnected.
+All app data (settings, associations, logs) is stored locally on your device. Uninstalling the
+app or clearing its app data deletes it. Photos you have downloaded belong to your device's
+gallery and are managed by you.
 
-**Crash and Problem Analysis (Sentry)**
+## Changes to this policy
 
-To keep the Application stable and to fix problems, anonymized diagnostic data may be sent to the
-Sentry error reporting service, hosted in EU data centers.
+This document is updated together with the app; changes are recorded in the public repository
+commit history.
 
-* Data is used **only** to analyze crashes and technical problems.
-* No personal data such as precise location history, device MAC addresses, or IP addresses is
-  collected or stored for profiling.
-* Data is **never** used for advertising, tracking, or sold to third parties.
+## Contact
 
-You can opt out of this diagnostic collection at any time by disabling the troubleshooting/error
-reporting feature in the Application settings.
+Questions or feedback: open an issue at either repository —
 
-For more details about Sentry’s handling of data, please see:
-
-* [Sentry Privacy Policy](https://sentry.io/privacy/)
-
-The Application may also use:
-
-* [Google Play Services](https://www.google.com/policies/privacy/)
-
-Please refer to their privacy policies for details about their processing.
-
-**Opt-Out Rights**
-
-You can stop all collection and processing of information by the Application at any time by:
-
-* Disabling the troubleshooting/error reporting feature in the settings, and/or
-* Uninstalling the Application using the standard process on your device or app store.
-
-**Children**
-
-The Application is not directed to children under the age of 13, and the Service Provider does not
-knowingly collect personally identifiable information from children under 13 years of age. If you
-believe that a child under 13 has provided personal information, please contact the Service Provider
-so that it can be removed.
-
-**Security**
-
-The Service Provider takes the protection of your data seriously and implements reasonable technical
-and organizational measures to safeguard the diagnostic information that is processed and
-maintained.
-
-**Changes**
-
-This Privacy Policy may be updated from time to time. Any changes will be published on this page.
-Continued use of the Application after changes are posted will be treated as acceptance of the
-updated Privacy Policy.
-
-This privacy policy is effective as of 2025-12-09.
-
-**Your Consent**
-
-By using the Application, you consent to the processing of your information as described in this
-Privacy Policy, now and as amended from time to time.
-
-**Contact Us**
-
-If you have any questions about this Privacy Policy or privacy while using the Application, please
-contact the Service Provider at: **saschl.ra@web.de**.
-
----
-
-This privacy policy page was originally generated
-by [App Privacy Policy Generator](https://app-privacy-policy-generator.nisrulz.com/) and has been
-adapted to reflect the Application's actual data usage and strong privacy focus.
+- https://github.com/mfreceiver/alpha-gps/issues
+- https://forge.example.com:443/owner/alphagps/issues
