@@ -22,7 +22,6 @@ import timber.log.Timber
 import java.util.Locale
 
 
-@RequiresApi(Build.VERSION_CODES.S)
 class CameraDeviceCompanionService : CompanionDeviceService() {
 
     private companion object {

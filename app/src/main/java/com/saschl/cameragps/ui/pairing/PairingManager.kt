@@ -265,9 +265,8 @@ fun startDevicePresenceObservation(
             ObservingDevicePresenceRequest.Builder().setAssociationId(device.id).build()
         )
     } else {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            deviceManager.startObservingDevicePresence(device.address)
-        }
+        @Suppress("DEPRECATION")
+        deviceManager.startObservingDevicePresence(device.address)
     }
 }
 

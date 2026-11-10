@@ -12,7 +12,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.core.content.ContextCompat
 import androidx.test.platform.app.InstrumentationRegistry
 import cameragps.sharednew.generated.resources.Res
-import cameragps.sharednew.generated.resources.background_location_required_error
 import cameragps.sharednew.generated.resources.step2_title
 import com.saschl.cameragps.ui.EnhancedLocationPermissionBox
 import com.saschl.cameragps.utils.PreferencesManager
@@ -38,9 +37,7 @@ class LocationPermissionBoxTest {
         val permissions = buildList {
             add(Manifest.permission.ACCESS_COARSE_LOCATION)
             add(Manifest.permission.ACCESS_FINE_LOCATION)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                add(Manifest.permission.BLUETOOTH_CONNECT)
-            }
+            add(Manifest.permission.BLUETOOTH_CONNECT)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.POST_NOTIFICATIONS)
             }
@@ -60,7 +57,7 @@ class LocationPermissionBoxTest {
     }
 
     @Test
-    fun foregroundGrantRequiresSeparateBackgroundAccessOnlyFromAndroid10() {
+    fun foregroundGrantRequiresSeparateBackgroundAccess() {
         assertEquals(
             "Run with background location ungranted to exercise the permission gate",
             PackageManager.PERMISSION_DENIED,
@@ -70,21 +67,13 @@ class LocationPermissionBoxTest {
             ),
         )
         lateinit var backgroundStep: String
-        lateinit var backgroundError: String
         compose.setContent {
             backgroundStep = stringResource(Res.string.step2_title)
-            backgroundError = stringResource(Res.string.background_location_required_error)
             MaterialTheme {
                 EnhancedLocationPermissionBox { Text("Permission-gated content") }
             }
         }
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            compose.onNodeWithText("Permission-gated content").assertIsDisplayed()
-            compose.onNodeWithText(backgroundStep).assertDoesNotExist()
-            compose.onNodeWithText(backgroundError).assertDoesNotExist()
-        } else {
-            compose.onNodeWithText("Permission-gated content").assertDoesNotExist()
-            compose.onNodeWithText(backgroundStep).assertIsDisplayed()
-        }
+        compose.onNodeWithText("Permission-gated content").assertDoesNotExist()
+        compose.onNodeWithText(backgroundStep).assertIsDisplayed()
     }
 }
