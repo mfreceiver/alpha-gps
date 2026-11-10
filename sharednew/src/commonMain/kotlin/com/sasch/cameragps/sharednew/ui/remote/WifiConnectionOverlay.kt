@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
+import cameragps.sharednew.generated.resources.c1_open_wifi_settings
 import cameragps.sharednew.generated.resources.camera_24px
 import cameragps.sharednew.generated.resources.cancel
 import cameragps.sharednew.generated.resources.check_24px
@@ -127,10 +128,12 @@ internal fun wifiFailureText(failure: WifiRemoteFailure?): StringResource = when
  * Full-screen connection overlay (design v3, connection frames): one fixed-size glass card with
  * three fixed slots — icon + step ring, title + two-line hint, one action — so nothing jumps between
  * frames. No dividers, no help or retry: a failure is left by tapping anywhere, Back or after
- * [CONNECTION_FAILURE_AUTO_DISMISS_MS]; only a missing permission offers "grant" (and waits).
+ * [CONNECTION_FAILURE_AUTO_DISMISS_MS]; only a missing permission offers "grant" (and waits), and a
+ * disabled phone Wi-Fi additionally offers "open Wi-Fi settings" (still auto-dismissing: coming
+ * back from the settings panel and tapping the entry again is the retry).
  *
  * [onCancel] ends the attempt (cancel button while connecting); [onDismiss] leaves a finished
- * (failed / unsupported) attempt.
+ * (failed / unsupported) attempt; [onWifiSettings] opens the system Wi-Fi settings.
  */
 @Composable
 internal fun WifiConnectionOverlay(
@@ -140,6 +143,7 @@ internal fun WifiConnectionOverlay(
     onDismiss: () -> Unit,
     onAppSettings: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    onWifiSettings: (() -> Unit)? = null,
 ) {
     val ended = frame is WifiConnectionFrame.Failed || frame is WifiConnectionFrame.Unsupported
     val permission = frame.needsPermissionAction() && onAppSettings != null
@@ -182,7 +186,7 @@ internal fun WifiConnectionOverlay(
             }
             Spacer(Modifier.height(8.dp))
             Box(Modifier.fillMaxWidth().height(ActionSlot), contentAlignment = Alignment.Center) {
-                FrameAction(frame, permission, onCancel, onAppSettings)
+                FrameAction(frame, permission, onCancel, onAppSettings, onWifiSettings)
             }
         }
     }
@@ -293,6 +297,7 @@ private fun SpinningRing(color: Color) {
 @Composable
 private fun FrameAction(
     frame: WifiConnectionFrame, permission: Boolean, onCancel: () -> Unit, onAppSettings: (() -> Unit)?,
+    onWifiSettings: (() -> Unit)?,
 ) {
     when (frame) {
         is WifiConnectionFrame.Progress, WifiConnectionFrame.Ready -> {
@@ -304,15 +309,21 @@ private fun FrameAction(
                 modifier = Modifier.fillMaxWidth().alpha(visible),
             )
         }
-        is WifiConnectionFrame.Failed, WifiConnectionFrame.Unsupported -> if (permission && onAppSettings != null) {
-            CapsuleButton(
+        is WifiConnectionFrame.Failed, WifiConnectionFrame.Unsupported -> when {
+            permission && onAppSettings != null -> CapsuleButton(
                 text = stringResource(Res.string.mw_connect_grant), onClick = onAppSettings,
                 modifier = Modifier.fillMaxWidth(),
             )
-        } else Text(
-            stringResource(Res.string.mw_connect_tap_to_return), style = MaterialTheme.typography.bodyMedium,
-            color = AlphaTheme.colors.onSurfaceVariant,
-        )
+            frame is WifiConnectionFrame.Failed && frame.failure == WifiRemoteFailure.WifiDisabled &&
+                onWifiSettings != null -> CapsuleButton(
+                text = stringResource(Res.string.c1_open_wifi_settings), onClick = onWifiSettings,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            else -> Text(
+                stringResource(Res.string.mw_connect_tap_to_return), style = MaterialTheme.typography.bodyMedium,
+                color = AlphaTheme.colors.onSurfaceVariant,
+            )
+        }
         WifiConnectionFrame.Closing -> Unit
     }
 }
