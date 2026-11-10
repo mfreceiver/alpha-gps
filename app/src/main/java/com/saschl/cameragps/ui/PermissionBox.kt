@@ -105,14 +105,11 @@ fun EnhancedLocationPermissionBox(
             Manifest.permission.BLUETOOTH_CONNECT,
             Manifest.permission.POST_NOTIFICATIONS
         )
-    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    } else {
         listOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.BLUETOOTH_CONNECT,
         )
-    } else {
-        listOf(Manifest.permission.ACCESS_FINE_LOCATION,
-        Manifest.permission.BLUETOOTH)
     }
 
     var hasUserDeniedPermission by remember { mutableStateOf(false) }
@@ -125,18 +122,15 @@ fun EnhancedLocationPermissionBox(
         }
     }
 
-    val backgroundLocationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+    val backgroundLocationPermission =
         rememberPermissionState(Manifest.permission.ACCESS_BACKGROUND_LOCATION) { granted ->
             if (!granted) {
                 hasUserDeniedPermission = true
             }
         }
-    } else {
-        null
-    }
 
     val allForegroundGranted = foregroundPermissionState.allPermissionsGranted
-    val backgroundGranted = backgroundLocationPermission?.status?.isGranted != false
+    val backgroundGranted = backgroundLocationPermission.status.isGranted
     val allPermissionsGranted = allForegroundGranted && backgroundGranted
     val shouldAllowContent = allPermissionsGranted || ignorePermissions
 
@@ -171,7 +165,7 @@ fun EnhancedLocationPermissionBox(
 @Composable
 private fun EnhancedPermissionScreen(
     foregroundPermissionState: MultiplePermissionsState,
-    backgroundLocationPermission: PermissionState?,
+    backgroundLocationPermission: PermissionState,
     allForegroundGranted: Boolean,
     hasUserDeniedPermission: Boolean,
     onContinueAnyway: () -> Unit,
@@ -190,7 +184,7 @@ private fun EnhancedPermissionScreen(
             rejectedPermissionDescriptions.joinToString()
         )
 
-        allForegroundGranted && backgroundLocationPermission?.status?.isGranted == false ->
+        allForegroundGranted && !backgroundLocationPermission.status.isGranted ->
             stringResource(Res.string.background_location_required_error)
 
         else -> ""
@@ -273,8 +267,8 @@ private fun EnhancedPermissionScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Step 2: Background location is a separate permission only on Android 10+.
-        if (allForegroundGranted && backgroundLocationPermission != null) {
+        // Step 2: Background location is a separate permission (Android 10+).
+        if (allForegroundGranted) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -384,7 +378,7 @@ private fun EnhancedPermissionScreen(
         )
     }
 
-    if (showBackgroundRationale && backgroundLocationPermission != null) {
+    if (showBackgroundRationale) {
         AlertDialog(
             onDismissRequest = { showBackgroundRationale = false },
             title = { Text(stringResource(Res.string.background_location_access_title)) },
@@ -421,8 +415,7 @@ private fun EnhancedPermissionScreen(
 }
 
 /**
- * Gates [content] behind the BLUETOOTH_CONNECT runtime permission (API 31+).
- * On older API levels the content is shown directly.
+ * Gates [content] behind the BLUETOOTH_CONNECT runtime permission.
  * Shows a permission-request UI when the permission is missing, with an optional
  * "continue anyway" escape hatch (consistent with [EnhancedLocationPermissionBox]).
  */
@@ -438,14 +431,11 @@ fun BluetoothConnectPermissionGate(
         mutableStateOf(PreferencesManager.isPermissionsIgnored(context))
     }
 
-    // Always call rememberPermissionState unconditionally (Compose rule).
-    // On API < 31 the permission is auto-granted, so isGranted == true there.
     val bluetoothConnectPermission = rememberPermissionState(
         permission = Manifest.permission.BLUETOOTH_CONNECT
     )
 
-    val isGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.S
-            || bluetoothConnectPermission.status.isGranted
+    val isGranted = bluetoothConnectPermission.status.isGranted
 
     Box(
         modifier = Modifier

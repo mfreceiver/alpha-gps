@@ -9,7 +9,6 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.companion.CompanionDeviceManager
-import android.os.Build
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -415,9 +414,8 @@ class LocationSenderService : LifecycleService() {
         if (associatedName != null) return associatedName
 
         val bluetoothName = runCatching {
-            // BLUETOOTH_CONNECT gates BluetoothDevice.name only from Android 12 on.
-            val canConnect = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-                    checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
+            // BLUETOOTH_CONNECT gates BluetoothDevice.name.
+            val canConnect = checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
                     PackageManager.PERMISSION_GRANTED
             if (canConnect) bluetoothManager.adapter.getRemoteDevice(upperMac).name.usable() else null
         }.getOrNull()

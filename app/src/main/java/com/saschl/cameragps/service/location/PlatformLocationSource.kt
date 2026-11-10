@@ -110,21 +110,17 @@ class PlatformLocationSource(
 
         locationListener = listener
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (locManager.isProviderEnabled(LocationManager.FUSED_PROVIDER)) {
-                locManager.requestLocationUpdates(
-                    LocationManager.FUSED_PROVIDER,
-                    LOCATION_UPDATE_INTERVAL_MS,
-                    10f,
-                    listener,
-                    Looper.getMainLooper(),
-                )
-                Timber.i("Started location updates from FUSED provider (Android 12+)")
-            } else {
-                Timber.w("FUSED provider not available, falling back to GPS")
-                requestGpsLocationUpdates(locManager, listener)
-            }
+        if (locManager.isProviderEnabled(LocationManager.FUSED_PROVIDER)) {
+            locManager.requestLocationUpdates(
+                LocationManager.FUSED_PROVIDER,
+                LOCATION_UPDATE_INTERVAL_MS,
+                10f,
+                listener,
+                Looper.getMainLooper(),
+            )
+            Timber.i("Started location updates from FUSED provider")
         } else {
+            Timber.w("FUSED provider not available, falling back to GPS")
             requestGpsLocationUpdates(locManager, listener)
         }
     }
