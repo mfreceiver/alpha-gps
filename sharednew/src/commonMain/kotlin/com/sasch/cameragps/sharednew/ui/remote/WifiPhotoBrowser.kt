@@ -11,6 +11,12 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -28,9 +34,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -44,6 +48,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -57,12 +63,21 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_deselect
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_select
 import cameragps.sharednew.generated.resources.wifi_remote_batch_progress
 import cameragps.sharednew.generated.resources.check_24px
+import cameragps.sharednew.generated.resources.close_24px
+import cameragps.sharednew.generated.resources.dismiss_button
+import cameragps.sharednew.generated.resources.download_24px
+import cameragps.sharednew.generated.resources.mw_lock_24px
+import cameragps.sharednew.generated.resources.mw_protected
+import cameragps.sharednew.generated.resources.wifi_remote_batch_download_jpg
+import cameragps.sharednew.generated.resources.wifi_remote_batch_download_none
+import cameragps.sharednew.generated.resources.wifi_remote_batch_download_size
 import cameragps.sharednew.generated.resources.search_24px
 import cameragps.sharednew.generated.resources.wifi_remote_browser_empty
 import cameragps.sharednew.generated.resources.wifi_remote_browser_failed
@@ -106,6 +121,15 @@ import com.sasch.cameragps.sharednew.remote.wifi.formatLabel
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import com.sasch.cameragps.sharednew.remote.wifi.shouldShowBatchSummary
 import com.sasch.cameragps.sharednew.remote.wifi.thumbnailWindow
+import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleSize
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassFloatingBar
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
+import com.sasch.cameragps.sharednew.ui.components.glass.InfoTag
+import com.sasch.cameragps.sharednew.ui.components.glass.InfoTagStyle
+import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import cameragps.sharednew.generated.resources.wifi_remote_back_busy
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -117,6 +141,7 @@ internal fun WifiPhotoBrowser(
     state: WifiRemoteState, viewModel: WifiRemoteViewModel,
     onDownload: (List<WifiPhotoDownload>) -> Unit,
     defaultDownloadFormatJpeg: Boolean = false,
+    gridOptions: WifiGridOptions = WifiGridOptions(),
 ) {
     val controller = viewModel.controller
     val identifier = viewModel.identifier
@@ -129,20 +154,23 @@ internal fun WifiPhotoBrowser(
     val busy = browser.loading || transfer.busy
     val selectedIds = viewModel.selectedPhotoIds
     val selecting = selectedIds.isNotEmpty()
+    val gridSize = gridOptions.gridSize
     val gridState = rememberLazyGridState()
-    var gridOffset by rememberSaveable { mutableStateOf(browser.offset) }
-    LaunchedEffect(browser.offset) {
-        if (gridOffset != browser.offset) {
+    // A different day (or the legacy flat list) starts at the top; returning from the viewer keeps
+    // the scroll position because the day key does not change.
+    var gridDay by rememberSaveable { mutableStateOf(browser.dateKey) }
+    LaunchedEffect(browser.dateKey) {
+        if (gridDay != browser.dateKey) {
             gridState.scrollToItem(0)
-            gridOffset = browser.offset
+            gridDay = browser.dateKey
         }
     }
     // The grid reports where the user is looking so the thumbnail loader serves that area first.
     // A header item (error/empty text) shifts the capture indices by one.
     val headerItems = if (browser.failed || captures.isEmpty()) 1 else 0
     val datesScreen = browser.grouped && browser.dateKey == null
-    // Long-press-and-drag range selection. The pointer handler is keyed on the page, never on the
-    // selection, and reads the live page through rememberUpdatedState.
+    // Long-press-and-drag range selection. The pointer handler is keyed on the day, never on the
+    // selection, and reads the live day through rememberUpdatedState.
     val latestCaptures by rememberUpdatedState(captures)
     val latestHeader by rememberUpdatedState(headerItems)
     val density = LocalDensity.current
@@ -167,7 +195,7 @@ internal fun WifiPhotoBrowser(
         if (hit != null) drag.end = hit.captureIndex
         return viewModel.updateRangeSelection(session, drag.end)
     }
-    // Resting at the top/bottom edge scrolls the current page slowly; it never turns pages.
+    // Resting at the top/bottom edge scrolls the day slowly; a range never crosses into another day.
     LaunchedEffect(dragActive) {
         if (!dragActive) return@LaunchedEffect
         val edge = with(density) { 56.dp.toPx() }
@@ -183,9 +211,10 @@ internal fun WifiPhotoBrowser(
     }
     val actionsEnabled = !busy && !dragActive
     if (browser.grouped) {
-        // Date pages load only what the viewport shows: the visible captures (stable keys, header
-        // filtered out) plus a row or two of margin. The report is tied to the page revision, so a
-        // layout of an earlier page can never steer the loader of the current one.
+        // A day loads only what the viewport shows: the visible captures (stable keys, header
+        // filtered out) plus two rows of margin; scrolling replaces the demand, so requests for tiles
+        // that scrolled away are dropped before they reach the camera. The report is tied to the
+        // page revision, so a layout of an earlier day can never steer the loader of the current one.
         LaunchedEffect(gridState, headerItems, browser.pageRevision, captures, datesScreen) {
             if (datesScreen) return@LaunchedEffect
             snapshotFlow {
@@ -207,240 +236,317 @@ internal fun WifiPhotoBrowser(
             }
         }
     }
-    // JPG-only: the batch is the selection's JPGs; RAW-only/saved/oversize captures are skipped.
-    // The select/download actions live in the top bar (WifiPhotoBrowserTopBar); the plan is
-    // shared through the ViewModel so both show the same numbers.
+    // The batch covers the whole cross-day selection snapshot under the settings' download format:
+    // JPG-only fetches the JPGs (captures without one are skipped and counted), Original everything.
     val plan = viewModel.batchPlan(policy, state)
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (selecting && plan.skippedCount > 0) Text(
-            stringResource(
-                Res.string.wifi_remote_batch_skip_hint,
-                plan.skippedCount, skipReasonsText(plan.skipped)
-            ),
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(horizontal = 8.dp)
-        )
-        val summary = viewModel.batchSummary
-        // Completion is latched in the ViewModel (noteBatchCompletion), so a preview
-        // round-trip — which clears the transfer result — keeps the finished batch line.
-        // A busy/failed/cancelled transfer always shows its own status instead.
-        if (summary != null && shouldShowBatchSummary(viewModel.batchSummarySettled(), transfer)) {
-            Text(
-                if (summary.skippedCount == 0) stringResource(
-                    Res.string.wifi_remote_batch_summary_no_skip, summary.downloaded
-                ) else stringResource(
-                    Res.string.wifi_remote_batch_summary, summary.downloaded,
-                    summary.skippedCount, skipReasonsText(summary.skipped)
-                ),
-                style = MaterialTheme.typography.bodyMedium
-            )
-        } else PhotoTransferStatus(transfer)
-        if (busy) TextButton(onClick = { controller.cancelPhotoOperation(identifier) }) {
-            Text(stringResource(Res.string.wifi_remote_transfer_cancel))
-        }
-        // One progress indicator for everything that is loading: a catalog page or the
-        // thumbnails. An active transfer takes precedence — the thumbnail loader is
-        // held during it anyway, so its "loading" is a paused wait, not progress.
-        Box(Modifier.fillMaxWidth().height(4.dp)) {
-            if (browserProgressVisible(browser.loading, thumbnailsLoading, transfer.busy)) {
-                LinearProgressIndicator(Modifier.fillMaxWidth())
+    val summary = viewModel.batchSummary
+    // Completion is latched in the ViewModel (noteBatchCompletion), so a preview round-trip — which
+    // clears the transfer result — keeps the finished batch line. A busy/failed/cancelled transfer
+    // always shows its own status instead.
+    val showSummary = summary != null && shouldShowBatchSummary(viewModel.batchSummarySettled(), transfer)
+    val showTransfer = transfer.busy || transfer.status != WifiImageTransferStatus.Idle
+    val bottomBar = !datesScreen && (selecting || showSummary || showTransfer)
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            // One thin progress line for everything that is loading: the catalog or the thumbnails.
+            // An active transfer takes precedence — the thumbnail loader is held during it anyway.
+            Box(Modifier.fillMaxWidth().height(3.dp)) {
+                if (browserProgressVisible(browser.loading, thumbnailsLoading, transfer.busy)) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
             }
-        }
-        if (viewModel.backBlockedNotice) {
-            Text(
-                stringResource(Res.string.wifi_remote_back_busy),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(horizontal = 8.dp)
-            )
-            LaunchedEffect(Unit) {
-                delay(BackNoticeMillis)
-                viewModel.dismissBackBlockedNotice()
+            if (viewModel.backBlockedNotice) {
+                Text(
+                    stringResource(Res.string.wifi_remote_back_busy),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AlphaTheme.colors.error,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+                LaunchedEffect(Unit) {
+                    delay(BackNoticeMillis)
+                    viewModel.dismissBackBlockedNotice()
+                }
             }
-        }
-        if (datesScreen) {
-            WifiPhotoDateList(
-                browser, enabled = !busy,
-                onOpen = viewModel::openDate,
-                onRetry = { controller.browseDates(identifier) },
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-            )
-        } else {
-            LazyVerticalGrid(
-                state = gridState,
-                // As many columns as fit the width (4 on a 360 dp phone, more on wider screens).
-                columns = GridCells.Adaptive(minSize = TileMinSize),
-                modifier = Modifier.weight(1f).then(
-                    if (gestureEnabled) Modifier.pointerInput(gestureEnabled, browser.pageRevision) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                            val hit = hitTestTile(visibleTiles(), down.position.x, down.position.y, actionPx)
-                            // The checkbox / magnifier corners stay independent actions.
-                            if (hit == null || hit.zone != TileZone.Body) return@awaitEachGesture
-                            val pressed = awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
-                            val anchorId = latestCaptures.getOrNull(hit.captureIndex)?.id ?: return@awaitEachGesture
-                            val session = viewModel.beginRangeSelection(anchorId) ?: return@awaitEachGesture
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            drag.start(session, hit.captureIndex, pressed.position.x, pressed.position.y)
-                            dragActive = true
-                            pressed.consume()
-                            try {
-                                var following = true
-                                while (true) {
-                                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                                    // Swallow everything until the finger lifts: the tile click and
-                                    // the grid scroll must not react to a drag selection.
-                                    event.changes.forEach { it.consume() }
-                                    if (!change.pressed) break
-                                    if (following) {
-                                        drag.x = change.position.x
-                                        drag.y = change.position.y
-                                        following = dragUpdate()
+            if (datesScreen) {
+                WifiPhotoDateList(
+                    browser, enabled = !busy,
+                    onOpen = viewModel::openDate,
+                    onRetry = { controller.browseDates(identifier) },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+            } else {
+                val tileShape = RoundedCornerShape(gridSize.cornerDp.dp)
+                LazyVerticalGrid(
+                    state = gridState,
+                    // Small / medium / large: 4 / 3 / 2 columns on a phone, more on wider windows.
+                    columns = GridCells.Adaptive(minSize = gridSize.minTileDp.dp),
+                    modifier = Modifier.weight(1f).then(
+                        if (gestureEnabled) Modifier.pointerInput(gestureEnabled, browser.pageRevision) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                val hit = hitTestTile(visibleTiles(), down.position.x, down.position.y, actionPx)
+                                // The checkbox / magnifier corners stay independent actions.
+                                if (hit == null || hit.zone != TileZone.Body) return@awaitEachGesture
+                                val pressed = awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
+                                val anchorId = latestCaptures.getOrNull(hit.captureIndex)?.id ?: return@awaitEachGesture
+                                val session = viewModel.beginRangeSelection(anchorId) ?: return@awaitEachGesture
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                drag.start(session, hit.captureIndex, pressed.position.x, pressed.position.y)
+                                dragActive = true
+                                pressed.consume()
+                                try {
+                                    var following = true
+                                    while (true) {
+                                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                        // Swallow everything until the finger lifts: the tile click and
+                                        // the grid scroll must not react to a drag selection.
+                                        event.changes.forEach { it.consume() }
+                                        if (!change.pressed) break
+                                        if (following) {
+                                            drag.x = change.position.x
+                                            drag.y = change.position.y
+                                            following = dragUpdate()
+                                        }
                                     }
+                                } finally {
+                                    drag.clear()
+                                    dragActive = false
+                                    viewModel.endRangeSelection()
                                 }
-                            } finally {
-                                drag.clear()
-                                dragActive = false
-                                viewModel.endRangeSelection()
                             }
-                        }
-                    } else Modifier
-                ),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                if (headerItems > 0) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (browser.failed) Text(
-                                stringResource(Res.string.wifi_remote_browser_failed),
-                                color = MaterialTheme.colorScheme.error
+                        } else Modifier
+                    ),
+                    contentPadding = PaddingValues(
+                        start = GridMargin, end = GridMargin, top = 4.dp,
+                        // Room for the floating download bar so the last row stays reachable.
+                        bottom = (if (bottomBar) FloatingBarSpace else 8.dp) + navBottom,
+                    ),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    if (headerItems > 0) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Text(
+                                stringResource(
+                                    if (browser.failed) Res.string.wifi_remote_browser_failed
+                                    else Res.string.wifi_remote_browser_empty
+                                ),
+                                color = if (browser.failed) AlphaTheme.colors.error else AlphaTheme.colors.onSurfaceVariant,
+                                modifier = Modifier.padding(16.dp).alpha(if (browser.failed || !browser.loading) 1f else 0f),
                             )
-                            if (!browser.loading && captures.isEmpty() && !browser.failed) {
-                                Text(stringResource(Res.string.wifi_remote_browser_empty))
-                            }
                         }
                     }
-                }
-                items(captures, key = { it.id }) { capture ->
-                    val isSelected = capture.id in selectedIds
-                    // The long-press label says what the gesture will do to this anchor tile.
-                    val toggleLabel = stringResource(
-                        if (isSelected) Res.string.wifi_remote_viewer_deselect
-                        else Res.string.wifi_remote_viewer_select
-                    )
-                    val tileShape = RoundedCornerShape(4.dp)
-                    val badgeText = capture.formatBadge()
-                    Box(
-                        Modifier.fillMaxWidth().aspectRatio(1f).clip(tileShape)
-                            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                    ) {
-                        // The clickable layer is a sibling of the preview button below, so the
-                        // magnifier is its own accessibility node and never toggles selection.
-                        Box(
-                            Modifier.fillMaxSize().clickable(
-                                enabled = !selecting || !busy,
-                                role = if (selecting) Role.Checkbox else Role.Button,
-                                onClick = {
-                                    if (selecting) viewModel.togglePhotoSelection(capture.id)
-                                    else viewModel.openPhoto(capture.id)
-                                },
-                            ).semantics {
-                                contentDescription = capture.name
-                                if (selecting) selected = isSelected
-                                // Accessibility long-click only: the pointer long press (and the drag
-                                // after it) has exactly one owner, the grid-level gesture, so a press
-                                // can never toggle twice.
-                                onLongClick(label = toggleLabel) {
-                                    if (!busy) viewModel.togglePhotoSelection(capture.id)
-                                    true
-                                }
-                            },
-                        ) {
-                            PhotoTile(
-                                thumbnails[capture.thumbnail.handle],
-                                tileSpinnerVisible(browser.loading, thumbnailsLoading, transfer.busy)
-                            )
-                            if (isSelected) {
-                                Box(
-                                    Modifier.fillMaxSize()
-                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
-                                        .border(3.dp, MaterialTheme.colorScheme.primary, tileShape)
-                                )
-                            }
-                            if (badgeText != null) Surface(
-                                modifier = Modifier.align(Alignment.BottomStart).padding(4.dp),
-                                color = Color.Black.copy(alpha = 0.7f), shape = RoundedCornerShape(4.dp)
-                            ) {
-                                Text(
-                                    badgeText,
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-                        // Checkbox (bottom-right) and preview (top-left) are always there, selecting
-                        // or not. Both are siblings of the clickable layer, so each is its own
-                        // accessibility node and never double-fires the tile tap. A load/transfer in
-                        // flight disables them (the ViewModel refuses too; this keeps feedback honest).
-                        Box(
-                            Modifier.align(Alignment.BottomEnd).size(TileActionSize).clickable(
-                                enabled = actionsEnabled,
-                                role = Role.Checkbox,
-                                onClick = { viewModel.togglePhotoSelection(capture.id) },
-                            ).semantics {
-                                contentDescription = toggleLabel
-                                selected = isSelected
-                            },
-                            contentAlignment = Alignment.Center
-                        ) { SelectionCheck(isSelected) }
-                        val previewLabel = stringResource(Res.string.wifi_remote_preview_photo)
-                        Box(
-                            Modifier.align(Alignment.TopStart).size(TileActionSize).clickable(
-                                enabled = actionsEnabled,
-                                role = Role.Button,
-                                onClick = { viewModel.previewPhoto(capture.id) },
-                            ).semantics { contentDescription = previewLabel },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            // Square, with a smaller fill than the touch target around it.
-                            Box(
-                                Modifier.size(24.dp)
-                                    .background(Color.Black.copy(alpha = 0.55f), SquareBadgeShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    painterResource(Res.drawable.search_24px), contentDescription = null,
-                                    tint = Color.White, modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
+                    items(captures, key = { it.id }) { capture ->
+                        PhotoGridTile(
+                            capture = capture,
+                            image = thumbnails[capture.thumbnail.handle],
+                            spinner = tileSpinnerVisible(browser.loading, thumbnailsLoading, transfer.busy),
+                            isSelected = capture.id in selectedIds,
+                            selecting = selecting,
+                            busy = busy,
+                            actionsEnabled = actionsEnabled,
+                            options = gridOptions,
+                            shape = tileShape,
+                            viewModel = viewModel,
+                        )
                     }
                 }
             }
-            WifiPhotoPagerBar(
-                browser = browser, enabled = actionsEnabled,
-                onPage = { offset ->
-                    if (browser.grouped) viewModel.openDatePage(offset)
-                    else controller.browsePhotos(identifier, offset)
-                },
-            )
+        }
+        if (bottomBar) {
+            Column(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, AlphaTheme.colors.scrim.copy(alpha = 0.28f))
+                        )
+                    )
+                    .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 16.dp + navBottom),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                when {
+                    showTransfer && !showSummary -> GlassFloatingBar(
+                        Modifier.widthIn(max = 480.dp).fillMaxWidth(),
+                        shape = AlphaShapes.row,
+                        contentPadding = PaddingValues(start = 20.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+                    ) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            PhotoTransferStatus(transfer)
+                        }
+                        if (transfer.busy) GlassIconButton(
+                            painterResource(Res.drawable.close_24px),
+                            contentDescription = stringResource(Res.string.wifi_remote_transfer_cancel),
+                            onClick = { controller.cancelPhotoOperation(identifier) },
+                        ) else if (!selecting) GlassIconButton(
+                            painterResource(Res.drawable.close_24px),
+                            contentDescription = stringResource(Res.string.dismiss_button),
+                            onClick = { controller.clearPhotoTransferResult(identifier) },
+                        )
+                    }
+                    showSummary -> GlassFloatingBar(
+                        Modifier.widthIn(max = 480.dp),
+                        shape = AlphaShapes.row,
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+                    ) {
+                        Text(
+                            if (summary.skippedCount == 0) stringResource(
+                                Res.string.wifi_remote_batch_summary_no_skip, summary.downloaded
+                            ) else stringResource(
+                                Res.string.wifi_remote_batch_summary, summary.downloaded,
+                                summary.skippedCount, skipReasonsText(summary.skipped)
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+                if (selecting && !transfer.busy) {
+                    if (plan.skippedCount > 0) Text(
+                        stringResource(
+                            Res.string.wifi_remote_batch_skip_hint,
+                            plan.skippedCount, skipReasonsText(plan.skipped)
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AlphaTheme.colors.onSurface,
+                        textAlign = TextAlign.Center,
+                    )
+                    // A plan with nothing in it stays tappable: the tap records the
+                    // "downloaded 0, skipped N" result instead of doing nothing.
+                    GlassFloatingBar(contentPadding = PaddingValues(6.dp)) { CapsuleButton(
+                        text = when {
+                            plan.files.isEmpty() -> stringResource(Res.string.wifi_remote_batch_download_none)
+                            policy == WifiFormatPolicy.JpegOnly -> stringResource(
+                                Res.string.wifi_remote_batch_download_jpg,
+                                plan.files.size, formatByteSize(plan.totalBytes)
+                            )
+                            else -> stringResource(
+                                Res.string.wifi_remote_batch_download_size,
+                                plan.files.size, formatByteSize(plan.totalBytes)
+                            )
+                        },
+                        onClick = { viewModel.requestBatchDownload(policy, state, onDownload) },
+                        icon = painterResource(Res.drawable.download_24px),
+                        size = CapsuleSize.Large,
+                        enabled = !busy,
+                    ) }
+                }
+            }
         }
     }
-    if (viewModel.showBatchOptions && selecting && policy == WifiFormatPolicy.Original) {
-        PhotoBatchDownloadSheet(
-            // The plan covers the whole cross-page selection snapshot, in selection order.
-            selectedIds.size, plan, state,
-            onDismiss = viewModel::dismissBatchOptions,
-            onDownload = { downloads ->
-                viewModel.dismissBatchOptions()
-                // An Original batch is a NEW download: drop any latched JpegOnly summary
-                // first so it cannot re-show or settle off this batch's own result.
-                viewModel.downloadOriginalBatch(downloads, onDownload)
+}
+
+/**
+ * One square tile of the day grid: the thumbnail cropped to the square (portrait shots centred),
+ * opt-in tags (format and size bottom-left, protection top-right), the preview corner (top-left)
+ * and the check box (bottom-right). The preview never changes the selection.
+ */
+@Composable
+private fun PhotoGridTile(
+    capture: WifiCameraCapture,
+    image: ImageBitmap?,
+    spinner: Boolean,
+    isSelected: Boolean,
+    selecting: Boolean,
+    busy: Boolean,
+    actionsEnabled: Boolean,
+    options: WifiGridOptions,
+    shape: RoundedCornerShape,
+    viewModel: WifiRemoteViewModel,
+) {
+    // The long-press label says what the gesture will do to this anchor tile.
+    val toggleLabel = stringResource(
+        if (isSelected) Res.string.wifi_remote_viewer_deselect
+        else Res.string.wifi_remote_viewer_select
+    )
+    Box(
+        Modifier.fillMaxWidth().aspectRatio(1f).clip(shape)
+            .background(AlphaTheme.colors.onSurface.copy(alpha = 0.08f))
+    ) {
+        // The clickable layer is a sibling of the preview button below, so the magnifier is its own
+        // accessibility node and never toggles selection.
+        Box(
+            Modifier.fillMaxSize().clickable(
+                enabled = !selecting || !busy,
+                role = if (selecting) Role.Checkbox else Role.Button,
+                onClick = {
+                    if (selecting) viewModel.togglePhotoSelection(capture.id)
+                    else viewModel.openPhoto(capture.id)
+                },
+            ).semantics {
+                contentDescription = capture.name
+                if (selecting) selected = isSelected
+                // Accessibility long-click only: the pointer long press (and the drag after it) has
+                // exactly one owner, the grid-level gesture, so a press can never toggle twice.
+                onLongClick(label = toggleLabel) {
+                    if (!busy) viewModel.togglePhotoSelection(capture.id)
+                    true
+                }
             },
-        )
+        ) {
+            PhotoTile(image, spinner)
+            if (isSelected) {
+                Box(
+                    Modifier.fillMaxSize()
+                        .background(AlphaTheme.colors.primary.copy(alpha = 0.25f))
+                        .border(3.dp, AlphaTheme.colors.primary, shape)
+                )
+            }
+            val format = if (options.showFormat) capture.formatBadge() else null
+            val size = if (options.showSize) formatSizeTag(capture.files.sumOf { it.size }) else null
+            if (format != null || size != null) Row(
+                Modifier.align(Alignment.BottomStart).padding(start = 4.dp, bottom = 4.dp, end = TileActionSize),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                if (format != null) InfoTag(format, style = InfoTagStyle.OnPhoto)
+                if (size != null) InfoTag(size, style = InfoTagStyle.OnPhoto)
+            }
+            // Protection is only known from the older catalog; unknown shows nothing, never a guess.
+            if (options.showProtection && capture.isProtected == true) {
+                val protectedLabel = stringResource(Res.string.mw_protected)
+                InfoTag(
+                "", modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
+                    .semantics { contentDescription = protectedLabel },
+                style = InfoTagStyle.OnPhoto,
+                icon = painterResource(Res.drawable.mw_lock_24px),
+                )
+            }
+        }
+        // Checkbox (bottom-right) and preview (top-left) are always there, selecting or not. Both are
+        // siblings of the clickable layer, so each is its own accessibility node and never double-fires
+        // the tile tap. A load/transfer in flight disables them (the ViewModel refuses too).
+        Box(
+            Modifier.align(Alignment.BottomEnd).size(TileActionSize).clickable(
+                enabled = actionsEnabled,
+                role = Role.Checkbox,
+                onClick = { viewModel.togglePhotoSelection(capture.id) },
+            ).semantics {
+                contentDescription = toggleLabel
+                selected = isSelected
+            },
+            contentAlignment = Alignment.Center
+        ) { SelectionCheck(isSelected) }
+        val previewLabel = stringResource(Res.string.wifi_remote_preview_photo)
+        Box(
+            Modifier.align(Alignment.TopStart).size(TileActionSize).clickable(
+                enabled = actionsEnabled,
+                role = Role.Button,
+                onClick = { viewModel.previewPhoto(capture.id) },
+            ).semantics { contentDescription = previewLabel },
+            contentAlignment = Alignment.Center
+        ) {
+            // Square, with a smaller fill than the touch target around it.
+            Box(
+                Modifier.size(22.dp).background(Color.Black.copy(alpha = 0.55f), SquareBadgeShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painterResource(Res.drawable.search_24px), contentDescription = null,
+                    tint = Color.White, modifier = Modifier.size(15.dp)
+                )
+            }
+        }
     }
 }
 
@@ -459,8 +565,11 @@ internal fun skipReasonsText(skipped: Map<WifiSkipReason, Int>): String =
 /** How long the "can't go back right now" hint stays visible. */
 private const val BackNoticeMillis = 3_000L
 
-/** Minimum tile width: the grid fits as many columns as the screen width allows. */
-private val TileMinSize = 80.dp
+/** Outer margin of the day grid (design v3: tiles nearly edge to edge). */
+private val GridMargin = 6.dp
+
+/** Bottom room kept free under the grid for the floating download bar (56 dp + gaps). */
+private val FloatingBarSpace = 96.dp
 
 /** Mutable state of the running drag selection (pointer position, session and range end). */
 private class RangeDragState {
@@ -502,14 +611,14 @@ internal fun SelectionCheck(selected: Boolean, modifier: Modifier = Modifier) {
 }
 
 /**
- * Grid thumbnail: scaled to fit the square tile so the whole picture is visible (never cropped);
- * the tile background shows around the shorter side. Bitmaps are already upright.
+ * Grid thumbnail: cropped to fill the square tile (a portrait shot shows its centre). Bitmaps are
+ * already upright; the viewer always shows the whole picture.
  */
 @Composable
 private fun PhotoTile(image: ImageBitmap?, loading: Boolean) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         if (image != null) {
-            Image(image, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+            Image(image, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else if (loading) {
             CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
         } else {

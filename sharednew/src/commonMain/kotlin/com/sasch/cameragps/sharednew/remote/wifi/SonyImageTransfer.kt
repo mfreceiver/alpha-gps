@@ -138,7 +138,7 @@ internal class SonyImageTransfer(
 
     /**
      * Date-grouped browser: enumerates the whole card (the only camera traffic needed to know the
-     * days) and returns the days. No page is displayed, so no photo is addressable until [datePage].
+     * days) and returns the days. No day is displayed, so no photo is addressable until [dayPhotos].
      */
     suspend fun openCatalog(): List<DateGroup> {
         enumerate()
@@ -147,11 +147,11 @@ internal class SonyImageTransfer(
     }
 
     /**
-     * One page of a single day, served from the local snapshot. The result is also recorded as the
-     * displayed page: thumbnails and previews only answer for handles of that page.
+     * All of one day, served from the local snapshot (no camera traffic, no paging). The result is
+     * also recorded as the displayed set: thumbnails and previews only answer for handles of that day.
      */
-    fun datePage(dateKey: String, offset: Int): CameraPhotoPage =
-        snapshot.page(dateKey, offset).also { pagePhotos = it.photos }
+    fun dayPhotos(dateKey: String): CameraPhotoPage =
+        snapshot.day(dateKey).also { pagePhotos = it.photos }
 
     private suspend fun enumerate() {
         check(supported)

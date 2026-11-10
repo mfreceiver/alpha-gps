@@ -13,17 +13,22 @@
 ## P1
 
 ### 1. 真机冒烟：11 项 UI/UX 改造（0673adf..451c31f）
-- 做什么：装新版后验证：单机直达、设备页简化/底部照片传输入口/删除二次确认、直达连接、图标顶栏与方形角标、预览页直接下载与时间副标题、自适应列数与不裁剪缩略图、图标分页栏+跳页、退出应用（划走任务/根页返回）只结束 Wi-Fi，BLE/GPS 与有连接需求的前台服务保持、缩略图分批渐进显示（`adb logcat -s AlphaThumb` 看 batch 行）。
+- 做什么：装新版后验证：单机直达、设备页简化/底部照片传输入口/删除二次确认、直达连接、图标顶栏与方形角标、预览页直接下载与时间副标题、退出应用（划走任务/根页返回）只结束 Wi-Fi，BLE/GPS 与有连接需求的前台服务保持、缩略图分批渐进显示（`adb logcat -s AlphaThumb` 看 batch 行）。
 - 验收：逐项无异常；退出/后台不得主动断 BLE，设备页用户主动断开才断 BLE；无下载退后台即结束 Wi-Fi，有用户单张/批量下载则保留至结束。重开应用不自动重建已结束的 Wi-Fi，需用户再次启动照片传输。
 - 依据：sonnet 五提交（ad8626b/8f542f6/acea142/b7226b2/451c31f）自报需真机验证清单。
 
 ### 9. 真机冒烟：第三轮 UI/UX（ac52215..E 提交）
-- 做什么：装新版后验证：①打开相册先显示"正在读取照片目录"，随后日期列表（按日倒序、未知日期最后，张数按 capture 计），进入某日只翻该日页，Back：网格→日期→退出；切日/翻页/返回日期不清选择、不丢"已选 N 张（含其它日期）"、不清已完成汇总；②缩略图只加载可见+前后余量（`adb logcat -s AlphaThumb` 看 batch 行，快速滑动不应整页扫描，翻页/刷新/断开立即停）；③网格长按拖动范围选取（长按格子变选中/取消、拖过范围批量、反向拖回恢复、边缘低速自动滚动且不翻页、checkbox/放大镜仍独立）；④角标 JPG/RAW/J&R/HEIF/H&R 只按文件格式；⑤JPG-only：RAW-only/HEIF-only 跳过并汇总"无 JPEG"，全跳过显示"下载 0/跳过 N"且不发起下载；Original：单张 JPG+RAW 一次下两个无格式选择器；⑥设备页仅 Ⓘ：对话框含重命名/删除二次确认/保持活跃/自动时间区域只读/MTU；连接按钮 连接/连接中…/断开连接/断开中…；断开后相机真实 BLE 断开（相机屏幕连接图标熄灭）、再开设备页仍保持断开、CDM 重新出现/重启不自动重连，点连接才恢复；多相机只断目标；Wi-Fi 会话中断开先关 Wi-Fi；⑦"保持活跃"开关：关（默认）时相机离开范围且无连接后服务应自行停止，开则保活；退出应用（划走/根页返回）不再断 BLE/GPS，仅立即取消下载并结束 Wi-Fi；Home/锁屏/切应用有用户下载时保留 Wi-Fi 至下载结束，无下载立即结束。
+- 做什么：装新版后验证：①打开相册先显示"正在读取照片目录"，随后日期列表（按日倒序、未知日期最后，张数按 capture 计），进入某日显示该日整日网格（0.2.0 起日期内不分页），Back：网格→日期→退出；切日/返回日期不清选择、不丢"已选 N 张（含其它日期）"、不清已完成汇总；②缩略图只加载可见+前后余量（`adb logcat -s AlphaThumb` 看 batch 行，快速滑动不应整页扫描，换日/刷新/断开立即停）；③网格长按拖动范围选取（长按格子变选中/取消、拖过范围批量、反向拖回恢复、边缘低速自动滚动、checkbox/放大镜仍独立）；④角标 JPG/RAW/J&R/HEIF/H&R 只按文件格式；⑤JPG-only：RAW-only/HEIF-only 跳过并汇总"无 JPEG"，全跳过显示"下载 0/跳过 N"且不发起下载；Original：单张 JPG+RAW 一次下两个无格式选择器；⑥设备页仅 Ⓘ：对话框含重命名/删除二次确认/保持活跃/自动时间区域只读/MTU；连接按钮 连接/连接中…/断开连接/断开中…；断开后相机真实 BLE 断开（相机屏幕连接图标熄灭）、再开设备页仍保持断开、CDM 重新出现/重启不自动重连，点连接才恢复；多相机只断目标；Wi-Fi 会话中断开先关 Wi-Fi；⑦"保持活跃"开关：关（默认）时相机离开范围且无连接后服务应自行停止，开则保活；退出应用（划走/根页返回）不再断 BLE/GPS，仅立即取消下载并结束 Wi-Fi；Home/锁屏/切应用有用户下载时保留 Wi-Fi 至下载结束，无下载立即结束。
 - 验收：逐项无异常；特别核对 ⑥ 用户主动断开后 CDM 重新出现不重连、多设备只断目标；⑦ 退出/后台仍继续 GPS 写入且前台服务不被 UI 退出停止，离开范围后的 presence 退休规则不变。
 - 依据：本轮 5 提交自报需真机验证（日期/视口/拖选/planner/Info 连接状态机均含无法在 JVM 验证的 Android 传输与手势部分）。
 - 子项（权限请求改造，fix(permissions)）：Android 12（API 31/32）全新安装，首次授权定位应一次弹出 FINE+COARSE 同请求（系统显示"精确/大致位置"二选一）；选"精确位置"后走后台定位分步授权（先前台全部通过再弹 ACCESS_BACKGROUND_LOCATION），选"仅大致位置"不放行、仍提示需要精确位置。API 33+ 同步确认 FINE+COARSE+通知一次请求。依据：sol 审阅 03dc59ae（Android 12 要求 FINE 与 COARSE 同请求，`PermissionBox.kt` `foregroundRuntimePermissions`）。
 
 - 子项（M1 后台/退出常驻）：真机分别在单张、跨文件批量下载中按 Home、锁屏、切换应用：确认 Wi-Fi 网络请求与下载不断，最后一项成功/失败/用户取消后仍在后台则释放 Wi-Fi（不留半文件，已提交文件保留），期间回前台则完成后继续保留会话。无下载、只有缩略图/大图预览时退后台立即释放；返回/旋转/活动重建不自动重连。下载中划卡、根页 Back 均立即取消并释放 Wi-Fi，但多台相机 BLE/GPS 与 FGS 保持；设备页主动断开仍仅断目标且保留既有持久化意图。验收还需覆盖后台超过 30 分钟的超时日志/清理、相机或网络丢失、OEM 电池策略。依据：`BackgroundWifiPolicy`、`WifiRemoteController` 的后台保留与 `AppExitCoordinator` 的 Wi-Fi-only 退出；宿主测试不能验证 Android 锁屏调度/系统网络许可窗口。
+
+### 16. 真机冒烟：0.2.0 Wi-Fi 屏（连接叠层 / 日期列表 / 整日网格 / 选择与悬浮下载）
+- 做什么：装新版后验证：①设备页点“照片传输”→ 全屏叠层 4 段环依次走 启动相机 Wi-Fi / 允许连接 / 连接相机 / 读取照片目录，卡片尺寸与按钮位置全程不跳变，取消即结束会话回设备页；成功短暂绿环后自动进日期列表；失败红色图标无底色、无帮助/重试，轻触/返回/5 秒自动回设备页；拒绝附近设备权限时出现“去授权”且不自动关闭；②日期列表：倒序、未知日期最后、今天/昨天与星期、张数；刷新图标读取中转圈；返回=结束 Wi-Fi 回设备页（蓝牙不断）；横屏两列、近方形限宽；③整日网格：无分页栏，长日（>60 张）一次连续滚动，缩略图方形裁剪居中，`adb logcat -s AlphaThumb` 只见可见+两行余量的 batch，快速滑动不扫整日、静置不全量下载；视图选项（grid_view 图标）小/中/大=4/3/2 列，格式/大小/保护三开关默认关、重启后保持，v4 机型保护开关置灰；④长按进选择，长按拖动连续范围、反向拖回恢复；顶栏“已选 N 张”+✕；悬浮“下载 N 张 · x MB”按设置格式直接下载（JPG-only 跳过无 JPG 并汇总、Original 全部原始文件）；跨日选择保留并一次下载；下载中底部玻璃进度条可取消，完成显示“已下载 N、跳过 M”；下载中按 Home 不断 Wi-Fi（M1 例外）；⑤预览（放大镜）不改选择，返回保留选择；整日内左右翻到首/末张为止。
+- 验收：逐项无异常；叠层不跳变；长日滚动不卡顿、内存稳定（缩略图缓存上限 300）；退后台/划卡语义与 M1 一致。
+- 依据：wave2/wifi 包（M4/M5/M6）自报需真机验证（Compose 手势/弹层/窗口适配与真实相机目录无法在 JVM 验证）。
 
 ## P2
 
@@ -32,11 +37,6 @@
 - 验收：设计评审后分阶段实施；恢复入口不得影响 GPS 写入/时间校正/照片下载；保留的协议层测试继续通过；需实机矩阵（型号/固件/协议版本/GPS 并用/单拍释放/取景首帧/浏览切换）。
 - 待用户决策/实机核实：①第一版做到 R1 还是 R1+R2；②ILCE-7M4 上蓝牙遥控是否与位置联动冲突（官方只明确 α6400 互斥）；③v4 取景能否稳定出帧；④参数面板与独立对焦是否后置。
 - 依据：用户 2026-11-10 决定；astra 研究报告。
-
-### 3. 补强回归测试：Original 批量“已锁存旧汇总”场景
-- 做什么：`originalBatchDropsASettledJpegOnlyBatchSummary`（`sharednew/src/commonTest/.../WifiRemoteControllerTest.kt` 约 :723-760）在提交 Original 批量 B 之前，先让 A Saved 后 `previewPhoto("photo:0")` → `closePhoto()`，断言 transfer=Idle 且 `batchSummarySettled()==true`，再提交 B；并在传入的 callback 内 `assertNull(batchSummary)` 证明清理早于提交。
-- 验收：断言在 `closeAndJoin` 之前；删掉 `downloadOriginalBatch` 里的 `recordBatchSummary(null)` 时该测试必须失败（mutation 自验）。
-- 依据：sol 对 910aa05 的复核（测试覆盖真实性缺口，非生产 bug）。
 
 ## P3
 
@@ -59,3 +59,13 @@
 - 做什么：设备页连接中已提供"取消"（`DeviceDetailViewModel.cancelConnecting` = 持久化的手动断开：deviceEnabled=false、停 presence 观察、`ACTION_DISCONNECT_DEVICE` → `AndroidBleTransport.disconnectDevice` 关闭含 autoConnect 等待中的 GATT）。需实机确认：相机不在范围/未开机时点"连接"再"取消"，之后相机开机靠近不会自动连上；日志无残余 GATT 回调。
 - 验收：≥1 台实机确认取消后无自动重连、无残余 GATT；与 retiredGatts 机制兼容。
 - 依据：M2 设备页实现；AndroidBleTransport.connect 使用 autoConnect。
+
+### 17. 日期列表封面缩略图（设计 v3 有，0.2.0 Wi-Fi 屏未做）
+- 做什么：日期列表每行左侧显示该日最新一张的缩略图（可见行惰性、每日 1 次请求、中性占位）。需放宽 `SonyImageTransfer.thumbnail()` 只服务“当前显示日”的门控（或为封面单独开放每日首张），并接入 `WifiRemoteController` 的串行队列与代次失效。
+- 验收：静置不批量请求；滚动只请求可见行；刷新/断开立即停；不压垮串行 PTP 队列。
+- 依据：`docs/design/ui-v3/content3a.py` 日期列表；wave2/wifi 报告“对设计稿的偏离”。
+
+### 18. 清理平铺分页遗留路径
+- 做什么：Android UI 只走按日分组浏览（`browseDates`/`browseDate`）；`WifiRemoteController.browsePhotos(offset)`、`WifiRemoteConnection.openPhotoBrowser/photoPage`、`WifiRemoteViewModel.viewPhotoAt` 的平铺翻页分支与 `SonyImageTransfer.page()`/`PAGE_SIZE` 仍保留（大量测试以其为夹具）。评估迁移测试夹具到按日路径后删除平铺分页。
+- 验收：全仓无 UI 可达的平铺翻页代码；测试改用按日路径且覆盖不降；全量验证通过。
+- 依据：wave2/wifi 取消日期内分页时为控制风险保留（见 `docs/wifi-architecture.md` “Day list, day grid, and thumbnails”）。
