@@ -10,6 +10,9 @@
 #   场景 8  基线格式错误 / 未知参数 → rc=2
 #   场景 9  app/src/main/java/.../ui/ 同样受管；非 ui 目录（如 data/）不受管
 #   场景 10 变异验证：去掉任一模式（只剩三种）时，对应的故意违规必须能被区分
+#   场景 11 扫描必须真实发生：ROOT 不是目录（/dev/null、不存在）、任一扫描目录缺失、
+#           受管 *.kt 为 0 个、文件不可读（grep rc>1）→ rc=2 且报告原因；输出报告"扫描了 N 个文件"
+#   场景 12 变异验证：逐条删掉场景 11 的检查（# mut: 标记行），对应用例必须失败
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)
@@ -134,6 +137,67 @@ for i in 0 1 2 3; do
   printf 'package x\nfun f() { %s }\n' "${SNIPS[$k]}" > "$R/$SN/ui/page/Page.kt"
   UI_STYLE_GUARD_ROOT=$R "$mutant" >/dev/null 2>&1; mrc=$?
   check "  变异守卫仍能拦截其它模式 ${SNIPS[$k]}（非空转）" test "$mrc" -eq 1
+done
+
+# 场景 11：扫描必须真实发生（曾经 ROOT=/dev/null --strict 也输出 ok）
+REAL_BASELINE=$HERE/../docs/ui-style-guard-baseline.txt
+out_has() { grep -q -- "$1" "$TMP/out"; }
+# scan_cases <guard>：跑场景 11 的全部用例，结果写入 CASE_<名字>=<rc>|<stderr 是否含预期原因>
+scan_cases() {
+  local g=$1 r
+  UI_STYLE_GUARD_ROOT=/dev/null UI_STYLE_GUARD_BASELINE=$REAL_BASELINE "$g" --strict >"$TMP/out" 2>"$TMP/err"
+  CASE_devnull="$?|$(err_has '仓库根不是目录' && echo y)"
+  UI_STYLE_GUARD_ROOT=$TMP/no-such-root "$g" >"$TMP/out" 2>"$TMP/err"
+  CASE_noroot="$?|$(err_has '仓库根不是目录' && echo y)"
+  r=$(new_repo nosn); rm -rf -- "${r:?}/$SN/ui"
+  UI_STYLE_GUARD_ROOT=$r "$g" >"$TMP/out" 2>"$TMP/err"
+  CASE_nosn="$?|$(err_has "扫描目录缺失.*$SN/ui" && echo y)"
+  r=$(new_repo noapp); rm -rf -- "${r:?}/$APPUI"
+  UI_STYLE_GUARD_ROOT=$r "$g" >"$TMP/out" 2>"$TMP/err"
+  CASE_noapp="$?|$(err_has "扫描目录缺失.*$APPUI" && echo y)"
+  r=$(new_repo empty); rm -f -- "${r:?}/$SN/ui/components/glass/Clean.kt"
+  UI_STYLE_GUARD_ROOT=$r "$g" >"$TMP/out" 2>"$TMP/err"
+  CASE_empty="$?|$(err_has '扫描了 0 个文件' && echo y)"
+  r=$(new_repo unreadable)
+  printf 'package x\nval a = Color.White\n' > "$r/$SN/ui/page/Secret.kt"; chmod 000 "$r/$SN/ui/page/Secret.kt"
+  UI_STYLE_GUARD_ROOT=$r "$g" >"$TMP/out" 2>"$TMP/err"
+  CASE_unreadable="$?|$(err_has 'grep 扫描出错' && echo y)"
+  chmod 644 "$r/$SN/ui/page/Secret.kt"
+}
+scan_cases "$GUARD"
+check "ROOT=/dev/null + 真实基线 --strict → rc=2 且报告根无效" test "$CASE_devnull" = "2|y"
+check "ROOT 不存在 → rc=2 且报告根无效" test "$CASE_noroot" = "2|y"
+check "缺 sharednew ui 扫描目录 → rc=2 且报告该目录" test "$CASE_nosn" = "2|y"
+check "缺 app ui 扫描目录 → rc=2 且报告该目录" test "$CASE_noapp" = "2|y"
+check "受管 *.kt 为 0 个 → rc=2 且报告扫描了 0 个文件" test "$CASE_empty" = "2|y"
+UNREADABLE_TESTABLE=1
+probe=$TMP/probe; : > "$probe"; chmod 000 "$probe"; [ -r "$probe" ] && UNREADABLE_TESTABLE=0
+if [ "$UNREADABLE_TESTABLE" -eq 1 ]; then
+  check "不可读文件（grep rc=2）→ rc=2 且报告扫描出错" test "$CASE_unreadable" = "2|y"
+else
+  echo "skip - 不可读文件用例（当前用户可读 000 文件，如 root）"
+fi
+R=$(new_repo count)
+printf 'package x\nval a = AlphaType.Body\n' > "$R/$APPUI/Screen.kt"
+guard "$R"; check "干净骨架报告扫描了 2 个文件（不含 ui/theme/ 豁免文件）" out_has '扫描了 2 个文件'
+check "  且通过" rc_is 0
+guard "$HERE/.." --strict >/dev/null; check "真实仓库 --strict 报告扫描文件数 > 0" grep -qE '扫描了 [1-9][0-9]* 个文件' "$TMP/out"
+
+# 场景 12 变异验证：逐条删掉守卫里 "# mut:<名>" 标记的检查行，对应用例必须不再得到 "2|y"
+for m in root dirs zero grep; do
+  check "  守卫含 mut:$m 标记行" grep -q "# mut:$m\$" "$GUARD"
+  mutant=$TMP/mutant-$m.sh
+  grep -v "# mut:$m\$" "$GUARD" > "$mutant"; chmod +x "$mutant"
+  scan_cases "$mutant"
+  case $m in
+    root) check "变异：删去根目录检查 → /dev/null 用例失效" test "$CASE_devnull" != "2|y" ;;
+    dirs) check "变异：删去扫描目录检查 → 缺目录用例失效" test "$CASE_nosn" != "2|y" -o "$CASE_noapp" != "2|y" ;;
+    zero) check "变异：删去 0 文件检查 → 空扫描用例失效" test "$CASE_empty" != "2|y" ;;
+    grep)
+      if [ "$UNREADABLE_TESTABLE" -eq 1 ]; then
+        check "变异：删去 grep 退出码检查 → 不可读用例失效" test "$CASE_unreadable" != "2|y"
+      fi ;;
+  esac
 done
 
 echo "ui_style_guard_test: $PASS passed, $FAILED failed"
