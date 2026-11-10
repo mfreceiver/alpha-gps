@@ -164,8 +164,9 @@ fun CapsuleDialog(
  *   (cancel) button. Disable with [dismissOnScrimClick] / [dismissOnBack] while busy.
  * - [onClose] adds a ✕ at the top end, in a header row shared with [title] (never overlapping the
  *   content; info dialogs: ✕ instead of an OK button).
- * - Inside a [GlassBackground] the dialog is drawn in-tree (it blurs the page); elsewhere it falls
- *   back to a platform dialog window with the solid glass fill.
+ * - Inside a [GlassBackground] the dialog is drawn in-tree (it blurs the page) and takes keyboard
+ *   focus like a modal window (GlassOverlayFocus.kt); elsewhere it falls back to a platform dialog
+ *   window with the solid glass fill and the window's own focus handling.
  * - The content scrolls when the window is short (landscape, IME); the buttons stay visible.
  */
 @Composable
@@ -230,8 +231,9 @@ fun CapsuleDialog(
                 usePlatformDefaultWidth = false,
             ),
         ) {
-            // A separate window cannot sample the page: solid glass.
-            CompositionLocalProvider(LocalGlassBackdrop provides null) {
+            // A separate window cannot sample the page: solid glass. No overlay entry either, so the
+            // in-page focus handling stays off: window focus as in 0.2.1 (panel not focusable).
+            CompositionLocalProvider(LocalGlassBackdrop provides null, LocalGlassOverlayEntry provides null) {
                 Box(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) { panel() }
             }
         }
@@ -255,8 +257,9 @@ private fun CapsuleDialogPanel(
     val enter = remember { Animatable(0f) }
     LaunchedEffect(Unit) { enter.animateTo(1f, tween(220)) }
     val horizontal = if (centered) Alignment.CenterHorizontally else Alignment.Start
-    // Keyboard focus enters the dialog (and returns to the page when the last overlay closes).
-    val panelFocus = rememberModalPanelFocus(LocalGlassOverlayHost.current)
+    // Hosted dialog: keyboard focus enters it (and returns to the layer below when it closes).
+    // Platform-Dialog fallback: null, no focus handling added (see rememberModalPanelFocus).
+    val panelFocus = rememberModalPanelFocus()
     GlassSurface(
         modifier = modifier
             .widthIn(max = AlphaDimens.dialogWidth)

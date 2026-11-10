@@ -26,7 +26,6 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -180,7 +179,8 @@ internal fun AnchoredBox(
  * short fade + offset. Without a [GlassBackground] above it, it renders nothing.
  *
  * Focus (like the platform `Popup(focusable = true)` it replaces): on open keyboard focus moves onto
- * the panel and the page cannot take it back; on close it returns to [anchor] if the page had focus.
+ * the panel and the layers below (page, lower overlays) cannot take it back; on close it returns to
+ * [anchor] if the layer below had focus.
  * [paneTitle] (optional) names the pane for accessibility services.
  *
  * ```
@@ -201,8 +201,7 @@ fun GlassPopover(
 ) {
     val host = LocalGlassOverlayHost.current ?: return
     if (!expanded) return
-    SideEffect { host.focusMemory.noteAnchor { tryFocus { anchor.focusRequester.requestFocus() } } }
-    GlassOverlay(host) {
+    GlassOverlay(host, returnFocus = anchor.focusRequester) {
         NavigationBackHandler(
             state = rememberNavigationEventState(NavigationEventInfo.None),
             isBackEnabled = true,
@@ -215,7 +214,7 @@ fun GlassPopover(
                 val enter = remember { Animatable(0f) }
                 LaunchedEffect(Unit) { enter.animateTo(1f, tween(160)) }
                 val up = placement == PopoverPlacement.AboveEnd || placement == PopoverPlacement.AboveStart
-                val panelFocus = rememberModalPanelFocus(host)
+                val panelFocus = rememberModalPanelFocus()
                 GlassSurface(
                     modifier = modifier
                         .widthIn(min = 180.dp, max = 320.dp)
