@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -17,11 +17,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
@@ -61,10 +62,12 @@ import cameragps.sharednew.generated.resources.m9_help_about_entry_desc
 import com.sasch.cameragps.sharednew.ui.components.ScrollbarLazyColumn
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassSurface
+import com.sasch.cameragps.sharednew.ui.components.glass.isScrolledUnderTopBar
 import com.sasch.cameragps.sharednew.ui.components.page.GlassPageScaffold
 import com.sasch.cameragps.sharednew.ui.help.AlphaGpsLinks
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsNavRow
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import com.saschl.cameragps.ui.about.AboutScreen
 import com.saschl.cameragps.ui.about.LicenseTextScreen
 import com.saschl.cameragps.ui.about.LicensesScreen
@@ -165,14 +168,17 @@ private fun HelpFaqScreen(
         )
     }
 
+    val listState = rememberLazyListState()
     GlassPageScaffold(
         title = stringResource(Res.string.help_faq_title),
         onBackClick = onBackClick,
+        scrolled = listState.isScrolledUnderTopBar,
     ) { innerPadding ->
         ScrollbarLazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
+            state = listState,
             verticalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp)
         ) {
@@ -199,14 +205,14 @@ private fun HelpFaqScreen(
                 GlassCard {
                     Text(
                         text = stringResource(Res.string.help_need_more_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = AlphaTheme.colors.onSurface,
+                        style = AlphaType.Heading,
+                        color = AlphaTheme.colors.textPrimary,
+                        modifier = Modifier.semantics { heading() },
                     )
                     Text(
                         text = stringResource(Res.string.help_need_more_description),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = AlphaTheme.colors.onSurfaceVariant,
+                        style = AlphaType.Body,
+                        color = AlphaTheme.colors.textSecondary,
                     )
                 }
             }
@@ -233,15 +239,14 @@ private fun FaqRow(faq: FaqItem, initiallyExpanded: Boolean) {
         ) {
             Text(
                 text = stringResource(faq.questionRes),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = AlphaTheme.colors.onSurface,
+                style = AlphaType.Label,
+                color = AlphaTheme.colors.textPrimary,
             )
             if (expanded) {
                 if (faq.containsLink) {
                     val linkStyle = TextLinkStyles(
                         style = SpanStyle(
-                            color = AlphaTheme.colors.primary,
+                            color = AlphaTheme.colors.accent,
                             textDecoration = TextDecoration.Underline
                         )
                     )
@@ -259,14 +264,14 @@ private fun FaqRow(faq: FaqItem, initiallyExpanded: Boolean) {
                                 append(reportIssue)
                             }
                         },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = AlphaTheme.colors.onSurfaceVariant,
+                        style = AlphaType.Body,
+                        color = AlphaTheme.colors.textSecondary,
                     )
                 } else {
                     Text(
                         text = stringResource(faq.answerRes),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = AlphaTheme.colors.onSurfaceVariant,
+                        style = AlphaType.Body,
+                        color = AlphaTheme.colors.textSecondary,
                     )
                 }
             }

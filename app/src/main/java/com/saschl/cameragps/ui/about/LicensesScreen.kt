@@ -8,26 +8,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.m9_about_licenses_entry
 import cameragps.sharednew.generated.resources.m9_licenses_intro
 import cameragps.sharednew.generated.resources.m9_licenses_load_failed
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassSurface
+import com.sasch.cameragps.sharednew.ui.components.glass.isScrolledUnderTopBar
 import com.sasch.cameragps.sharednew.ui.components.page.GlassPageScaffold
 import com.sasch.cameragps.sharednew.ui.components.verticalScrollbar
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsColumn
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsNavRow
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
@@ -35,11 +34,13 @@ import org.jetbrains.compose.resources.stringResource
 /** List of components with their licenses; tapping an item opens its bundled full license text. */
 @Composable
 fun LicensesScreen(onBackClick: () -> Unit, onOpenLicense: (String) -> Unit) {
+    val scrollState = rememberScrollState()
     GlassPageScaffold(
         title = stringResource(Res.string.m9_about_licenses_entry),
         onBackClick = onBackClick,
+        scrolled = scrollState.isScrolledUnderTopBar,
     ) { padding ->
-        SharedSettingsColumn(Modifier.fillMaxSize().padding(padding)) {
+        SharedSettingsColumn(Modifier.fillMaxSize().padding(padding), state = scrollState) {
             BodyText(stringResource(Res.string.m9_licenses_intro))
             LicenseCatalog.entries.forEach { entry ->
                 val purpose = entry.purpose?.let { stringResource(it) }
@@ -71,6 +72,7 @@ fun LicenseTextScreen(licenseId: String?, gplText: Boolean = false, onBackClick:
     GlassPageScaffold(
         title = entry?.let { "${it.name} · ${it.licenseName}" } ?: stringResource(Res.string.m9_about_licenses_entry),
         onBackClick = onBackClick,
+        scrolled = scrollState.isScrolledUnderTopBar,
     ) { padding ->
         GlassSurface(
             modifier = Modifier
@@ -92,11 +94,8 @@ fun LicenseTextScreen(licenseId: String?, gplText: Boolean = false, onBackClick:
                             shown.isEmpty() -> stringResource(Res.string.m9_licenses_load_failed)
                             else -> shown
                         },
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 12.sp,
-                        ),
-                        color = AlphaTheme.colors.onSurface,
+                        style = AlphaType.Mono,
+                        color = AlphaTheme.colors.textSecondary,
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
                     )
                 }
