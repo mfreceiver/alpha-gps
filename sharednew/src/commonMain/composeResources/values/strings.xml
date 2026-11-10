@@ -462,4 +462,9 @@
     <string name="m9_viewer_lens">Show lens info</string>
     <string name="m9_viewer_lens_desc">Lens model and lens details.</string>
     <string name="m9_viewer_info_note">These details appear only in the info area of the preview. When any of them is on, opening a preview reads the photo header once more, which slightly increases communication with the camera.</string>
+    <string name="m9_logs_copy">Copy logs</string>
+    <string name="m9_logs_copied">Copied %1$d log entries</string>
+    <string name="m9_logs_copied_latest">Copied the latest %1$d log entries (only the newest are copied)</string>
+    <string name="m9_logs_copy_empty">No logs to copy</string>
+    <string name="m9_logs_clear_confirm">Clear all logs? This cannot be undone.</string>
 </resources>

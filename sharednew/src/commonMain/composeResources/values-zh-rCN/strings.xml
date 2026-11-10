@@ -433,4 +433,9 @@
     <string name="m9_viewer_lens">显示镜头信息</string>
     <string name="m9_viewer_lens_desc">镜头型号等镜头信息。</string>
     <string name="m9_viewer_info_note">这些信息仅在预览页的信息区显示。开启任意一项后，进入预览会额外读取一次照片头部数据，轻微增加与相机的通信。</string>
+    <string name="m9_logs_copy">复制日志</string>
+    <string name="m9_logs_copied">已复制 %1$d 条日志</string>
+    <string name="m9_logs_copied_latest">已复制最新的 %1$d 条日志（仅复制最新部分）</string>
+    <string name="m9_logs_copy_empty">暂无日志可复制</string>
+    <string name="m9_logs_clear_confirm">清除所有日志？此操作无法撤销。</string>
 </resources>
