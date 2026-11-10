@@ -1,64 +1,98 @@
-<!-- file: `app/src/main/res/drawable/ic_launcher_foreground.xml` -->
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AlphaGPS adaptive icon: foreground layer.
+     Converted from docs/brand/alpha-gps-icon-foreground.svg (108x108, same coordinates).
+     All artwork lies inside the 66dp safe circle (r <= 33 around 54,54).
+     Original artwork drawn by mfreceiver for AlphaGPS. License: GPL-3.0. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <group
-        android:pivotX="54"
-        android:pivotY="54"
-        android:scaleX="0.8"
-        android:scaleY="0.8">
+    <!-- viewfinder frame corners -->
+    <path
+        android:pathData="M32,40V35A3,3 0,0 1,35 32H40M68,32H73A3,3 0,0 1,76 35V40M76,68V73A3,3 0,0 1,73 76H68M40,76H35A3,3 0,0 1,32 73V68"
+        android:strokeWidth="3.4"
+        android:strokeAlpha="0.92"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
 
-        <!-- Camera Body - circular design for round icon -->
-        <path
-            android:fillColor="#E8E8E8"
-            android:pathData="M54,54m-35,0a35,35 0,1 1,70 0a35,35 0,1 1,-70 0"/>
+    <!-- signal arc (location being sent) -->
+    <path
+        android:pathData="M56.82,32.18A17.5,17.5 0,0 1,68.82 44.18"
+        android:strokeWidth="3"
+        android:strokeColor="#FFC857"
+        android:strokeLineCap="round" />
 
-        <!-- Camera Lens Outer Ring -->
-        <path
-            android:fillColor="#2C2C2C"
-            android:pathData="M54,35c-10.49,0 -19,8.51 -19,19s8.51,19 19,19s19,-8.51 19,-19S64.49,35 54,35z"/>
+    <!-- location pin: shadow -->
+    <path
+        android:fillAlpha="0.28"
+        android:fillColor="#062E6F"
+        android:pathData="M52,73C48.36,67.94 39,58.06 39,50A13,13 0,0 1,65 50C65,58.06 55.64,67.94 52,73Z" />
 
-        <!-- Camera Lens Middle Ring -->
-        <path
-            android:fillColor="#404040"
-            android:pathData="M54,40c-7.73,0 -14,6.27 -14,14s6.27,14 14,14s14,-6.27 14,-14S61.73,40 54,40z"/>
+    <!-- location pin -->
+    <path android:pathData="M52,72C48.36,66.94 39,57.06 39,49A13,13 0,0 1,65 49C65,57.06 55.64,66.94 52,72Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:endX="52"
+                android:endY="72"
+                android:startX="52"
+                android:startY="36"
+                android:type="linear">
+                <item
+                    android:color="#FFFFFFFF"
+                    android:offset="0" />
+                <item
+                    android:color="#FFD3E3FD"
+                    android:offset="1" />
+            </gradient>
+        </aapt:attr>
+    </path>
 
-        <!-- Camera Lens Inner -->
-        <path
-            android:fillColor="#1A1A1A"
-            android:pathData="M54,45c-4.97,0 -9,4.03 -9,9s4.03,9 9,9s9,-4.03 9,-9S58.97,45 54,45z"/>
+    <!-- camera lens in the pin head: outer ring (circle 52,49 r9.8) -->
+    <path
+        android:fillColor="#062E6F"
+        android:pathData="M42.2,49A9.8,9.8 0,1 0,61.8 49A9.8,9.8 0,1 0,42.2 49Z" />
 
-        <!-- GPS Compass Rose Background -->
-        <path
-            android:fillColor="#333333"
-            android:pathData="M54,49c-2.76,0 -5,2.24 -5,5s2.24,5 5,5s5,-2.24 5,-5S56.76,49 54,49z"/>
+    <!-- lens glass (circle 52,49 r7.6) -->
+    <path android:pathData="M44.4,49A7.6,7.6 0,1 0,59.6 49A7.6,7.6 0,1 0,44.4 49Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="49.5"
+                android:centerY="45.5"
+                android:gradientRadius="10"
+                android:type="radial">
+                <item
+                    android:color="#FFA8C7FA"
+                    android:offset="0" />
+                <item
+                    android:color="#FF0B57D0"
+                    android:offset="0.55" />
+                <item
+                    android:color="#FF062E6F"
+                    android:offset="1" />
+            </gradient>
+        </aapt:attr>
+    </path>
 
-        <!-- GPS Compass Center -->
-        <path
-            android:fillColor="#FF4444"
-            android:pathData="M54,52c-1.1,0 -2,0.9 -2,2s0.9,2 2,2s2,-0.9 2,-2S55.1,52 54,52z"/>
+    <!-- aperture (circle 52,49 r2.9) -->
+    <path
+        android:fillAlpha="0.85"
+        android:fillColor="#062E6F"
+        android:pathData="M49.1,49A2.9,2.9 0,1 0,54.9 49A2.9,2.9 0,1 0,49.1 49Z" />
 
-        <!-- North Needle (Red) -->
-        <path
-            android:fillColor="#FF4444"
-            android:pathData="M54,47l-1.5,4h3L54,47z"/>
+    <!-- lens reflection -->
+    <path
+        android:pathData="M47.29,48.39A5.02,5.02 0,0 1,51.54 44.14"
+        android:strokeWidth="1.5"
+        android:strokeAlpha="0.9"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
 
-        <!-- South Needle (White) -->
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M54,61l-1.5,-4h3L54,61z"/>
-
-        <!-- East Needle (Light Gray) -->
-        <path
-            android:fillColor="#CCCCCC"
-            android:pathData="M61,54l-4,-1.5v3L61,54z"/>
-
-        <!-- West Needle (Light Gray) -->
-        <path
-            android:fillColor="#CCCCCC"
-            android:pathData="M47,54l4,-1.5v3L47,54z"/>
-    </group>
+    <!-- small cyan glint (circle 55.2,52.2 r1) -->
+    <path
+        android:fillColor="#7FE3F0"
+        android:pathData="M54.2,52.2A1,1 0,1 0,56.2 52.2A1,1 0,1 0,54.2 52.2Z" />
 </vector>
