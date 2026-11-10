@@ -14,18 +14,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -35,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.cancel_button
@@ -55,7 +50,13 @@ import cameragps.sharednew.generated.resources.event_sounds_set_default
 import cameragps.sharednew.generated.resources.event_sounds_set_silent
 import cameragps.sharednew.generated.resources.event_sounds_title
 import cameragps.sharednew.generated.resources.keyboard_arrow_right_24px
-import com.sasch.cameragps.sharednew.ui.components.ScrollbarLazyColumn
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
+import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
+import com.sasch.cameragps.sharednew.ui.settings.SharedRadioOption
+import com.sasch.cameragps.sharednew.ui.settings.SharedToggleRow
+import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.saschl.cameragps.notification.NotificationsHelper
 import com.saschl.cameragps.service.TransmissionSoundEvent
 import com.saschl.cameragps.service.TransmissionSoundMode
@@ -129,15 +130,14 @@ internal fun EventSoundsSettingsCard() {
         Text(
             text = stringResource(Res.string.event_sounds_description),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = AlphaTheme.colors.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
         SettingsListGroup {
-            SettingsToggleRow(
+            SharedToggleRow(
                 title = stringResource(Res.string.event_sounds_enable_all),
                 checked = enabled,
-                showDivider = false,
                 onCheckedChange = { value ->
                     enabled = value
                     PreferencesManager.setTransmissionEventSoundsEnabled(context, value)
@@ -148,19 +148,18 @@ internal fun EventSoundsSettingsCard() {
         Text(
             text = stringResource(Res.string.event_sounds_title),
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = AlphaTheme.colors.onSurfaceVariant,
             modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
         )
 
         SettingsListGroup {
             val eventEntries = eventTitles.entries.toList()
-            eventEntries.forEachIndexed { index, (event, title) ->
+            eventEntries.forEach { (event, title) ->
                 EventSettingsRow(
                     title = title,
                     subtitle = getModeLabel(
                         eventModeStates[event] ?: TransmissionSoundMode.DEFAULT
                     ),
-                    showDivider = index < eventEntries.lastIndex,
                     checked = eventEnabledStates[event] == true,
                     controlsEnabled = enabled,
                     onCheckedChange = { value ->
@@ -175,14 +174,13 @@ internal fun EventSoundsSettingsCard() {
         Text(
             text = stringResource(Res.string.event_sounds_notification_channels_title),
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = AlphaTheme.colors.onSurfaceVariant,
             modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
         )
 
         SettingsListGroup {
             SettingsActionRow(
                 title = stringResource(Res.string.event_sounds_configure_transmission_channel),
-                showDivider = true,
                 onClick = {
                     openNotificationChannelSettings(
                         context,
@@ -192,7 +190,6 @@ internal fun EventSoundsSettingsCard() {
             )
             SettingsActionRow(
                 title = stringResource(Res.string.event_sounds_configure_disconnect_channel),
-                showDivider = false,
                 onClick = {
                     openNotificationChannelSettings(
                         context,
@@ -246,13 +243,7 @@ internal fun EventSoundsSettingsCard() {
 
 @Composable
 private fun SettingsListGroup(content: @Composable ColumnScope.() -> Unit) {
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        tonalElevation = 1.dp,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(content = content)
-    }
+    GlassCard(modifier = Modifier.fillMaxWidth(), content = content)
 }
 
 @Composable
@@ -260,82 +251,49 @@ private fun EventSettingsRow(
     title: String,
     subtitle: String,
     checked: Boolean,
-    showDivider: Boolean,
     controlsEnabled: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     onClick: () -> Unit,
 ) {
-    ListItem(
-        headlineContent = { Text(title) },
-        supportingContent = { Text(subtitle) },
-        trailingContent = {
-            Switch(
-                checked = checked,
-                enabled = controlsEnabled,
-                onCheckedChange = onCheckedChange
-            )
-        },
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = controlsEnabled && checked, onClick = onClick)
+    SharedToggleRow(
+        title = title,
+        description = subtitle,
+        checked = checked,
+        enabled = controlsEnabled,
+        onCheckedChange = onCheckedChange,
     )
 
     if (controlsEnabled && checked) {
         SettingsActionRow(
             title = stringResource(Res.string.event_sounds_choose_sound),
             onClick = onClick,
-            showDivider = showDivider
         )
     }
-
 }
 
 @Composable
 private fun SettingsActionRow(
     title: String,
-    showDivider: Boolean = true,
     onClick: () -> Unit,
 ) {
-    ListItem(
-        headlineContent = { Text(title) },
-        trailingContent = {
-            Icon(
-                painter = painterResource(Res.drawable.keyboard_arrow_right_24px),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        },
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        overlineContent = null,
-        supportingContent = null,
-        leadingContent = null
-    )
-
-    if (showDivider) {
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-    }
-}
-
-@Composable
-private fun SettingsToggleRow(
-    title: String,
-    checked: Boolean,
-    showDivider: Boolean = true,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    ListItem(
-        headlineContent = { Text(title) },
-        trailingContent = {
-            Switch(
-                checked = checked,
-                onCheckedChange = onCheckedChange
-            )
-        }
-    )
-    if (showDivider) {
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            .heightIn(min = AlphaDimens.minTouchTarget)
+            .clickable(role = Role.Button, onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = AlphaTheme.colors.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            painter = painterResource(Res.drawable.keyboard_arrow_right_24px),
+            contentDescription = null,
+            tint = AlphaTheme.colors.onSurfaceVariant
+        )
     }
 }
 
@@ -354,44 +312,28 @@ private fun SoundModeSelectionDialog(
         TransmissionSoundMode.CUSTOM to stringResource(Res.string.event_sounds_choose_sound)
     )
 
-    AlertDialog(
+    CapsuleDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            ScrollbarLazyColumn {
-                items(options) { (mode, label) ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable
-                        {
-                            when (mode) {
-                                TransmissionSoundMode.DEFAULT -> onSelectDefault()
-                                TransmissionSoundMode.SILENT -> onSelectSilent()
-                                TransmissionSoundMode.CUSTOM -> onSelectCustom()
-                            }
+        title = title,
+        confirm = null,
+        dismiss = DialogAction(stringResource(Res.string.cancel_button), onDismiss),
+    ) {
+        Column(Modifier.selectableGroup()) {
+            options.forEach { (mode, label) ->
+                SharedRadioOption(
+                    label = label,
+                    selected = mode == currentMode,
+                    onClick = {
+                        when (mode) {
+                            TransmissionSoundMode.DEFAULT -> onSelectDefault()
+                            TransmissionSoundMode.SILENT -> onSelectSilent()
+                            TransmissionSoundMode.CUSTOM -> onSelectCustom()
                         }
-                    ) {
-                        RadioButton(
-                            selected = mode == currentMode,
-                            onClick = {
-                                when (mode) {
-                                    TransmissionSoundMode.DEFAULT -> onSelectDefault()
-                                    TransmissionSoundMode.SILENT -> onSelectSilent()
-                                    TransmissionSoundMode.CUSTOM -> onSelectCustom()
-                                }
-                            }
-                        )
-                        Text(text = label, style = MaterialTheme.typography.bodyLarge)
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = stringResource(Res.string.cancel_button))
+                    },
+                )
             }
         }
-    )
+    }
 }
 
 @Composable

@@ -161,7 +161,7 @@ class AdaptiveLayoutTest {
         val width = mutableStateOf(1024.dp)
         compose.setContent {
             TestViewport(width.value) {
-                SharedSettingsScreen("Settings", {}, {}, {}) { padding ->
+                SharedSettingsScreen("Settings", {}) { padding ->
                     SharedSettingsColumn(Modifier
                         .fillMaxSize()
                         .padding(padding)) {

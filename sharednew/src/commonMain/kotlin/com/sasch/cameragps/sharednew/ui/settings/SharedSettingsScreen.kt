@@ -1,66 +1,25 @@
 package com.sasch.cameragps.sharednew.ui.settings
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.text.font.FontWeight
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
-import com.sasch.cameragps.sharednew.ui.components.ScreenContent
+import com.sasch.cameragps.sharednew.ui.components.page.GlassPageScaffold
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** Settings page frame: glass page with back button; system Back also calls [onBackClick]. */
 @Composable
 fun SharedSettingsScreen(
     title: String,
     onBackClick: () -> Unit,
-    onTitleClick: () -> Unit,
-    navigationIcon: @Composable () -> Unit,
     content: @Composable (innerPadding: PaddingValues) -> Unit,
 ) {
-    Scaffold(
-        topBar = {
-            ScreenContent {
-                CenterAlignedTopAppBar(
-                    title = {
-                        Text(
-                            text = title,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = androidx.compose.ui.Modifier
-                                .clickable { onTitleClick() }
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onBackClick) {
-                            navigationIcon()
-                        }
-                    },
-
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    )
-                )
-            }
-        }
-    ) { paddingValues ->
+    GlassPageScaffold(title = title, onBackClick = onBackClick) { paddingValues ->
         NavigationBackHandler(
             state = rememberNavigationEventState(NavigationEventInfo.None),
             isBackEnabled = true,
-            onBackCompleted = {
-                onBackClick()
-            }
+            onBackCompleted = { onBackClick() },
         )
-        ScreenContent {
-            content(paddingValues)
-        }
+        content(paddingValues)
     }
 }
-

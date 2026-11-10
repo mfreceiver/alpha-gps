@@ -3,42 +3,56 @@ package com.sasch.cameragps.sharednew.ui.logs
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cameragps.sharednew.generated.resources.Res
-import cameragps.sharednew.generated.resources.arrow_back_24px
-import cameragps.sharednew.generated.resources.back
+import cameragps.sharednew.generated.resources.cancel_button
+import cameragps.sharednew.generated.resources.content_copy_24px
+import cameragps.sharednew.generated.resources.delete_24px
 import cameragps.sharednew.generated.resources.logs_clear_all
 import cameragps.sharednew.generated.resources.logs_empty
 import cameragps.sharednew.generated.resources.logs_title
+import cameragps.sharednew.generated.resources.m9_logs_clear_confirm
+import cameragps.sharednew.generated.resources.m9_logs_copied
+import cameragps.sharednew.generated.resources.m9_logs_copied_latest
+import cameragps.sharednew.generated.resources.m9_logs_copy
+import cameragps.sharednew.generated.resources.m9_logs_copy_empty
 import com.sasch.cameragps.sharednew.database.logging.LogEntry
 import com.sasch.cameragps.sharednew.database.logging.LogRepository
 import com.sasch.cameragps.sharednew.logging.LogFormatter
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
+import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSurface
+import com.sasch.cameragps.sharednew.ui.components.page.GlassPageScaffold
 import com.sasch.cameragps.sharednew.ui.components.verticalScrollbar
+import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -54,7 +68,6 @@ private val LOG_TIMESTAMP_FORMAT = LocalDateTime.Format {
     byUnicodePattern("dd-MM-yyyy HH:mm:ss.SSS")
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SharedLogViewerScreen(
     logFormatter: LogFormatter,
@@ -63,82 +76,125 @@ fun SharedLogViewerScreen(
 ) {
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
+    @Suppress("DEPRECATION")
+    val clipboard = LocalClipboardManager.current
     val logs by remember(logFormatter) { logFormatter.format() }.collectAsState(emptyList())
+    var showClearConfirm by remember { mutableStateOf(false) }
+    var copyNotice by remember { mutableStateOf<String?>(null) }
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(Res.string.logs_title),
-                        fontWeight = FontWeight.SemiBold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            painter = painterResource(Res.drawable.arrow_back_24px),
-                            contentDescription = stringResource(Res.string.back)
-                        )
+    val copyLabel = stringResource(Res.string.m9_logs_copy)
+    val clearLabel = stringResource(Res.string.logs_clear_all)
+    val nothingToCopy = stringResource(Res.string.m9_logs_copy_empty)
+    val copiedAll = stringResource(Res.string.m9_logs_copied, logs.size.coerceAtMost(LOG_COPY_MAX_ENTRIES))
+    val copiedLatest = stringResource(Res.string.m9_logs_copied_latest, LOG_COPY_MAX_ENTRIES)
+
+    LaunchedEffect(copyNotice) {
+        if (copyNotice != null) {
+            delay(2500)
+            copyNotice = null
+        }
+    }
+
+    GlassPageScaffold(
+        title = stringResource(Res.string.logs_title),
+        onBackClick = onBackClick,
+        actions = {
+            GlassIconButton(
+                icon = painterResource(Res.drawable.content_copy_24px),
+                contentDescription = copyLabel,
+                enabled = logs.isNotEmpty(),
+                onClick = {
+                    val payload = buildLogClipboardText(logs)
+                    if (payload.count == 0) {
+                        copyNotice = nothingToCopy
+                    } else {
+                        @Suppress("DEPRECATION")
+                        clipboard.setText(AnnotatedString(payload.text))
+                        copyNotice = if (payload.truncated) copiedLatest else copiedAll
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                )
             )
-        }
+            GlassIconButton(
+                icon = painterResource(Res.drawable.delete_24px),
+                contentDescription = clearLabel,
+                enabled = logs.isNotEmpty(),
+                onClick = { showClearConfirm = true },
+            )
+        },
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(paddingValues)
+                .padding(horizontal = AlphaDimens.screenMargin)
+                .padding(bottom = AlphaDimens.screenMargin),
+            verticalArrangement = Arrangement.spacedBy(AlphaDimens.cardGap),
         ) {
-            Button(
-                onClick = {
-                    scope.launch {
-                        logRepository.clearAllLogs()
-                    }
-                }
-            ) {
-                Text(stringResource(Res.string.logs_clear_all))
-            }
-
-            SelectionContainer(
+            GlassSurface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
+                    .weight(1f),
+                contentPadding = PaddingValues(0.dp),
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScrollbar(scrollState.scrollIndicatorState)
-                        .verticalScroll(scrollState)
-                ) {
-                    if (logs.isEmpty()) {
-                        Text(
-                            text = stringResource(Res.string.logs_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(16.dp)
-                        )
-                    } else {
-                        val logText = logs.joinToString("\n\n")
-
-                        Text(
-                            text = logText,
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 12.sp
-                            ),
-                            modifier = Modifier.padding(16.dp)
-                        )
+                SelectionContainer(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScrollbar(scrollState.scrollIndicatorState)
+                            .verticalScroll(scrollState)
+                    ) {
+                        if (logs.isEmpty()) {
+                            Text(
+                                text = stringResource(Res.string.logs_empty),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = AlphaTheme.colors.onSurfaceVariant,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        } else {
+                            Text(
+                                text = logs.joinToString("\n\n"),
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 12.sp
+                                ),
+                                color = AlphaTheme.colors.onSurface,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
                     }
                 }
             }
+            copyNotice?.let { notice ->
+                Text(
+                    text = notice,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AlphaTheme.colors.onSurface,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            }
         }
+    }
+
+    if (showClearConfirm) {
+        CapsuleDialog(
+            onDismissRequest = { showClearConfirm = false },
+            title = clearLabel,
+            message = stringResource(Res.string.m9_logs_clear_confirm),
+            confirm = DialogAction(
+                label = clearLabel,
+                onClick = {
+                    showClearConfirm = false
+                    scope.launch { logRepository.clearAllLogs() }
+                },
+            ),
+            dismiss = DialogAction(
+                label = stringResource(Res.string.cancel_button),
+                onClick = { showClearConfirm = false },
+            ),
+            destructive = true,
+        )
     }
 }
 
