@@ -29,6 +29,12 @@
 - **仅 arm64**：app 与 heif 的 `defaultConfig.ndk.abiFilters` 只含 `arm64-v8a`（native 仅构建/打包该 ABI）；老 32 位（armeabi-v7a）与 x86/x86_64 设备/模拟器不可安装。`scripts/release_assert_apk.sh` 断言 APK `lib/` 下仅含 `arm64-v8a` 且至少一个 `.so`。
 - `release_build.sh` 构建前清理 compose 资源生成残留（sharednew/build 与 app/build 的生成/中间 assets 目录），并断言 APK 仅含 en+zh-rCN 的 composeResources（`assets/composeResources/*/values*` ⊆ {values, values-zh-rCN}）。
 
+## Android 后台与退出语义
+- Home/锁屏/切换应用/划走任务卡/根页 Back 均不主动断开 BLE/GPS，不停止仍有连接需求的前台服务；设备页用户主动“断开”的持久化意图、二次确认与 presence 退休逻辑保持独立。
+- Wi-Fi 照片传输只在应用可见时保留；退后台无用户下载即结束。有已接受的单张/批量下载则保留整个下载任务与网络请求，成功/失败/取消后若仍在后台自动结束；缩略图、预览、结果汇总不算下载。回前台取消待结束，不能自动重开已结束会话。
+- 划卡/根页 Back 为明确退出，即使下载中也立即取消并结束 Wi-Fi；不加任何 BLE/GATT 或 FGS 关闭回调。`AppExitGate` 的 owner/epoch 与退休快照反例必须保留。后台下载保留最多 30 分钟（超时记日志并走正常取消清理）；生命周期与真机限制见 `docs/wifi-architecture.md`。
+- 应用内通用帮助只在设备清单提供入口，帮助页的手动赞助链接保留；连接故障排查不等同于通用帮助入口。
+
 ## 语言资源纪律
 - 仅支持英文基线（`values/`）+ 简体中文（`values-zh-rCN/`）；其余语言已移除，`app/build.gradle.kts` 用 `androidResources.localeFilters`（en、zh-rCN）屏蔽依赖库语言。
 - 新增文案只需写 `values/` 与 `values-zh-rCN/` 两处（app 的 `app/src/main/res` 与 sharednew 的 `commonMain/composeResources` 同理），不要新增其它语言目录。

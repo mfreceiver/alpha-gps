@@ -115,6 +115,7 @@ class WifiRemoteController internal constructor(
     private val releaseControls: (String) -> Unit,
     private val automaticConnector: WifiAutomaticConnector? = null,
     private val manualSetupConnector: WifiManualSetupConnector? = null,
+    private val backgroundDownloadTimeoutMs: Long = 30 * 60 * 1_000L,
 ) {
     private val log = logging()
 
@@ -142,6 +143,51 @@ class WifiRemoteController internal constructor(
     private var activeConnection: WifiRemoteConnection? = null
     private var previewJob: Job? = null
     private var photoJob: Job? = null
+    private var userDownloadInProgress = false
+    private var isForeground = true
+    private var backgroundDownloadTimer: Job? = null
+    private var backgroundEpoch = 0L
+
+    /** Activity visibility is app-owned, not tied to the browser composition's lifetime. */
+    fun onAppVisibilityChanged(visible: Boolean) {
+        isForeground = visible
+        applyBackgroundPolicy()
+    }
+
+    /** Navigation closes Wi-Fi; background disposal must not cancel an accepted download. */
+    fun onRemoteScreenDisposed(identifier: String) {
+        if (!_owner.value.equals(identifier, true)) return
+        if (isForeground) disconnect(identifier) else applyBackgroundPolicy()
+    }
+
+    private fun cancelBackgroundDownloadTimer() {
+        backgroundEpoch++
+        backgroundDownloadTimer?.cancel()
+        backgroundDownloadTimer = null
+    }
+
+    private fun applyBackgroundPolicy() {
+        val id = _owner.value ?: return
+        when (BackgroundWifiPolicy.decide(isForeground, userDownloadInProgress)) {
+            BackgroundWifiPolicy.Action.Keep -> cancelBackgroundDownloadTimer()
+            BackgroundWifiPolicy.Action.Close -> disconnect(id)
+            BackgroundWifiPolicy.Action.FinishDownload -> {
+                if (backgroundDownloadTimer != null) return
+                val epoch = backgroundEpoch
+                val sessionAttempt = attempt
+                backgroundDownloadTimer = scope.launch {
+                    delay(backgroundDownloadTimeoutMs)
+                    // A cancelled timer must not close a later visit or a new same-camera session.
+                    if (epoch == backgroundEpoch && attempt == sessionAttempt &&
+                        _owner.value == id && !isForeground && userDownloadInProgress
+                    ) {
+                        log.w { "Wi-Fi background download retention timed out; attempt=$sessionAttempt" }
+                        disconnect(id)
+                    }
+                }
+            }
+        }
+    }
     /** Background batched thumbnail loader of the current page (independent of [photoJob]). */
     private var thumbJob: Job? = null
     /** Page-relative capture index the grid is showing; the loader serves it (and what follows) first. */
@@ -219,6 +265,10 @@ class WifiRemoteController internal constructor(
             log.w { "Wi-Fi remote connect ignored: previous attempt=$attempt is still active or closing" }
             return
         }
+        // A connection is user-initiated from a visible activity; stale background callbacks
+        // (for example a permission result) cannot silently start a new network request.
+        if (!isForeground) return
+        cancelBackgroundDownloadTimer()
         attempt++
         log.i { "Wi-Fi remote attempt=$attempt starting phase=$phase" }
         val id = identifier.uppercase()
@@ -671,7 +721,7 @@ class WifiRemoteController internal constructor(
                         totalFiles = pending.size
                     )
                 )
-            }) { id, connection ->
+            }, userDownload = true) { id, connection ->
             val current = registry.get(id)?.wifiRemote
             if (current?.photoBrowser?.open != true ||
                 current.photoBrowser.browserGeneration != generation
@@ -785,6 +835,7 @@ class WifiRemoteController internal constructor(
 
     private fun photoWork(
         identifier: String, starting: (WifiRemoteState) -> WifiRemoteState,
+        userDownload: Boolean = false,
         action: suspend (String, WifiRemoteConnection) -> Unit
     ) {
         val id = identifier.uppercase()
@@ -839,9 +890,12 @@ class WifiRemoteController internal constructor(
             }
         }
         photoJob = work
+        if (userDownload) userDownloadInProgress = true
         work.invokeOnCompletion {
+            val completedDownload = photoJob === work && userDownload
             if (photoJob === work) {
                 photoJob = null
+                if (userDownload) userDownloadInProgress = false
                 updateReady(id) {
                     it.copy(
                         photoBrowser = it.photoBrowser.copy(loading = false),
@@ -852,6 +906,7 @@ class WifiRemoteController internal constructor(
                 }
             }
             releaseThumbnails()
+            if (completedDownload) applyBackgroundPolicy()
         }
         work.start()
     }
@@ -859,6 +914,7 @@ class WifiRemoteController internal constructor(
     fun disconnect(identifier: String? = null) {
         val id = _owner.value ?: return
         if (identifier != null && !id.equals(identifier, true)) return
+        cancelBackgroundDownloadTimer()
         log.i { "Wi-Fi remote attempt=$attempt disconnect requested" }
         registry.updateWifiRemote(id, WifiRemoteState(phase = WifiRemotePhase.Closing))
         job?.cancel()
@@ -938,6 +994,8 @@ class WifiRemoteController internal constructor(
             activeConnection = null
             previewJob = null
             photoJob = null
+            userDownloadInProgress = false
+            cancelBackgroundDownloadTimer()
             thumbJob = null
             _thumbnailsLoading.value = false
             thumbnailHolds.value = 0
