@@ -14,9 +14,6 @@ local.properties
 .kotlin
 shared/build
 
-# Sentry Config File
-sentry.properties
-
 # Xcode
 #
 # gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore

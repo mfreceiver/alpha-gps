@@ -27,13 +27,11 @@ import androidx.navigation3.ui.NavDisplay
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.back
 import cameragps.sharednew.generated.resources.battery_optimization_settings_title
-import cameragps.sharednew.generated.resources.enable_sentry_description
 import cameragps.sharednew.generated.resources.event_sounds_open_section_description
 import cameragps.sharednew.generated.resources.event_sounds_title
 import cameragps.sharednew.generated.resources.keyboard_arrow_right_24px
 import cameragps.sharednew.generated.resources.location_provider_hint
 import cameragps.sharednew.generated.resources.location_provider_title
-import cameragps.sharednew.generated.resources.sentry_settings
 import cameragps.sharednew.generated.resources.settings
 import com.sasch.cameragps.sharednew.ui.settings.SharedLanguageSettingsCard
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsColumn
@@ -43,7 +41,6 @@ import com.sasch.cameragps.sharednew.whatsnew.WhatsNewState
 import com.saschl.cameragps.R
 import com.saschl.cameragps.service.location.LOCATION_PROVIDER_SELECTABLE
 import com.saschl.cameragps.ui.ReviewHintDebugPanel
-import com.saschl.cameragps.utils.CrashReporting
 import com.saschl.cameragps.utils.PreferencesManager
 import kotlinx.serialization.Serializable
 import org.jetbrains.compose.resources.painterResource
@@ -106,12 +103,6 @@ fun SettingsScreen(
                     }
                 }*/
 
-            SettingsDestination.Sentry -> {
-                NavEntry(SettingsDestination.Sentry) {
-                    SentrySettingsSubScreen(onBackClick = { navigateBack() })
-                }
-            }
-
             else -> {
                 NavEntry(destination) {}
             }
@@ -164,14 +155,6 @@ private fun SettingsOverviewScreen(
             )
             SharedLanguageSettingsCard()
             WhatsNewSettingsCard(whatsNew)
-            if (CrashReporting.AVAILABLE) {
-                SettingsSectionNavigation(
-                    title = stringResource(Res.string.sentry_settings),
-                    description = stringResource(Res.string.enable_sentry_description),
-                    onClick = { onOpenDestination(SettingsDestination.Sentry) }
-                )
-            }
-
             if (debugPanelCounter >= 5) {
                 ReviewHintDebugPanel()
                 DebugDonationDialogCard()
@@ -258,16 +241,6 @@ private fun BatteryOptimizationSettingsScreen(onBackClick: () -> Unit) {
 }
 
 
-@Composable
-private fun SentrySettingsSubScreen(onBackClick: () -> Unit) {
-    SettingsSectionScreen(
-        title = stringResource(Res.string.sentry_settings),
-        onBackClick = onBackClick
-    ) {
-        SentrySettingsCard()
-    }
-}
-
 private sealed interface SettingsDestination : NavKey {
     @Serializable
     data object Overview : SettingsDestination
@@ -284,7 +257,4 @@ private sealed interface SettingsDestination : NavKey {
     @Serializable
     data object Language : SettingsDestination
 
-
-    @Serializable
-    data object Sentry : SettingsDestination
 }

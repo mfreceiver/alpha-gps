@@ -244,26 +244,6 @@ object PreferencesManager {
         return getPreferences(context).getBoolean("auto_start_after_boot", false)
     }
 
-    fun sentryEnabled(context: Context): Boolean {
-        return getPreferences(context).getBoolean("sentry_enabled", false)
-    }
-
-    fun setSentryEnabled(context: Context, enabled: Boolean) {
-        getPreferences(context).edit {
-            putBoolean("sentry_enabled", enabled)
-        }
-    }
-
-    fun isSentryConsentDialogDismissed(context: Context): Boolean {
-        return getPreferences(context).getBoolean("sentry_consent_dialog_dismissed", false)
-    }
-
-    fun setSentryConsentDialogDismissed(context: Context, dismissed: Boolean) {
-        getPreferences(context).edit {
-            putBoolean("sentry_consent_dialog_dismissed", dismissed)
-        }
-    }
-
     fun isPermissionsIgnored(context: Context): Boolean {
         return getPreferences(context).getBoolean(KEY_IGNORE_PERMISSIONS, false)
     }

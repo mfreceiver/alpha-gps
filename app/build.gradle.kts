@@ -1,6 +1,3 @@
-import io.sentry.android.gradle.sourcecontext.UploadSourceBundleTask
-import io.sentry.android.gradle.tasks.SentryUploadNativeSymbolsTask
-import io.sentry.android.gradle.tasks.SentryUploadProguardMappingsTask
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -10,7 +7,6 @@ plugins {
     alias(libs.plugins.jetbrains.compose)
     id("androidx.room")
     id("com.google.devtools.ksp")
-    id("io.sentry.android.gradle") version "6.24.0"
 }
 
 room {
@@ -96,12 +92,12 @@ android {
 
     flavorDimensions += "distribution"
     productFlavors {
-        // Play Store build: GMS fused location, Play in-app review, Sentry.
+        // Play Store build: GMS fused location, Play in-app review.
         create("gplay") {
             dimension = "distribution"
             isDefault = true
         }
-        // F-Droid build: no GMS, no Play libraries, no Sentry.
+        // F-Droid build: no GMS, no Play libraries.
         create("foss") {
             dimension = "distribution"
         }
@@ -162,8 +158,6 @@ dependencies {
     "gplayImplementation"(libs.google.play.services.location)
     "gplayImplementation"(libs.review)
     "gplayImplementation"(libs.review.ktx)
-    "gplayImplementation"(libs.sentry.android)
-    "gplayImplementation"(libs.sentry.android.timber)
 
     implementation(libs.material)
 
@@ -191,40 +185,3 @@ dependencies {
 
 }
 
-
-val sentryUploadsEnabled = providers.gradleProperty("disableSentryUpload")
-    .map { !it.toBoolean() }
-    .orElse(true)
-
-// Sentry's --no-upload source task still requires authentication; skip the tasks entirely.
-tasks.configureEach {
-    if (this is SentryUploadProguardMappingsTask ||
-        this is UploadSourceBundleTask ||
-        this is SentryUploadNativeSymbolsTask
-    ) {
-        onlyIf("Sentry uploads are enabled") { sentryUploadsEnabled.get() }
-    }
-}
-
-sentry {
-    org.set("sascha-ni")
-    projectName.set("android")
-
-    // this will upload your source code to Sentry to show it as part of the stack traces
-    // disable if you don't want to expose your sources
-    includeSourceContext.set(true)
-
-    // The foss flavor ships without Sentry; the SDK is added explicitly via
-    // gplayImplementation instead of auto-installation (which is variant-blind).
-    ignoredFlavors.set(setOf("foss"))
-    autoInstallation {
-        enabled.set(false)
-    }
-
-    // Performance tracing is off (no traces sample rate in the manifest), so the
-    // bytecode it would patch into Room/file I/O/OkHttp/Compose calls records
-    // spans that are never sent. Re-enable together with a sample rate.
-    tracingInstrumentation {
-        enabled.set(false)
-    }
-}

@@ -20,7 +20,6 @@ import com.sasch.cameragps.sharednew.bluetooth.session.CameraAutoCorrectionContr
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSession
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionOrchestrator
 import com.sasch.cameragps.sharednew.bluetooth.session.OrchestratorEvent
-import com.sasch.cameragps.sharednew.crash.IosCrashReporting
 import com.sasch.cameragps.sharednew.database.LogDatabase
 import com.sasch.cameragps.sharednew.database.devices.CameraDeviceDAO
 import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
@@ -85,10 +84,6 @@ object IosBluetoothController : BluetoothController {
         val level = runCatching { LogLevel.valueOf(IosAppPreferences.getLogLevel()) }
             .getOrDefault(LogLevel.Info)
         IosLogging.install(LogRepository(getDatabaseBuilder()), level)
-        // After the loggers exist, so an init failure is logged, and before
-        // anything below can throw: crash reporting is most useful exactly on
-        // the background-relaunch paths that have no UI to notice a problem.
-        IosCrashReporting.startIfConsented()
         logging.i {
             "Launch (${IosLaunchContext.describe()}): appEnabled=$appEnabled " +
                     "migrationDone=${IosAppPreferences.isAccessoryMigrationDone()}"

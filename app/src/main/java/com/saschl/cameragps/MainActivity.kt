@@ -25,7 +25,6 @@ import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
-import com.sasch.cameragps.sharednew.crash.CrashReportPolicy
 import com.sasch.cameragps.sharednew.database.LogDatabase
 import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
 import com.sasch.cameragps.sharednew.database.logging.LogRepository
@@ -36,13 +35,10 @@ import com.sasch.cameragps.sharednew.whatsnew.rememberWhatsNewState
 import com.saschl.cameragps.service.LocationSenderService
 import com.saschl.cameragps.ui.EnhancedLocationPermissionBox
 import com.saschl.cameragps.ui.HelpScreen
-import com.saschl.cameragps.ui.SentryConsentDialog
 import com.saschl.cameragps.ui.TroubleshootingScreen
 import com.saschl.cameragps.ui.WelcomeScreen
 import com.saschl.cameragps.ui.device.CameraDeviceManager
-import com.saschl.cameragps.ui.device.SCREENSHOT_MODE
 import com.saschl.cameragps.ui.settings.SettingsScreen
-import com.saschl.cameragps.utils.CrashReporting
 import com.saschl.cameragps.utils.PreferencesManager
 import com.saschl.cameragps.utils.logging.AndroidLogFormatter
 import kotlinx.serialization.Serializable
@@ -188,15 +184,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        var showSentryDialog by remember {
-            mutableStateOf(
-                !SCREENSHOT_MODE && CrashReportPolicy.shouldShowConsentDialog(
-                    available = CrashReporting.AVAILABLE,
-                    consentDialogDismissed =
-                        PreferencesManager.isSentryConsentDialogDismissed(context),
-                )
-            )
-        }
         var forceDonationDialogThisLaunch by remember {
             mutableStateOf(
                 PreferencesManager.consumeForceDonationDialogOnNextAppStart(context)
@@ -258,20 +245,9 @@ class MainActivity : AppCompatActivity() {
 
                 AppDestination.Devices -> {
                     NavEntry(AppDestination.Devices) {
-                        LaunchedEffect(Unit) {
-                            showSentryDialog =
-                                !SCREENSHOT_MODE && CrashReportPolicy.shouldShowConsentDialog(
-                                    available = CrashReporting.AVAILABLE,
-                                    consentDialogDismissed =
-                                        PreferencesManager.isSentryConsentDialogDismissed(context),
-                                )
-                        }
-
-
                         EnhancedLocationPermissionBox {
                             CameraDeviceManager(
                                 whatsNew = whatsNew,
-                                startupPromptActive = showSentryDialog,
                                 forceShowDonationDialogOnEnter = forceDonationDialogThisLaunch,
                                 onForceDonationDialogConsumed = {
                                     forceDonationDialogThisLaunch = false
@@ -289,17 +265,7 @@ class MainActivity : AppCompatActivity() {
                                     backStack.add(AppDestination.Logs)
                                 }
                             )
-                        }
-
-
-                        if (showSentryDialog) {
-                            SentryConsentDialog(
-                                onDismiss = {
-                                    showSentryDialog = false
-                                }
-                            )
-                        }
-                    }
+                        }                    }
                 }
 
                 AppDestination.Logs -> {

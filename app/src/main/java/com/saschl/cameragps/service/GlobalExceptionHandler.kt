@@ -1,19 +1,8 @@
 package com.saschl.cameragps.service
 
-import android.util.Log
 import timber.log.Timber
 import kotlin.jvm.javaClass
 import kotlin.stackTraceToString
-
-class CrashReportingTree : Timber.Tree() {
-    override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
-        // Only log errors and warnings to avoid spam
-        if (priority == Log.ERROR || priority == Log.WARN) {
-            // You could also send to crashlytics or other crash reporting service here
-            super.log(priority, tag, message, t)
-        }
-    }
-}
 
 class GlobalExceptionHandler(
     private val defaultHandler: Thread.UncaughtExceptionHandler?

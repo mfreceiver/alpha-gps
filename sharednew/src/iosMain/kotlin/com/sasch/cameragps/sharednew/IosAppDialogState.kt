@@ -8,14 +8,11 @@ import androidx.compose.runtime.remember
 import androidx.lifecycle.Lifecycle
 import com.sasch.cameragps.sharednew.bluetooth.BluetoothDeviceInfo
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController
-import com.sasch.cameragps.sharednew.crash.CrashReportPolicy
-import com.sasch.cameragps.sharednew.crash.IosCrashReporting
 import com.sasch.cameragps.sharednew.ui.dialog.DialogQueue
 
 internal sealed interface IosDialog {
     data object MigrationError : IosDialog
     data object MigrationExplainer : IosDialog
-    data object SentryConsent : IosDialog
     data class PairingFailed(val deviceName: String) : IosDialog
     data object AlwaysLocation : IosDialog
     data object PreciseLocation : IosDialog
@@ -30,8 +27,6 @@ internal class IosAppDialogState {
     private var recordDonationImpression = false
 
     fun requestMigration() = queue.enqueue(IosDialog.MigrationExplainer)
-
-    fun dismissSentryConsent() = queue.remove(IosDialog.SentryConsent)
 
     fun requestDonation(recordImpression: Boolean = false) {
         if (IosDialog.Donation in queue) return
@@ -67,13 +62,6 @@ internal fun rememberIosAppDialogState(
 
     LaunchedEffect(Unit) {
         if (!SCREENSHOT_MODE) {
-            if (CrashReportPolicy.shouldShowConsentDialog(
-                    available = IosCrashReporting.AVAILABLE,
-                    consentDialogDismissed = IosAppPreferences.isSentryConsentDialogDismissed(),
-                )
-            ) {
-                dialogQueue.enqueue(IosDialog.SentryConsent)
-            }
             if (IosAppPreferences.consumeForceDonationDialogOnNextAppStart()) {
                 state.requestDonation()
             }

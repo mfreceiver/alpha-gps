@@ -26,7 +26,6 @@ import cameragps.sharednew.generated.resources.settings_24px
 import cameragps.sharednew.generated.resources.view_logs
 import com.diamondedge.logging.LogLevel
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController
-import com.sasch.cameragps.sharednew.crash.IosCrashReporting
 import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
 import com.sasch.cameragps.sharednew.database.logging.LogRepository
 import com.sasch.cameragps.sharednew.language.appLanguagePreference
@@ -111,7 +110,6 @@ internal fun CameraGpsIosApp(
     )
     var isAppEnabled by remember { mutableStateOf(IosAppPreferences.isAppEnabled()) }
     var hapticsEnabled by remember { mutableStateOf(IosAppPreferences.isHapticsEnabled()) }
-    var sentryEnabled by remember { mutableStateOf(IosAppPreferences.isSentryEnabled()) }
     var isAppInForeground by remember {
         mutableStateOf(
             UIApplication.sharedApplication.applicationState == UIApplicationStateActive
@@ -193,16 +191,6 @@ internal fun CameraGpsIosApp(
         devices = devices,
         whatsNewPending = whatsNew.pending,
     )
-    val onSentryEnabledChange: (Boolean) -> Unit = { enabled ->
-        sentryEnabled = enabled
-        IosAppPreferences.setSentryEnabled(enabled)
-        // A choice in Settings also answers any pending consent prompt.
-        IosAppPreferences.setSentryConsentDialogDismissed(true)
-        dialogs.dismissSentryConsent()
-        // Enabling takes effect now; disabling requires the restart shown in Settings.
-        if (enabled) IosCrashReporting.start()
-    }
-
     IosReviewPromptEffect(
         reviewTestMode = reviewTestMode,
         isForeground = !SCREENSHOT_MODE && isAppInForeground,
@@ -340,8 +328,6 @@ internal fun CameraGpsIosApp(
                         hapticsEnabled = enabled
                         IosAppPreferences.setHapticsEnabled(enabled)
                     },
-                    sentryEnabled = sentryEnabled,
-                    onSentryEnabledChange = onSentryEnabledChange,
                     onChangeLogLevel = { level ->
                         IosLogging.install(logRepository, level)
                     },
@@ -383,7 +369,6 @@ internal fun CameraGpsIosApp(
         canShow = canShowDialogs,
         whatsNew = whatsNew,
         migrationSnackbarHostState = migrationSnackbarHostState,
-        onSentryEnabledChange = onSentryEnabledChange,
         onOpenTroubleshooting = {
             troubleshootingReturnScreen = IosScreen.Devices
             currentScreen = IosScreen.Troubleshooting

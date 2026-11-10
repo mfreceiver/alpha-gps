@@ -70,7 +70,6 @@ import cameragps.sharednew.generated.resources.wifi_remote_default_download_form
 import com.diamondedge.logging.LogLevel
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController
 import com.sasch.cameragps.sharednew.ui.settings.SharedLanguageSettingsCard
-import com.sasch.cameragps.sharednew.ui.settings.SharedSentrySettingsCard
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsCard
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsColumn
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsScreen
@@ -102,8 +101,6 @@ internal fun IosSettingsScreen(
     onBackClick: () -> Unit,
     onAppEnabledChange: (Boolean) -> Unit,
     onHapticsEnabledChange: (Boolean) -> Unit,
-    sentryEnabled: Boolean,
-    onSentryEnabledChange: (Boolean) -> Unit,
     onChangeLogLevel: (LogLevel) -> Unit,
     onTipJarScrollConsumed: () -> Unit = {},
     whatsNew: WhatsNewState? = null,
@@ -240,13 +237,6 @@ internal fun IosSettingsScreen(
                     NSLog("selected log level: ${it.name}")
                     onChangeLogLevel(it)
                 },
-            )
-
-            // Unconditional: unlike Android there is no foss variant on iOS,
-            // so a build without a crash reporter does not exist here.
-            SharedSentrySettingsCard(
-                enabled = sentryEnabled,
-                onEnabledChange = onSentryEnabledChange,
             )
 
             if (debugTapCounter >= 5) {

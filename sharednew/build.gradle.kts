@@ -13,9 +13,6 @@ plugins {
 
     id("androidx.room")
     id("com.google.devtools.ksp")
-    // Applied conditionally below via the alphagps.enableIos switch.
-    alias(libs.plugins.sentry.kotlin.multiplatform) apply false
-
 }
 
 // Personal customization switch: when false (default) no iOS targets, source sets,
@@ -100,38 +97,6 @@ val generateSupportedLanguages = tasks.register("generateSupportedLanguages") {
     }
 }
 
-
-// --- Sentry Cocoa linking (Apple targets only) --------------------------------
-//
-// The plugin adds the `-F` search path for the Sentry Cocoa xcframework that
-// Xcode's Swift Package Manager checked out for iosApp/alphagps.xcodeproj
-// (product `Sentry-Dynamic`); the published cinterop klib already carries the
-// matching `-framework Sentry`.
-//
-// **The foss guarantee lives here.** Left at its default, the plugin injects
-// `api("io.sentry:sentry-kotlin-multiplatform")` into commonMain, which would
-// put the Sentry Java SDK into :sharednew's Android artifact and therefore into
-// the F-Droid flavor of :app. Turning auto-install off reduces the plugin to
-// pure Apple-target linking; the dependency stays declared by hand in the
-// iosMain source set below. Do not remove this.
-//
-// Beyond that the plugin is inert for Android work: it only configures Apple
-// binaries, only on a Mac host, and only when an Apple compile task is actually
-// in the requested task graph. It is only applied at all when iOS targets are
-// enabled (alphagps.enableIos=true).
-if (enableIos) {
-    apply(plugin = "io.sentry.kotlin.multiplatform.gradle")
-    configure<io.sentry.kotlin.multiplatform.gradle.SentryExtension> {
-        autoInstall.enabled.set(false)
-
-        // Without this the plugin file-walks the repo root looking for a .xcodeproj,
-        // which here means walking website/node_modules (138 MB).
-        linker.xcodeprojPath.set(rootProject.layout.projectDirectory.dir("iosApp/alphagps.xcodeproj").asFile.absolutePath)
-        // Escape hatch for a checkout that has never been opened in Xcode:
-        // -Psentry.cocoa.frameworkPath=/path/to/Sentry-Dynamic.xcframework
-        linker.frameworkPath.set(providers.gradleProperty("sentry.cocoa.frameworkPath"))
-    }
-}
 
 val heifTestFixturesDir = layout.buildDirectory.dir("generated/heifTestFixtures/kotlin")
 // Opt-in originals stay outside the repository and are packaged only in the test APK.
@@ -399,12 +364,6 @@ kotlin {
                 // part of KMP’s default source set hierarchy. Note that this source set depends
                 // on common by default and will correctly pull the iOS artifacts of any
                 // KMP dependencies declared in commonMain.
-
-                // Sentry stays in iosMain: moving it to commonMain would drag the
-                // Sentry Java SDK into :sharednew's Android artifact and therefore
-                // into the foss (F-Droid) flavor of :app, which must stay free of
-                // proprietary dependencies.
-                    implementation(libs.sentry.kotlin.multiplatform)
                 }
             }
         }
