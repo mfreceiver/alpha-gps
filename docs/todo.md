@@ -84,3 +84,8 @@
 - 做什么：Android UI 只走按日分组浏览（`browseDates`/`browseDate`）；`WifiRemoteController.browsePhotos(offset)`、`WifiRemoteConnection.openPhotoBrowser/photoPage`、`WifiRemoteViewModel.viewPhotoAt` 的平铺翻页分支、`WifiPhotoViewer` 的平铺边界页（加载/失败/传输等待）与 `SonyImageTransfer.page()`/`PAGE_SIZE` 仍保留（大量测试以其为夹具）。评估迁移测试夹具到按日路径后删除平铺分页。
 - 验收：全仓无 UI 可达的平铺翻页代码；测试改用按日路径且覆盖不降；全量验证通过。
 - 依据：wave2/wifi 取消日期内分页时为控制风险保留（见 `docs/wifi-architecture.md` “Day list, day grid, and thumbnails”）。
+
+### 22. 复审遗留的测试强度与展示边界（0.2.1 复审 P3，不阻断）
+- 前置检查"晚返回"测试：现有测试用可取消的 `CompletableDeferred.await()`，取消后旧检查已退出，没有制造"忽略取消后仍返回"的非协作检查；建议补一个先取消、再放行旧结果、断言零 claim/open 并可重连的用例。
+- 诊断取消测试只覆盖 disconnect；建议补"同一 Ready 会话内换日/刷新后，排队扫描不再执行"的断言。
+- JPG-only 下"无 JPG 且 RAW/HEIF 原件全部超限"的照片：格子仍显示原件大小+无 JPG 警示（NoJpeg），预览页回退原件计划为空显示"超限"并禁用下载；不会误下载也不误报已保存，属 JPG-only 批量与手动 Original 动作的语义区别，待决定是否对齐提示。
