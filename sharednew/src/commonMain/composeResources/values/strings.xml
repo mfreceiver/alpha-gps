@@ -454,4 +454,6 @@
     <string name="device_info_setting_unknown">Unknown (camera not connected)</string>
     <string name="device_info_mtu">Bluetooth MTU</string>
     <string name="device_info_mtu_value">%1$d bytes</string>
+    <string name="m0_dialog_close">Close</string>
+    <string name="m0_button_loading">Loading</string>
 </resources>
