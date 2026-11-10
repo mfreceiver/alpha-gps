@@ -85,8 +85,12 @@ There are three entry paths:
 | Entry point                                                   | What happens before opening PTP                                                                                                                                                                  |
 |---------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `connectAutomatically()`                                      | BLE prepares the camera and reads credentials; the OS joins its Wi-Fi; the connector discovers its gateway address. Available on Android 10+ and iOS.                                            |
-| `prepareManualConnection()` then `continueManualConnection()` | On Android 8–9, BLE obtains credentials, the user joins in Settings, and the connector verifies the joined network before opening PTP.                                                           |
-| `connect(identifier, host)`                                   | The user has already enabled remote shooting and joined the camera's Wi-Fi. Android can discover the address when the host is blank; iOS's direct manual connector requires an explicit address. |
+| `connect(identifier, host)`                                   | The user has already joined the camera's Wi-Fi. Android can discover the address when the host is blank; iOS's direct manual connector requires an explicit address. |
+
+> Historical note: `prepareManualConnection()` / `continueManualConnection()` implemented a manual
+> join-in-Settings fallback for Android 8–9. Since `minSdk` was raised to 31, Android 10+ automatic
+> connection is the only supported path and that fallback is obsolete (kept only until its code is
+> removed).
 
 For automatic setup, [SonyWifiBootstrap][bootstrap] uses the existing BLE operation queue to start
 Wi-Fi and read the SSID/password, with optional BSSID and status
