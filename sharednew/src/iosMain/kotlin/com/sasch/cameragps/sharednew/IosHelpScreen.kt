@@ -195,7 +195,7 @@ internal fun IosHelpScreen(
                                         append("\n")
                                         withLink(
                                             LinkAnnotation.Url(
-                                                "https://github.com/Saschl/camera-gps/blob/main/README.md",
+                                                AlphaGpsLinks.README,
                                                 TextLinkStyles(
                                                     style = SpanStyle(
                                                         color = MaterialTheme.colorScheme.primary,
@@ -204,7 +204,7 @@ internal fun IosHelpScreen(
                                                 ),
                                             ),
                                         ) {
-                                            append("https://github.com/Saschl/camera-gps")
+                                            append(AlphaGpsLinks.REPOSITORY)
                                         }
                                         append("\n")
                                         withLink(
