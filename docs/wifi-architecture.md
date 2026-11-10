@@ -240,6 +240,45 @@ until reopening shooting succeeds. Retry/return can attempt the transition again
 the browser uses
 `prepareToDisconnect()`, which ends transfer without needlessly reopening shooting.
 
+## Day list, day grid, and thumbnails (UI v3)
+
+The Wi-Fi screen enters the grouped browser automatically once the session is ready
+(`WifiRemoteViewModel.maybeAutoEnterBrowser()` → `browseDates()`):
+
+- **Connection overlay.** While connecting, a fixed-size card shows the steps as a segmented ring.
+  `wifiConnectionFrame()` in [WifiBrowserModel.kt][browser-model] maps the unchanged controller
+  phases to frames: `PreparingCamera` → prepare, `AwaitingNetworkApproval` → approve,
+  `JoiningNetwork`/`OpeningSession` → join, `Ready` with the first catalog read still running →
+  read catalog, then a short green “ready” frame before the day list. `Failed` shows a red icon and
+  ends by a tap, Back, or after 5 s (the permission failure instead offers app settings and waits);
+  there is no help or retry button — entering again is the retry. Cancel ends the session.
+- **Day list.** `openCatalog()` enumerates the whole card once (it always did: the v4 content
+  catalog and `GET_OBJECT_HANDLES` both list every object, and the result is kept in memory as a
+  `CatalogSnapshot`). The days and their counts come from that snapshot, so the list adds no camera
+  traffic. Leaving the day list ends the Wi-Fi session (Bluetooth stays); refresh re-enumerates and
+  starts a new `browserGeneration`.
+- **Day grid without pages.** `dayPhotos(dateKey)` returns the whole day from the snapshot; there is
+  no page inside a day any more. The transfer's “displayed set” gate (thumbnails, previews and
+  metadata are only served for handles of the displayed day) is unchanged — it just covers the whole
+  day now. Downloads still resolve handles against the full catalog, so a selection spanning days
+  downloads correctly.
+- **Stale-view safety.** Every `browseDate()` publishes a new `pageRevision` on the same generation;
+  `expectedRevision` refuses a day switch issued from an earlier view (A → B → A), the thumbnail
+  demand carries the revision, and a refresh bumps the generation (selection snapshots and range
+  gestures are rejected on either change). This is the same mechanism as for pages before, keyed by
+  day instead of `(day, offset)`.
+- **Viewport-driven thumbnails.** The grid reports its visible captures plus two rows of margin
+  (`requestThumbnails`). One serial loader per day takes at most 12 per batch, re-checks before every
+  request that the tile is still wanted (fast scrolling drops not-yet-started requests; the request
+  in flight is never cancelled), pauses while a download or preview holds the PTP queue, and stays
+  idle without a viewport. Because a day can now be long, decoded thumbnails beyond 300 are evicted
+  oldest-first (never the current demand) and are fetched again when scrolled back to.
+- **Selection and download.** Long-press selects; dragging after a long-press selects a contiguous
+  range within the day. The floating download button follows the settings' default format: JPG-only
+  plans one JPG per capture (captures without one are skipped and counted), Original downloads every
+  file — there is no format sheet. The batch summary is recorded before the batch is submitted, so a
+  summary latched by an earlier batch can neither reappear nor settle on the new batch's result.
+
 ## Downloading and saving
 
 [SonyImageTransfer][transfer] selects the supported browsing implementation:
@@ -507,6 +546,7 @@ initialization, and preview layers respectively.
 [mtp]: ../sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/remote/wifi/SonyMtpObjectInfo.kt
 [state]: ../sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/remote/wifi/WifiRemoteState.kt
 [screen]: ../sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiRemoteScreen.kt
+[browser-model]: ../sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiBrowserModel.kt
 [android-wifi]: ../sharednew/src/androidMain/kotlin/com/sasch/cameragps/sharednew/remote/wifi/AndroidWifiRemote.kt
 [android-network]: ../sharednew/src/androidMain/kotlin/com/sasch/cameragps/sharednew/remote/wifi/AndroidCameraNetworkRequest.kt
 [android-dir]: ../sharednew/src/androidMain/kotlin/com/sasch/cameragps/sharednew/remote/wifi/

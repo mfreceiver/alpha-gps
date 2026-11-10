@@ -26,6 +26,7 @@ import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
@@ -90,7 +91,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         }
 
         var catalogOpens = 0
-        val datePageRequests = mutableListOf<Pair<String, Int>>()
+        val dayRequests = mutableListOf<String>()
         var failCatalog = false
         override suspend fun openCatalog(): List<DateGroup> {
             catalogOpens++
@@ -100,9 +101,9 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             return CatalogSnapshot.of(groupCameraPhotos(photos)).dates
         }
 
-        override suspend fun datePage(dateKey: String, offset: Int): CameraPhotoPage {
-            datePageRequests += dateKey to offset
-            return CatalogSnapshot.of(groupCameraPhotos(photos)).page(dateKey, offset)
+        override suspend fun dayPhotos(dateKey: String): CameraPhotoPage {
+            dayRequests += dateKey
+            return CatalogSnapshot.of(groupCameraPhotos(photos)).day(dateKey)
         }
 
         override suspend fun photoThumbnail(handle: Long, stats: ThumbnailStatsSink?): ImageBitmap? {
@@ -527,7 +528,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         assertNull(registry.get("camera")!!.wifiRemote.photoBrowser.dateKey, "Unknown days are ignored")
         assertEquals(1, connection.catalogOpens)
         assertEquals(
-            listOf("2024-05-01" to 0, "2024-05-02" to 0), connection.datePageRequests
+            listOf("2024-05-01", "2024-05-02"), connection.dayRequests
         )
         // An explicit refresh is the only thing that opens a new generation and re-reads the card.
         controller.browseDates("camera")
@@ -924,9 +925,6 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         model.togglePhotoSelection("photo:1")
         assertNull(model.batchSummary)
         model.recordBatchSummary(summary)
-        model.selectAllPhotos()
-        assertNull(model.batchSummary)
-        model.recordBatchSummary(summary)
         model.clearPhotoSelection()
         assertNull(model.batchSummary)
         controller.closeAndJoin()
@@ -1119,7 +1117,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     }
 
     @Test
-    fun originalBatchDropsASettledJpegOnlyBatchSummary() = runTest {
+    fun originalBatchReplacesASettledJpegOnlyBatchSummaryLatchedAcrossAPreview() = runTest {
         val registry = CameraSessionRegistry()
         val connection = pagedConnection()
         connection.downloadResults = Channel(Channel.UNLIMITED)
@@ -1130,37 +1128,51 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         runCurrent()
         controller.browsePhotos("camera")
         runCurrent()
-        // JpegOnly batch A (two files) runs to completion and latches.
+        fun state() = registry.get("camera")!!.wifiRemote
+        val download: (List<WifiPhotoDownload>) -> Unit = { controller.downloadPhotos("camera", it) }
+        // JpegOnly batch A (two JPGs) runs to completion and latches.
         model.togglePhotoSelection("photo:0")
         model.togglePhotoSelection("photo:1")
-        model.recordBatchSummary(WifiBatchSummary(2, emptyMap()))
-        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(0), WifiPhotoDownload(2)))
+        model.requestBatchDownload(WifiFormatPolicy.JpegOnly, state(), download)
         runCurrent()
         repeat(2) {
             connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Saved))
             runCurrent()
         }
-        assertTrue(model.batchSummarySettled(), "batch A must settle after completing")
-        // Submitting an Original batch B through the VM entry must drop the old summary.
-        model.downloadOriginalBatch(listOf(WifiPhotoDownload(4))) { controller.downloadPhotos("camera", it) }
-        assertNull(model.batchSummary, "an Original batch must drop the previous JpegOnly summary")
-        assertFalse(model.batchSummarySettled(), "the dropped summary must not stay settled")
-        // Batch B really saves: the old summary must not re-show off B's own result.
+        val summaryA = model.batchSummary
+        assertEquals(WifiBatchSummary(2, emptyMap()), summaryA)
+        // A preview round-trip clears the transfer result; the summary stays latched.
+        model.previewPhoto("photo:0")
         runCurrent()
-        connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Saved))
+        model.closePhoto()
         runCurrent()
-        val transfer = registry.get("camera")!!.wifiRemote.imageTransfer
-        assertEquals(WifiImageTransferStatus.Saved, transfer.status)
-        assertNull(model.batchSummary)
-        assertFalse(
-            shouldShowBatchSummary(model.batchSummarySettled(), transfer),
-            "batch B's Saved result must not show batch A's summary line",
-        )
+        assertEquals(WifiImageTransferStatus.Idle, state().imageTransfer.status)
+        assertTrue(model.batchSummarySettled(), "batch A is latched across the preview")
+        // Original batch B, same selection: only the RAW files are still missing.
+        val summaryB = model.batchPlan(WifiFormatPolicy.Original, state()).toSummary()
+        var submitted: List<WifiPhotoDownload>? = null
+        model.requestBatchDownload(WifiFormatPolicy.Original, state()) { downloads ->
+            // The new batch's own summary is recorded before it is submitted, so the latched
+            // summary of A can neither show nor settle off B's result.
+            assertEquals(summaryB, model.batchSummary)
+            assertFalse(model.batchSummarySettled(), "the latched summary of A must be dropped")
+            submitted = downloads
+            download(downloads)
+        }
+        assertEquals(listOf(WifiPhotoDownload(1), WifiPhotoDownload(3)), submitted)
+        runCurrent()
+        assertFalse(shouldShowBatchSummary(model.batchSummarySettled(), state().imageTransfer))
+        repeat(2) {
+            connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Saved))
+            runCurrent()
+        }
+        assertEquals(summaryB, model.batchSummary)
+        assertTrue(shouldShowBatchSummary(model.batchSummarySettled(), state().imageTransfer))
         controller.closeAndJoin()
     }
 
     @Test
-    fun originalBatchMustNotSettleAFailedSameSizeJpegOnlySummary() = runTest {
+    fun originalBatchMustNotSettleAFailedJpegOnlySummary() = runTest {
         val registry = CameraSessionRegistry()
         val connection = pagedConnection()
         connection.downloadResults = Channel(Channel.UNLIMITED)
@@ -1171,26 +1183,28 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         runCurrent()
         controller.browsePhotos("camera")
         runCurrent()
+        fun state() = registry.get("camera")!!.wifiRemote
+        val download: (List<WifiPhotoDownload>) -> Unit = { controller.downloadPhotos("camera", it) }
         // A one-file JpegOnly batch A fails.
         model.togglePhotoSelection("photo:0")
-        model.recordBatchSummary(WifiBatchSummary(1, emptyMap()))
-        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(0)))
+        model.requestBatchDownload(WifiFormatPolicy.JpegOnly, state(), download)
         runCurrent()
+        val summaryA = model.batchSummary
         connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Failed))
         runCurrent()
         assertFalse(model.batchSummarySettled(), "the failed batch A must not settle")
-        // Original batch B (same file count) succeeds: A must not be settled by B.
-        model.downloadOriginalBatch(listOf(WifiPhotoDownload(2))) { controller.downloadPhotos("camera", it) }
+        // Original batch B of the same selection (JPG + RAW) succeeds: only B's own summary settles.
+        model.requestBatchDownload(WifiFormatPolicy.Original, state(), download)
         runCurrent()
-        connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Saved))
-        runCurrent()
-        val transfer = registry.get("camera")!!.wifiRemote.imageTransfer
+        repeat(2) {
+            connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Saved))
+            runCurrent()
+        }
+        val transfer = state().imageTransfer
         assertEquals(WifiImageTransferStatus.Saved, transfer.status)
-        assertNull(model.batchSummary, "the Original batch entry must have dropped batch A's summary")
-        assertFalse(
-            shouldShowBatchSummary(model.batchSummarySettled(), transfer),
-            "batch A's summary must not settle off batch B's Saved result",
-        )
+        assertTrue(model.batchSummary != summaryA, "batch A's summary was replaced by B's")
+        assertEquals(WifiBatchSummary(2, emptyMap()), model.batchSummary)
+        assertTrue(shouldShowBatchSummary(model.batchSummarySettled(), transfer))
         controller.closeAndJoin()
     }
 
@@ -2211,7 +2225,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         runCurrent()
         model.reconcilePhotoSelection()
         assertTrue(model.selectedPhotoIds.isEmpty(), "Refreshed catalog invalidates selection")
-        model.selectAllPhotos()
+        listOf("one", "two", "file:45").forEach(model::togglePhotoSelection)
         assertEquals(setOf("one", "two", "file:45"), model.selectedPhotoIds)
         controller.downloadPhoto("camera", 42)
         runCurrent()
@@ -2264,11 +2278,11 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         assertEquals(setOf("photo:0"), model.selectedPhotoIds, "Paging must keep selections")
         // …select on page 2, union with the other page…
         model.togglePhotoSelection("photo:$pageSize")
-        model.selectAllPhotos()
+        model.togglePhotoSelection("photo:${pageSize + 1}")
         assertEquals(
             setOf("photo:0", "photo:$pageSize", "photo:${pageSize + 1}"),
             model.selectedPhotoIds,
-            "Select-all unions the current page with selections on other pages"
+            "Selections on the current view union with selections made elsewhere"
         )
         // …deselecting on the current page keeps other pages selected.
         model.togglePhotoSelection("photo:$pageSize")
@@ -2281,7 +2295,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         model.reconcilePhotoSelection()
         assertTrue("photo:0" in model.selectedPhotoIds && "photo:$pageSize" in model.selectedPhotoIds)
         val batch = selectedBatch()
-        // Insertion order: photo:0, then photo:pageSize + 1 (added by select-all), then photo:pageSize
+        // Insertion order: photo:0, then photo:pageSize + 1, then photo:pageSize
         // (toggled off/on re-appends at the end).
         assertEquals(
             listOf(0L, 1L, page2 + 2, page2 + 3, page2, page2 + 1),
@@ -2666,7 +2680,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
 
 
     @Test
-    fun topBarDownloadInJpegOnlyModeStartsThePlanAndRemembersTheSummary() = runTest {
+    fun floatingDownloadInJpegOnlyModeStartsThePlanAndRemembersTheSummary() = runTest {
         val registry = CameraSessionRegistry()
         val controller =
             WifiRemoteController(backgroundScope, registry, { _, _ -> pagedConnection() }, {}, {})
@@ -2682,17 +2696,16 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
 
         model.requestBatchDownload(WifiFormatPolicy.JpegOnly, state) { started += it }
 
-        // One JPG per capture, never the RAW companions; the sheet stays closed.
+        // One JPG per capture, never the RAW companions.
         assertEquals(listOf(listOf(WifiPhotoDownload(0), WifiPhotoDownload(2))), started)
         assertEquals(2, model.batchSummary?.downloaded)
-        assertFalse(model.showBatchOptions)
         // The selection survives so the result line can be shown over it.
         assertEquals(setOf("photo:0", "photo:1"), model.selectedPhotoIds)
         controller.closeAndJoin()
     }
 
     @Test
-    fun topBarDownloadInOriginalModeOpensTheFormatSheetAndClearingClosesIt() = runTest {
+    fun floatingDownloadInOriginalModeDownloadsEveryOriginalFileWithoutAsking() = runTest {
         val registry = CameraSessionRegistry()
         val controller =
             WifiRemoteController(backgroundScope, registry, { _, _ -> pagedConnection() }, {}, {})
@@ -2702,20 +2715,24 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         controller.browsePhotos("camera")
         runCurrent()
         model.togglePhotoSelection("photo:0")
+        model.togglePhotoSelection("photo:1")
         val state = registry.get("camera")!!.wifiRemote
-        var started = 0
+        val started = mutableListOf<List<WifiPhotoDownload>>()
 
-        model.requestBatchDownload(WifiFormatPolicy.Original, state) { started++ }
+        model.requestBatchDownload(WifiFormatPolicy.Original, state) { started += it }
 
-        assertTrue(model.showBatchOptions)
-        assertEquals(0, started, "Original mode asks for formats first")
-        model.clearPhotoSelection()
-        assertFalse(model.showBatchOptions)
+        // The settings' format decides: no format sheet, JPG + RAW of every selected capture.
+        assertEquals(
+            listOf(listOf(WifiPhotoDownload(0), WifiPhotoDownload(1), WifiPhotoDownload(2), WifiPhotoDownload(3))),
+            started
+        )
+        assertEquals(WifiBatchSummary(4, emptyMap()), model.batchSummary)
+        assertEquals(setOf("photo:0", "photo:1"), model.selectedPhotoIds)
         controller.closeAndJoin()
     }
 
     @Test
-    fun topBarDownloadWithNothingToDownloadDoesNothing() = runTest {
+    fun floatingDownloadWithNothingSelectedDoesNothing() = runTest {
         val registry = CameraSessionRegistry()
         val controller =
             WifiRemoteController(backgroundScope, registry, { _, _ -> pagedConnection() }, {}, {})
@@ -2731,7 +2748,6 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         model.requestBatchDownload(WifiFormatPolicy.Original, state) { started++ }
         model.requestBatchDownload(WifiFormatPolicy.JpegOnly, state) { started++ }
 
-        assertFalse(model.showBatchOptions)
         assertEquals(0, started)
         assertNull(model.batchSummary)
         controller.closeAndJoin()
@@ -2918,6 +2934,33 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     private fun CameraSessionRegistry.revision() = get("camera")!!.wifiRemote.photoBrowser.pageRevision
 
     @Test
+    fun aLongDayKeepsTheThumbnailCacheBoundedAndRefetchesEvictedTilesWhenScrolledBack() = runTest {
+        val count = THUMBNAIL_CACHE_LIMIT + 40
+        val connection = Connection().apply {
+            photos = (0 until count).map { WifiCameraPhoto(it.toLong(), "$it.JPG", 100, "image/jpeg", "", captureId = "p:$it") }
+        }
+        val registry = CameraSessionRegistry()
+        val controller = dayController(connection, registry)
+        // Scroll through the whole day one 12-tile viewport at a time.
+        for (start in 0 until count step THUMBNAIL_BATCH_SIZE) {
+            val visible = (start until minOf(start + THUMBNAIL_BATCH_SIZE, count)).map { "p:$it" }
+            controller.requestThumbnails("camera", registry.revision(), visible, emptyList())
+            runCurrent()
+        }
+        assertEquals(count, connection.thumbnailRequests.size, "every tile was fetched once, serially")
+        assertEquals(THUMBNAIL_CACHE_LIMIT, controller.thumbnails.value.size, "the cache stays bounded")
+        assertFalse(0L in controller.thumbnails.value, "the oldest tiles were dropped")
+        assertTrue((count - 1).toLong() in controller.thumbnails.value, "the current viewport is kept")
+        // Scrolling back asks for the dropped tile again instead of leaving a dead placeholder.
+        controller.requestThumbnails("camera", registry.revision(), listOf("p:0"), emptyList())
+        runCurrent()
+        assertEquals(0L, connection.thumbnailRequests.last())
+        assertTrue(0L in controller.thumbnails.value)
+        controller.closeAndJoin()
+    }
+
+
+    @Test
     fun aDayPageFetchesNothingUntilTheViewportIsReportedThenVisibleBeforeMargin() = runTest {
         val connection = pagedConnection()
         val registry = CameraSessionRegistry()
@@ -3011,7 +3054,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     }
 
     @Test
-    fun switchingPageOrDayStopsTheOldLoaderAndDropsItsDemand() = runTest {
+    fun reopeningADayStopsTheOldLoaderAndDropsItsDemand() = runTest {
         val connection = pagedConnection()
         val registry = CameraSessionRegistry()
         val controller = dayController(connection, registry)
@@ -3019,20 +3062,22 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         controller.requestThumbnails("camera", oldRevision, photoIds(0..1), emptyList())
         runCurrent()
         assertEquals(2, connection.thumbnailRequests.size)
-        controller.browseDate("camera", UNKNOWN_DATE_KEY, pageSize, expectedRevision = oldRevision)
+        // Re-opening the day (same day, same generation) still publishes a new revision.
+        controller.browseDate("camera", UNKNOWN_DATE_KEY, expectedRevision = oldRevision)
         runCurrent()
         assertTrue(registry.revision() > oldRevision)
         controller.requestThumbnails("camera", oldRevision, photoIds(2..5), emptyList())
         runCurrent()
-        assertEquals(2, connection.thumbnailRequests.size, "the old page's demand is dead")
+        assertEquals(2, connection.thumbnailRequests.size, "the old revision's demand is dead")
+        // No page boundary inside a day: a capture past the old 60-capture page is served directly.
         controller.requestThumbnails("camera", registry.revision(), photoIds(pageSize..pageSize), emptyList())
         runCurrent()
         assertEquals(thumbHandle(pageSize), connection.thumbnailRequests.last())
-        // A page change issued from an earlier view (A -> B -> A) is refused instead of replacing this one.
-        val before = connection.datePageRequests.size
-        controller.browseDate("camera", UNKNOWN_DATE_KEY, 0, expectedRevision = oldRevision)
+        // A day change issued from an earlier view (A -> B -> A) is refused instead of replacing this one.
+        val before = connection.dayRequests.size
+        controller.browseDate("camera", UNKNOWN_DATE_KEY, expectedRevision = oldRevision)
         runCurrent()
-        assertEquals(before, connection.datePageRequests.size)
+        assertEquals(before, connection.dayRequests.size)
         // Going back to the day list ends the loader; late layouts of the grid cause no traffic.
         val requests = connection.thumbnailRequests.size
         controller.showDates("camera")
@@ -3043,11 +3088,11 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     }
 
     @Test
-    fun theViewerCrossingIntoANewPageNamesTheCaptureItShowsFirst() = runTest {
+    fun aDayOpenedForTheViewerNamesTheCaptureItShowsFirst() = runTest {
         val connection = pagedConnection()
         val registry = CameraSessionRegistry()
         val controller = dayController(connection, registry)
-        controller.browseDate("camera", UNKNOWN_DATE_KEY, pageSize, preferredPhotoIndex = pageSize + 1)
+        controller.browseDate("camera", UNKNOWN_DATE_KEY, preferredPhotoIndex = pageSize + 1)
         runCurrent()
         assertEquals(listOf(thumbHandle(pageSize + 1)), connection.thumbnailRequests)
         controller.closeAndJoin()
@@ -3122,7 +3167,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     }
 
     @Test
-    fun switchingDaysKeepsTheFinishedBatchSummaryAndViewerPagesStayInTheDay() = runTest {
+    fun theViewerWalksTheWholeDayWithoutReloadingAndKeepsTheBatchSummary() = runTest {
         val connection = pagedConnection()
         val registry = CameraSessionRegistry()
         val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
@@ -3136,14 +3181,20 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         model.recordBatchSummary(WifiBatchSummary(downloaded = 1, skipped = emptyMap()))
         model.openPhoto("photo:${pageSize - 1}")
         runCurrent()
-        model.viewPhotoAt(pageSize) // next page of the same day
+        model.viewPhotoAt(pageSize) // past the old page boundary: still the same, already loaded day
         runCurrent()
         val browser = registry.get("camera")!!.wifiRemote.photoBrowser
-        assertEquals(listOf(UNKNOWN_DATE_KEY to 0, UNKNOWN_DATE_KEY to pageSize), connection.datePageRequests)
-        assertEquals(pageSize, browser.offset)
+        assertEquals(listOf(UNKNOWN_DATE_KEY), connection.dayRequests, "the day is loaded once")
+        assertEquals(0, browser.offset)
+        assertEquals(pageSize, model.viewedPhotoIndex)
+        assertEquals("photo:$pageSize", model.viewedCapture()?.id)
+        val last = groupCameraPhotos(browser.photos).size - 1
+        model.viewPhotoAt(last + 1) // past the end of the day: the viewer stops
+        runCurrent()
+        assertEquals(pageSize, model.viewedPhotoIndex)
         assertTrue(connection.pageRequests.isEmpty(), "grouped mode never uses the flat page API")
         assertEquals(1, connection.catalogOpens)
-        assertTrue(model.batchSummary != null, "paging inside a day does not drop the batch summary")
+        assertTrue(model.batchSummary != null, "moving inside a day does not drop the batch summary")
         controller.closeAndJoin()
     }
 
@@ -3192,15 +3243,12 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     }
 
     @Test
-    fun aGestureFromAnEarlierPageViewOrDayNeverWritesIntoTheSelection() = runTest {
+    fun aGestureFromAnEarlierDayViewNeverWritesIntoTheSelection() = runTest {
         val (model, controller, registry) = rangeModel()
         val session = model.beginRangeSelection("photo:1")!!
-        // Same day, next page: the page identity changed.
-        model.openDatePage(pageSize)
-        runCurrent()
-        assertFalse(model.updateRangeSelection(session, 1), "another page rejects the old token")
-        // Back on page 0 (A -> B -> A): the revision still differs, so the late token is rejected.
-        model.openDatePage(0)
+        // The same day opened again (day list -> day): the revision changed.
+        controller.showDates("camera")
+        model.openDate(UNKNOWN_DATE_KEY)
         runCurrent()
         assertFalse(model.updateRangeSelection(session, 3), "A -> B -> A does not revive the old gesture")
         assertEquals(setOf("photo:1"), model.selectedPhotoIds)
@@ -3216,8 +3264,13 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     @Test
     fun rangeSelectionIsRefusedWhileBusyOrViewingAndAnAnchorMustBeOnThePage() = runTest {
         val (model, controller, _) = rangeModel()
-        assertNull(model.beginRangeSelection("photo:999"), "anchor not on this page")
-        assertNull(model.beginRangeSelection("photo:${pageSize + 1}"), "anchor on another page of the day")
+        assertNull(model.beginRangeSelection("photo:999"), "anchor not on this day")
+        val late = assertNotNull(
+            model.beginRangeSelection("photo:${pageSize + 1}"), "the whole day is one range: no page boundary"
+        )
+        assertTrue(model.updateRangeSelection(late, 2), "a range may span the old page boundary")
+        assertEquals(photoIds(2..pageSize + 1).toSet(), model.selectedPhotoIds)
+        model.clearPhotoSelection()
         val session = model.beginRangeSelection("photo:1")!!
         model.previewPhoto("photo:2") // the magnifier opens the viewer even while selecting
         runCurrent()
@@ -3264,9 +3317,9 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         assertTrue(model.selectedPhotoIds.isEmpty())
 
         val second = model.beginRangeSelection("photo:6")!!
-        model.selectAllPhotos()
-        assertFalse(model.updateRangeSelection(second, 8), "select all retires the gesture too")
-        assertEquals(photoIds(0..pageSize - 1).toSet(), model.selectedPhotoIds)
+        model.togglePhotoSelection("photo:0")
+        assertFalse(model.updateRangeSelection(second, 8), "a tap toggle retires the gesture too")
+        assertEquals(setOf("photo:6", "photo:0"), model.selectedPhotoIds)
         controller.closeAndJoin()
     }
 
@@ -3314,7 +3367,6 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         assertEquals(WifiBatchSummary(0, mapOf(WifiSkipReason.NoJpeg to 1)), model.batchSummary)
         assertTrue(model.batchSummarySettled(), "a local no-op result is settled on its own")
         assertEquals(WifiImageTransferStatus.Idle, registry.get("camera")!!.wifiRemote.imageTransfer.status)
-        assertFalse(model.showBatchOptions)
         controller.closeAndJoin()
     }
 
@@ -3357,7 +3409,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     }
 
     @Test
-    fun originalBatchWithNothingLeftIsALocalSummaryNotAnEmptySheet() = runTest {
+    fun originalBatchWithNothingLeftIsALocalSummaryAndStartsNothing() = runTest {
         val registry = CameraSessionRegistry()
         val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> plannerConnection() }, {}, {})
         val model = WifiRemoteViewModel("camera", controller)
@@ -3371,7 +3423,6 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         model.requestBatchDownload(WifiFormatPolicy.Original, registry.get("camera")!!.wifiRemote) { started++ }
 
         assertEquals(0, started)
-        assertFalse(model.showBatchOptions)
         assertEquals(WifiBatchSummary(0, mapOf(WifiSkipReason.TooLarge to 1)), model.batchSummary)
         controller.closeAndJoin()
     }
