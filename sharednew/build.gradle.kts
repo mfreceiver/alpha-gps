@@ -235,6 +235,10 @@ kotlin {
         minSdk = 31
 
         withHostTestBuilder {
+        }.configure {
+            // Robolectric Compose UI tests (glass overlay focus) need the merged test manifest
+            // (ui-test-manifest's ComponentActivity) and resources.
+            isIncludeAndroidResources = true
         }
 
         withDeviceTestBuilder {
@@ -297,6 +301,22 @@ kotlin {
                 implementation(libs.androidx.exifinterface)
                 implementation(project(":heif"))
 
+            }
+        }
+
+        getByName("androidHostTest") {
+            dependencies {
+                // Test-only (never shipped): real Compose focus behaviour of the in-page overlays
+                // on the JVM (OverlayFocusComposeTest). Same Compose BOM as :app.
+                implementation(project.dependencies.platform(libs.androidx.compose.bom))
+                implementation(libs.androidx.ui.test.junit4)
+                implementation(libs.androidx.ui.test.manifest)
+                implementation(libs.robolectric)
+                // Align ui-test's androidx.test dependencies with the versions :app's androidTest uses.
+                implementation(libs.androidx.core)
+                implementation(libs.androidx.junit)
+                implementation(libs.androidx.runner)
+                implementation(libs.androidx.espresso.core)
             }
         }
 

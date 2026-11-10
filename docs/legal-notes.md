@@ -81,6 +81,13 @@
 
 > 上游使用的 Sentry（崩溃上报）相关组件已随 Sentry 移除（W2）从依赖中删除，不再列于此清单。
 
+**仅测试，不随应用分发**（只出现在 sharednew 的 `androidHostTest` 测试类路径，不进 APK，不列入应用内许可页）：
+
+| 组件 | 许可证 | 说明 |
+|---|---|---|
+| Robolectric 4.14.1（及其传递依赖、android-all-instrumented 运行时） | MIT（传递依赖各自许可） | 在 JVM 上运行 Compose UI 测试（弹层焦点 `OverlayFocusComposeTest`） |
+| Compose UI Test（ui-test-junit4 / ui-test-manifest，随 Compose BOM）、AndroidX Test（core、ext-junit、runner、espresso-core） | Apache-2.0 | 同上 |
+
 ## 6. 商标免责声明
 
 **EN**
