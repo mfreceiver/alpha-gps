@@ -273,7 +273,7 @@ kotlin {
                 minorApiLevel = 1
             }
         }
-        minSdk = 26
+        minSdk = 31
 
         withHostTestBuilder {
         }
