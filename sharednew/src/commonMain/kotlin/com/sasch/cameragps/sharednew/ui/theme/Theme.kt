@@ -2,37 +2,54 @@ package com.sasch.cameragps.sharednew.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey80,
-    tertiary = Pink80,
-    primaryContainer =  Color(0xFF1C1B1F),
-)
+/** Palette of the enclosing [CameraGpsTheme]; light palette when read outside one (tests). */
+val LocalAlphaColors = staticCompositionLocalOf { LightAlphaColors }
 
-private val LightColorScheme = lightColorScheme(
-    secondary = PurpleGrey40,
-    tertiary = Pink40,
-)
+/**
+ * How glass surfaces render below the enclosing [CameraGpsTheme]. [GlassRenderMode.Solid] is the
+ * performance / test fallback: no backdrop blur, near-opaque fills (see [GlassTokens]).
+ */
+val LocalGlassRenderMode = staticCompositionLocalOf { GlassRenderMode.Blur }
 
+private val LightColorScheme = LightAlphaColors.toColorScheme()
+private val DarkColorScheme = DarkAlphaColors.toColorScheme()
+
+/**
+ * The single theme entry of the app (the app module wraps its content in it; there is no second
+ * theme in `app/`). Fixed blue palette — dynamic colour is deliberately not used (design v3 page 6).
+ *
+ * @param glassRenderMode [GlassRenderMode.Blur] by default; pass [GlassRenderMode.Solid] to turn all
+ *   backdrop blur off (low-end devices, screenshots, tests).
+ */
 @Composable
 fun CameraGpsTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    content: @Composable () -> Unit
+    glassRenderMode: GlassRenderMode = GlassRenderMode.Blur,
+    content: @Composable () -> Unit,
 ) {
-    val colorScheme = when {
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+    val colors = if (darkTheme) DarkAlphaColors else LightAlphaColors
+    CompositionLocalProvider(
+        LocalAlphaColors provides colors,
+        LocalGlassRenderMode provides glassRenderMode,
+    ) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme,
+            typography = Typography,
+            content = content,
+        )
     }
+}
 
+/** Accessors for the AlphaGPS-specific theme values (Material roles stay on [MaterialTheme]). */
+object AlphaTheme {
+    val colors: AlphaColors
+        @Composable @ReadOnlyComposable get() = LocalAlphaColors.current
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content,
-    )
+    val glassRenderMode: GlassRenderMode
+        @Composable @ReadOnlyComposable get() = LocalGlassRenderMode.current
 }
