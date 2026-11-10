@@ -427,6 +427,7 @@
     <string name="device_info_mtu_value">%1$d bytes</string>
     <string name="m0_dialog_close">Close</string>
     <string name="m0_button_loading">Loading</string>
+    <string name="m0_text_field_invalid">Invalid input</string>
     <string name="m9_photo_transfer_title">Photo transfer</string>
     <string name="m9_download_format_hint">Batch and single-photo downloads both follow this format.</string>
     <string name="m9_download_format_jpeg_desc">Only the JPG is downloaded. Photos without a JPG are skipped and listed in the summary.</string>
