@@ -10,17 +10,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,7 +27,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.app_settings
@@ -71,10 +71,17 @@ import cameragps.sharednew.generated.resources.step2_grant
 import cameragps.sharednew.generated.resources.step2_granted
 import cameragps.sharednew.generated.resources.step2_title
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
-import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassBackground
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
+import com.sasch.cameragps.sharednew.ui.components.glass.StatusBadge
+import com.sasch.cameragps.sharednew.ui.components.glass.StatusTone
+import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import com.google.accompanist.permissions.MultiplePermissionsState
 import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.isGranted
@@ -129,30 +136,95 @@ fun EnhancedLocationPermissionBox(
     val shouldAllowContent = allPermissionsGranted || ignorePermissions
 
     Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(modifier),
-        contentAlignment = if (shouldAllowContent) {
-                contentAlignment
-            } else {
-                Alignment.Center
-            },
-        ) {
+        modifier = Modifier
+            .fillMaxSize()
+            .then(modifier),
+        contentAlignment = if (shouldAllowContent) contentAlignment else Alignment.Center,
+    ) {
         if (shouldAllowContent) {
-                onAllPermissionsGranted()
+            onAllPermissionsGranted()
+        } else {
+            EnhancedPermissionScreen(
+                foregroundPermissionState = foregroundPermissionState,
+                backgroundLocationPermission = backgroundLocationPermission,
+                allForegroundGranted = allForegroundGranted,
+                hasUserDeniedPermission = hasUserDeniedPermission,
+                onContinueAnyway = {
+                    ignorePermissions = true
+                    PreferencesManager.setPermissionsIgnored(context, true)
+                },
+            )
+        }
+    }
+}
+
+/**
+ * Root of a permission page: its own [GlassBackground] (backdrop + host of the rationale
+ * dialogs), a scrollable, width-limited column centred in the window.
+ */
+@Composable
+private fun PermissionPage(content: @Composable ColumnScope.() -> Unit) {
+    GlassBackground(Modifier.fillMaxSize()) {
+        Box(
+            Modifier.fillMaxSize().safeDrawingPadding(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                modifier = Modifier
+                    .widthIn(max = PermissionPageMaxWidth)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(AlphaDimens.screenMargin)
+                    .animateContentSize(),
+                verticalArrangement = Arrangement.spacedBy(AlphaDimens.cardGap),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                content = content,
+            )
+        }
+    }
+}
+
+private val PermissionPageMaxWidth = 560.dp
+
+@Composable
+private fun PermissionPageTitle(text: String) {
+    Text(
+        text = text,
+        style = AlphaType.Title,
+        color = AlphaTheme.colors.textPrimary,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.padding(bottom = 4.dp).semantics { heading() },
+    )
+}
+
+/**
+ * One permission step: Heading title, Body description, then either what is still missing with
+ * its grant action ([pending]) or a green "granted" badge.
+ */
+@Composable
+private fun PermissionStepCard(
+    title: String,
+    description: String,
+    granted: Boolean,
+    grantedText: String,
+    pending: @Composable ColumnScope.() -> Unit,
+) {
+    val colors = AlphaTheme.colors
+    GlassCard(Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(text = title, style = AlphaType.Heading, color = colors.textPrimary, textAlign = TextAlign.Center)
+            Text(text = description, style = AlphaType.Body, color = colors.textSecondary, textAlign = TextAlign.Center)
+            if (granted) {
+                StatusBadge(text = grantedText, tone = StatusTone.Success, modifier = Modifier.padding(top = 4.dp))
             } else {
-                EnhancedPermissionScreen(
-                    foregroundPermissionState = foregroundPermissionState,
-                    backgroundLocationPermission = backgroundLocationPermission,
-                    allForegroundGranted = allForegroundGranted,
-                    hasUserDeniedPermission = hasUserDeniedPermission,
-                    onContinueAnyway = {
-                        ignorePermissions = true
-                        PreferencesManager.setPermissionsIgnored(context, true)
-                    },
-                )
+                pending()
             }
         }
+    }
 }
 
 @OptIn(ExperimentalPermissionsApi::class)
@@ -167,6 +239,7 @@ private fun EnhancedPermissionScreen(
     val context = LocalContext.current
     var showForegroundRationale by remember { mutableStateOf(false) }
     var showBackgroundRationale by remember { mutableStateOf(false) }
+    val colors = AlphaTheme.colors
 
     val rejectedPermissionDescriptions = foregroundPermissionState.revokedPermissions
         .mapNotNull { permission ->
@@ -184,213 +257,147 @@ private fun EnhancedPermissionScreen(
         else -> ""
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-            .animateContentSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = stringResource(Res.string.camera_gps_permissions),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 16.dp),
-            color = MaterialTheme.colorScheme.onSurface
-        )
+    PermissionPage {
+        PermissionPageTitle(stringResource(Res.string.camera_gps_permissions))
 
         // Step 1: Foreground Location Permissions
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = if (allForegroundGranted)
-                    MaterialTheme.colorScheme.primaryContainer
-                else
-                    MaterialTheme.colorScheme.surface
-            )
+        PermissionStepCard(
+            title = stringResource(Res.string.step1_title),
+            description = stringResource(Res.string.step1_desc),
+            granted = allForegroundGranted,
+            grantedText = stringResource(Res.string.step1_granted),
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = stringResource(Res.string.step1_title),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = stringResource(Res.string.step1_desc),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                if (!allForegroundGranted) {
-                    val revokedPermissions =
-                        foregroundPermissionState.revokedPermissions.map { it ->
-                            getPermissionDescription(it.permission)?.let { res -> stringResource(res) }
-                        }
-                            .filterNotNull()
-                            .joinToString("\n") { " - $it" }
-
-                    Text(
-                        text = stringResource(Res.string.step1_missing) + "\n" + revokedPermissions,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-
-                    Button(
-                        onClick = {
-                            if (foregroundPermissionState.shouldShowRationale) {
-                                showForegroundRationale = true
-                            } else {
-                                foregroundPermissionState.launchMultiplePermissionRequest()
-                            }
-                        },
-                    ) {
-                        Text(text = stringResource(Res.string.step1_grant))
-                    }
-                } else {
-                    Text(
-                        text = stringResource(Res.string.step1_granted),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+            val revokedPermissions =
+                foregroundPermissionState.revokedPermissions.map { it ->
+                    getPermissionDescription(it.permission)?.let { res -> stringResource(res) }
                 }
-            }
-        }
+                    .filterNotNull()
+                    .joinToString("\n") { " - $it" }
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = stringResource(Res.string.step1_missing) + "\n" + revokedPermissions,
+                style = AlphaType.Caption,
+                color = colors.textSecondary,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            )
+
+            CapsuleButton(
+                text = stringResource(Res.string.step1_grant),
+                onClick = {
+                    if (foregroundPermissionState.shouldShowRationale) {
+                        showForegroundRationale = true
+                    } else {
+                        foregroundPermissionState.launchMultiplePermissionRequest()
+                    }
+                },
+                role = CapsuleRole.Primary,
+            )
+        }
 
         // Step 2: Background location is a separate permission (Android 10+).
         if (allForegroundGranted) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (backgroundLocationPermission.status.isGranted)
-                        MaterialTheme.colorScheme.primaryContainer
-                    else
-                        MaterialTheme.colorScheme.surface
-                )
+            PermissionStepCard(
+                title = stringResource(Res.string.step2_title),
+                description = stringResource(Res.string.step2_desc),
+                granted = backgroundLocationPermission.status.isGranted,
+                grantedText = stringResource(Res.string.step2_granted),
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = stringResource(Res.string.step2_title),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(Res.string.step2_desc),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = stringResource(Res.string.step2_android10_warning),
+                    style = AlphaType.Caption,
+                    color = colors.warningText,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 4.dp),
+                )
 
-                    if (!backgroundLocationPermission.status.isGranted) {
-                            Text(
-                                text = stringResource(Res.string.step2_android10_warning),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.tertiary,
-                                modifier = Modifier.padding(bottom = 12.dp)
-                            )
-
-                        Button(
-                            onClick = {
-                                if (backgroundLocationPermission.status.shouldShowRationale) {
-                                    showBackgroundRationale = true
-                                } else {
-                                    backgroundLocationPermission.launchPermissionRequest()
-                                }
-                            },
-                        ) {
-                            Text(text = stringResource(Res.string.step2_grant))
+                CapsuleButton(
+                    text = stringResource(Res.string.step2_grant),
+                    onClick = {
+                        if (backgroundLocationPermission.status.shouldShowRationale) {
+                            showBackgroundRationale = true
+                        } else {
+                            backgroundLocationPermission.launchPermissionRequest()
                         }
-                    } else {
-                        Text(
-                            text = stringResource(Res.string.step2_granted),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
+                    },
+                    role = CapsuleRole.Primary,
+                )
             }
         }
 
         if (hasUserDeniedPermission && errorText.isNotBlank()) {
-            Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = errorText,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.error,
+                style = AlphaType.Caption,
+                color = colors.danger,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 4.dp),
             )
-            Button(
+            CapsuleButton(
+                text = stringResource(Res.string.app_settings),
                 onClick = {
                     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                         data = Uri.fromParts("package", context.packageName, null)
                     }
                     context.startActivity(intent)
                 },
-                modifier = Modifier.padding(top = 12.dp),
-            ) {
-                Text(text = stringResource(Res.string.app_settings))
-            }
-            TextButton(onClick = onContinueAnyway) {
-                Text(text = stringResource(Res.string.continue_anyway))
-            }
+                role = CapsuleRole.Primary,
+            )
+            CapsuleButton(
+                text = stringResource(Res.string.continue_anyway),
+                onClick = onContinueAnyway,
+                role = CapsuleRole.Secondary,
+            )
+        }
+
+        // Rationale dialogs (in-tree overlays of this page's GlassBackground)
+        if (showForegroundRationale) {
+            CapsuleDialog(
+                onDismissRequest = { showForegroundRationale = false },
+                title = stringResource(Res.string.location_bluetooth_access_title),
+                confirm = DialogAction(stringResource(Res.string.grant_permissions_button), onClick = {
+                    showForegroundRationale = false
+                    foregroundPermissionState.launchMultiplePermissionRequest()
+                }),
+                dismiss = DialogAction(stringResource(Res.string.cancel_button), onClick = {
+                    showForegroundRationale = false
+                }),
+            ) { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                RationaleText(stringResource(Res.string.location_bluetooth_access_message))
+                RationaleText(stringResource(Res.string.location_bluetooth_benefit_1))
+                RationaleText(stringResource(Res.string.location_bluetooth_benefit_2))
+                RationaleText(stringResource(Res.string.location_bluetooth_benefit_3))
+            } }
+        }
+
+        if (showBackgroundRationale) {
+            CapsuleDialog(
+                onDismissRequest = { showBackgroundRationale = false },
+                title = stringResource(Res.string.background_location_access_title),
+                confirm = DialogAction(stringResource(Res.string.continue_button), onClick = {
+                    showBackgroundRationale = false
+                    backgroundLocationPermission.launchPermissionRequest()
+                }),
+                dismiss = DialogAction(stringResource(Res.string.cancel_button), onClick = {
+                    showBackgroundRationale = false
+                }),
+            ) { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                RationaleText(stringResource(Res.string.background_location_access_message))
+                RationaleText(stringResource(Res.string.background_location_benefit_1))
+                RationaleText(stringResource(Res.string.background_location_benefit_2))
+                RationaleText(stringResource(Res.string.background_location_benefit_3))
+                RationaleText(stringResource(Res.string.background_location_instruction), emphasized = true)
+            } }
         }
     }
-
-    // Rationale dialogs
-    if (showForegroundRationale) {
-        CapsuleDialog(
-            onDismissRequest = { showForegroundRationale = false },
-            title = stringResource(Res.string.location_bluetooth_access_title),
-            confirm = DialogAction(stringResource(Res.string.grant_permissions_button), onClick = {
-                showForegroundRationale = false
-                foregroundPermissionState.launchMultiplePermissionRequest()
-            }),
-            dismiss = DialogAction(stringResource(Res.string.cancel_button), onClick = {
-                showForegroundRationale = false
-            }),
-        ) { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            RationaleText(stringResource(Res.string.location_bluetooth_access_message))
-            RationaleText(stringResource(Res.string.location_bluetooth_benefit_1))
-            RationaleText(stringResource(Res.string.location_bluetooth_benefit_2))
-            RationaleText(stringResource(Res.string.location_bluetooth_benefit_3))
-        } }
-    }
-
-    if (showBackgroundRationale) {
-        CapsuleDialog(
-            onDismissRequest = { showBackgroundRationale = false },
-            title = stringResource(Res.string.background_location_access_title),
-            confirm = DialogAction(stringResource(Res.string.continue_button), onClick = {
-                showBackgroundRationale = false
-                backgroundLocationPermission.launchPermissionRequest()
-            }),
-            dismiss = DialogAction(stringResource(Res.string.cancel_button), onClick = {
-                showBackgroundRationale = false
-            }),
-        ) { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            RationaleText(stringResource(Res.string.background_location_access_message))
-            RationaleText(stringResource(Res.string.background_location_benefit_1))
-            RationaleText(stringResource(Res.string.background_location_benefit_2))
-            RationaleText(stringResource(Res.string.background_location_benefit_3))
-            RationaleText(stringResource(Res.string.background_location_instruction), bold = true)
-        } }
-    }
-
 }
 
-/** Body line of a permission rationale dialog. */
+/** Body line of a permission rationale dialog; the closing instruction is emphasised (Label). */
 @Composable
-private fun RationaleText(text: String, bold: Boolean = false) {
+private fun RationaleText(text: String, emphasized: Boolean = false) {
     Text(
         text = text,
-        style = AlphaTextStyles.dialogBody,
-        fontWeight = if (bold) FontWeight.Bold else null,
-        color = AlphaTheme.colors.onSurfaceVariant,
+        style = if (emphasized) AlphaType.Label else AlphaType.Body,
+        color = if (emphasized) AlphaTheme.colors.textPrimary else AlphaTheme.colors.textSecondary,
     )
 }
 
@@ -426,38 +433,39 @@ fun BluetoothConnectPermissionGate(
         if (isGranted || ignorePermissions) {
             content()
         } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    text = stringResource(Res.string.bluetooth_connect_required_title),
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = 16.dp),
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = stringResource(Res.string.bluetooth_connect_required_desc),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(bottom = 24.dp),
-                )
-                Button(
-                    onClick = { bluetoothConnectPermission.launchPermissionRequest() },
-                ) {
-                    Text(text = stringResource(Res.string.bluetooth_connect_grant_button))
+            val colors = AlphaTheme.colors
+            PermissionPage {
+                PermissionPageTitle(stringResource(Res.string.bluetooth_connect_required_title))
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = stringResource(Res.string.bluetooth_connect_required_desc),
+                            style = AlphaType.Body,
+                            color = colors.textSecondary,
+                            textAlign = TextAlign.Center,
+                        )
+                        CapsuleButton(
+                            text = stringResource(Res.string.bluetooth_connect_grant_button),
+                            onClick = { bluetoothConnectPermission.launchPermissionRequest() },
+                            role = CapsuleRole.Primary,
+                        )
+                    }
                 }
                 // Permanently denied – show explanation and offer opening app settings
                 if (!bluetoothConnectPermission.status.shouldShowRationale) {
                     Text(
                         text = stringResource(Res.string.bluetooth_connect_permanently_denied),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
+                        style = AlphaType.Caption,
+                        color = colors.danger,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 4.dp),
                     )
-                    TextButton(
+                    CapsuleButton(
+                        text = stringResource(Res.string.app_settings),
                         onClick = {
                             val intent =
                                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
@@ -465,12 +473,9 @@ fun BluetoothConnectPermissionGate(
                                 }
                             context.startActivity(intent)
                         },
-                        modifier = Modifier.padding(top = 8.dp),
-                    ) {
-                        Text(text = stringResource(Res.string.app_settings))
-                    }
+                        role = CapsuleRole.Secondary,
+                    )
                 }
-
             }
         }
     }
