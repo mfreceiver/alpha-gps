@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # M10 双源发布（GitHub 步骤）自测：纯函数（scripts/release_lib.sh rl_gh_*）+ release_build.sh 接线。
-# 全程无网络：沙箱 git 仓库 + 本地 bare 仓库充当主仓库/GitHub 远端（GitHub 远端用 insteadOf 把
-# 公开 URL 改写到本地 bare）+ fake curl（python，模拟主仓库 REST、api/uploads/github.com、
-# CDN 302）+ git credential store（沙箱 HOME）。不会对真实 GitHub/主仓库做任何请求。
+# 全程无网络：沙箱 git 仓库 + 本地 bare 仓库充当主仓库/GitHub 远端 + fake curl（python，模拟主仓库
+# REST、api/uploads/github.com、CDN 302）+ fake git（PATH 垫片：仅传输层 ls-remote/push 把公开 URL
+# 字面量换成本地 bare、其它网络目的地/按远端名传输一律拒绝并记录；其余全部透传真实 git）+ git
+# credential store（沙箱 HOME）。**沙箱里 GitHub 远端的 url 就是真实公开 URL，不再用 insteadOf 改写**
+# （否则会被目的地校验正确拒绝）；生产校验不留任何测试后门。不会对真实 GitHub/主仓库做任何请求。
 #   场景 1  rl_gh_url_allowed：api/upload/download 合法主机放行
 #   场景 2  拒绝：'@' 旁路 / 子域 / 后缀拼接 / 端口 / 大小写 / http 降级 / 类别串用 / 控制字符 /
 #           反斜杠 / 空白 / fragment / 空 / 未知类别 / 裸 githubusercontent.com / raw 子域
@@ -24,7 +26,12 @@
 #   场景 15 选项互斥/适用性校验与 --help
 #   场景 16 --publish-github-only 前置：本地 tag 缺失/归档 sha 被改/tag 不在 HEAD/脏树 → 退出码 1
 #   场景 17 主仓库无 sha256 字段分支（下载强校验）仍工作
-#   场景 18 脚本变异验证：去掉重定向白名单校验 / 改成跟随重定向 / 放过第二跳 3xx → 必须检出
+#   场景 18 脚本变异验证：去掉重定向白名单校验 / 改成跟随重定向 / 放过第二跳 3xx（第二跳 302 带着与本地
+#           完全相同的字节也必须退出 40，不靠哈希兜底）→ 必须检出
+#   场景 19 推送目的地校验：规范化函数、URL 净化、真实 git 配置矩阵（split fetch/push、pushurl、insteadOf、
+#           pushInsteadOf、多 URL、别名+字面量改写、env 注入配置）+ 库级变异
+#   场景 20 脚本级目的地：上述绕过 → 退出码 1 且零请求零传输；传输钉定到 URL 字面量（wire 日志不变量、
+#           followTags=false、无 force）；中途被改 pushurl → 40；生产默认值不可被环境变量绕过 + 变异
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)
@@ -273,6 +280,8 @@ def handle(u, m):
             r = state["primary"]
             return (200, {}, j(prel(r))) if r else (404, {}, b"{}")
         if path == api + "/releases" and m == "POST":
+            if env.get("FAKE_PRIMARY_HOOK"):
+                os.system(env["FAKE_PRIMARY_HOOK"])   # 测试钩子：主仓库发布过程中改动本机配置
             if env.get("FAKE_PRIMARY_FAIL") == "create":
                 return 500, {}, b'{"message":"boom"}'
             state["primary"] = {"id": 11, "assets": []}
@@ -325,9 +334,11 @@ def handle(u, m):
         return 599, {}, b"UNHANDLED github.com " + u.encode()
     if path.startswith("/github-production-release-asset/"):   # CDN（任意主机都会服务，便于检出误请求）
         name = path.rsplit("/", 1)[1]
-        if env.get("FAKE_GH_DOUBLE") and not q.get("again"):
-            return 302, {"location": "https://%s%s?again=1" % (host, path)}, b""
         p = os.path.join(D, "blobs", name)
+        if env.get("FAKE_GH_DOUBLE") and not q.get("again"):
+            # FAKE_GH_DOUBLE_BODY：第二跳 302 同时携带与本地完全相同的字节（哈希兜底无法区分，只能靠状态码）
+            same = open(p, "rb").read() if (env.get("FAKE_GH_DOUBLE_BODY") and os.path.exists(p)) else b""
+            return 302, {"location": "https://%s%s?again=1" % (host, path)}, same
         if not os.path.exists(p):
             return 404, {}, b""
         data = open(p, "rb").read()
@@ -355,6 +366,47 @@ if "-w" in o and "%{http_code}" in o["-w"][-1]:
 sys.exit(0 if code != 599 else 6)
 PYEOF
 chmod +x "$SHIM/curl"
+
+# fake git：传输层（ls-remote/push/fetch/pull/clone，且非 --get-url）按目的地处理，其余命令全部透传。
+#   目的地 == 公开规范 URL 字面量 → 换成沙箱本地 bare（FAKE_GH_BARE）；
+#   目的地是 github 远端名(github/gh)或含 '://' '@' 的其它网络地址 → 拒绝（exit 97）并记 BLOCKED（测试绝不触网）；
+#   其余（primary 远端名/本地路径）原样透传。每次传输调用把原始 argv 记入 $FAKE_DIR/gitwire.log。
+cat > "$SHIM/git" <<'GITSHIM'
+#!/usr/bin/env bash
+real=${FAKE_REAL_GIT:?}
+CANON=https://github.com/mfreceiver/alpha-gps.git
+args=("$@"); i=0; sub=""
+while (( i < ${#args[@]} )); do
+  case "${args[i]}" in
+    -c|-C) i=$((i+2)) ;;
+    -*) i=$((i+1)) ;;
+    *) sub=${args[i]}; break ;;
+  esac
+done
+case "$sub" in
+  ls-remote|push|fetch|pull|clone)
+    getu=0; for a in "${args[@]}"; do [[ "$a" == --get-url ]] && getu=1; done
+    if (( ! getu )); then
+      j=$((i+1)); di=-1
+      while (( j < ${#args[@]} )); do
+        case "${args[j]}" in -*) ;; *) di=$j; break ;; esac
+        j=$((j+1))
+      done
+      dest=""; (( di >= 0 )) && dest=${args[di]}
+      echo "ARGV: $*" >> "${FAKE_DIR:?}/gitwire.log"
+      if [[ "$dest" == "$CANON" ]]; then args[di]=${FAKE_GH_BARE:?}
+      else
+        case "$dest" in
+          github|gh|*://*|*@*) echo "BLOCKED $sub dest=$dest" >> "$FAKE_DIR/gitwire.log"
+                               echo "fake git: 拒绝非钉定/网络传输目的地: $dest" >&2; exit 97 ;;
+        esac
+      fi
+    fi ;;
+esac
+exec "$real" "${args[@]}"
+GITSHIM
+chmod +x "$SHIM/git"
+REAL_GIT=$(command -v git)
 
 cat > "$TMP/logq.py" <<'PYEOF'
 import json, sys
@@ -406,22 +458,25 @@ AAPT
       && git -c user.email=t@t -c user.name=t commit -qm archive && git tag "$TAGV" )
   git init -q --bare "$SB-primary.git"; git init -q --bare "$SB-github.git"
   ( cd "$SB" && git remote add primary "$SB-primary.git" \
-      && git remote add github https://github.com/mfreceiver/alpha-gps.git \
-      && git config "url.$SB-github.git.insteadOf" https://github.com/mfreceiver/alpha-gps.git )
+      && git remote add github https://github.com/mfreceiver/alpha-gps.git )   # 真实公开 URL；传输由 fake git 垫片换成本地 bare
   LSHA=$(sha256sum "$SB/release/$APKN" | awk '{print $1}')
 }
 
 fake_reset() { FAKE_DIR=$TMP/fake; rm -rf -- "$FAKE_DIR"; mkdir -p "$FAKE_DIR"; FAKE_LOG=$FAKE_DIR/req.jsonl; : > "$FAKE_LOG"; export FAKE_DIR FAKE_LOG; }
-fake_clear_env() { unset FAKE_GH_FAIL FAKE_PRIMARY_FAIL FAKE_PRIMARY_NOSHA FAKE_GH_DIGEST FAKE_GH_REDIR_HOST FAKE_GH_REDIR_LOCATION FAKE_GH_DOUBLE FAKE_GH_TAMPER FAKE_GH_BAD_URL FAKE_GH_TAG_STATUS; }
+fake_clear_env() { unset FAKE_GH_FAIL FAKE_PRIMARY_FAIL FAKE_PRIMARY_NOSHA FAKE_GH_DIGEST FAKE_GH_REDIR_HOST FAKE_GH_REDIR_LOCATION FAKE_GH_DOUBLE FAKE_GH_TAMPER FAKE_GH_BAD_URL FAKE_GH_TAG_STATUS FAKE_GH_DOUBLE_BODY FAKE_PRIMARY_HOOK; }
 
 rb() { # rb <SB> <输出文件> <release_build.sh 参数...>   （FAKE_* 由调用方 export 或前缀传入；NOPRIMARY=1 去掉主仓库配置）
   local SB=$1 out=$2; shift 2
-  : > "$FAKE_LOG"
+  : > "$FAKE_LOG"; : > "$FAKE_DIR/gitwire.log"
   local -a envu=()
   [[ -n "${NOPRIMARY:-}" ]] && envu=(-u ALPHAGPS_PRIMARY_HOST -u ALPHAGPS_PRIMARY_REPO -u ALPHAGPS_PRIMARY_REMOTE)
+  [[ -n "${RB_SHELLOPTS:-}" ]] && envu+=(SHELLOPTS=xtrace)   # 以 SHELLOPTS=xtrace 启动（含子 shell 继承）
+  # RB_BASH_FLAGS（如 -x）：用 `bash -x scripts/release_build.sh` 启动
+  # shellcheck disable=SC2086
   ( cd "$SB" && env "${envu[@]}" PATH="$SHIM:$SB/home/jdk/bin:$PATH" HOME="$SB/home" JAVA_HOME="$SB/home/jdk" \
+      FAKE_GH_BARE="$SB-github.git" FAKE_REAL_GIT="$REAL_GIT" \
       DSH_KEYSTORE_PASSWORD=x DSH_KEY_PASSWORD=x AAPT_CODE=$FIXTURE_CODE AAPT_VNAME=$FIXTURE_NAME \
-      timeout 120 bash scripts/release_build.sh 0.1.2 "$@" ) > "$out" 2>&1
+      timeout 120 bash ${RB_BASH_FLAGS:-} scripts/release_build.sh 0.1.2 "$@" ) > "$out" 2>&1
 }
 summ() { python3 "$TMP/logq.py" "$FAKE_LOG"; }
 has_sum() { summ | grep -q -E -- "$1"; }
@@ -602,14 +657,14 @@ check "自定义远端收到 tag" test "$(gh_tags "$TMP/s12g-github.git")" == "r
 echo "== 场景 13: GitHub 远端 tag 已存在 =="
 make_sb s13; fake_reset; fake_clear_env
 ( cd "$TMP/s13" && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m other \
-    && git push -q github HEAD:refs/tags/$TAGV 2>/dev/null; git reset -q --hard HEAD~1 )
+    && git push -q "$TMP/s13-github.git" HEAD:refs/tags/$TAGV 2>/dev/null; git reset -q --hard HEAD~1 )
 check "预置：GitHub 远端 tag 指向另一个 commit" test "$(git -C "$TMP/s13-github.git" rev-parse "$TAGV^{commit}")" != "$(git -C "$TMP/s13" rev-parse "$TAGV^{commit}")"
 NOPRIMARY=1 rb "$TMP/s13" "$TMP/s13.log" --publish-github-only; RC=$?
 check "tag 指向不同 commit → 退出码 40（禁止移动已发布 tag）" test "$RC" -eq 40
 check "报告 tag 指向不一致" grep -q "禁止移动已发布 tag" "$TMP/s13.log"
 check "未发起 release 请求" test ! -s "$FAKE_LOG"
 make_sb s13b; fake_reset
-git -C "$TMP/s13b" push -q github "$TAGV" 2>/dev/null
+git -C "$TMP/s13b" push -q "$TMP/s13b-github.git" "$TAGV" 2>/dev/null
 NOPRIMARY=1 rb "$TMP/s13b" "$TMP/s13b.log" --publish-github-only; RC=$?
 check "tag 已存在且同 commit → 跳过 push，退出码 0" test "$RC" -eq 0
 check "日志含『跳过 tag push』" grep -q "跳过 tag push" "$TMP/s13b.log"
@@ -689,7 +744,193 @@ check "变异C 前置：sed 确实改动了脚本" bash -c '! diff -q "$1" "$2" 
 retag "$TMP/mutC"
 ( export FAKE_GH_DOUBLE=1; NOPRIMARY=1 rb "$TMP/mutC" "$TMP/mutC.log" --publish-github-only ); RC=$?
 check "变异C（放过第二跳 3xx）：二次重定向用例不再报『第二跳仍重定向』（用例能区分）" bash -c '! grep -q "第二跳仍重定向" "$1"' _ "$TMP/mutC.log"
+# 加强：第二跳 302 携带与本地**完全相同**的字节——哈希对账无法区分，必须靠状态码判定（退出码，而非错误文本）
+make_sb mutC2; fake_reset; fake_clear_env
+cp -- "$TMP/mutC/scripts/release_build.sh" "$TMP/mutC2/scripts/release_build.sh"
+retag "$TMP/mutC2"
+( export FAKE_GH_DOUBLE=1 FAKE_GH_DOUBLE_BODY=1; NOPRIMARY=1 rb "$TMP/mutC2" "$TMP/mutC2.log" --publish-github-only ); RC=$?
+check "变异C + 第二跳 302 携带相同字节：哈希兜底下被当作成功（rc=0，证明该用例能暴露状态漏洞）" test "$RC" -eq 0
+check "变异C + 同字节：对账确实通过（哈希相同）" grep -q "GitHub 资产对账通过" "$TMP/mutC2.log"
+make_sb realC2; fake_reset; fake_clear_env
+retag "$TMP/realC2"
+( export FAKE_GH_DOUBLE=1 FAKE_GH_DOUBLE_BODY=1; NOPRIMARY=1 rb "$TMP/realC2" "$TMP/realC2.log" --publish-github-only ); RC=$?
+check "真实脚本：第二跳 302 携带与本地完全相同字节仍必须退出 40" test "$RC" -eq 40
+check "真实脚本：报告第二跳仍重定向（而非靠哈希不一致）" bash -c 'grep -q "第二跳仍重定向" "$1" && ! grep -q "对账通过" "$1"' _ "$TMP/realC2.log"
 fake_clear_env
+
+echo "== 场景 19: GitHub 推送目的地校验（规范化函数 + URL 净化 + 真实 git 配置矩阵 + 库级变异） =="
+CANON=https://github.com/mfreceiver/alpha-gps.git
+FAKE_TOK=ghp_FAKEleak999
+OUT=$(rl_gh_canon_url "${CANON%.git}" 2>/dev/null); check "规范化: 无 .git 后缀 → 规范形式（带 .git）" test "$OUT" == "$CANON"
+OUT=$(rl_gh_canon_url "$CANON" 2>/dev/null); check "规范化: 带 .git 后缀 → 原样" test "$OUT" == "$CANON"
+for u in "$CANON/" "${CANON%.git}/" "http://github.com/mfreceiver/alpha-gps.git" "https://github.com/MFreceiver/alpha-gps.git" \
+         "https://GitHub.com/mfreceiver/alpha-gps.git" "https://github.com:443/mfreceiver/alpha-gps.git" \
+         "https://$FAKE_TOK@github.com/mfreceiver/alpha-gps.git" "$CANON?x=1" "$CANON#f" " $CANON" "$CANON " \
+         "$CANON"$'\n'"$CANON" "$CANON.git" "git@github.com:mfreceiver/alpha-gps.git" \
+         "ssh://git@github.com/mfreceiver/alpha-gps.git" "/tmp/x.git" "file:///tmp/x.git" ""; do
+  rl_gh_canon_url "$u" >"$TMP/o" 2>/dev/null; rc=$?
+  check "规范化拒绝（无输出）: $(printf '%q' "${u//$FAKE_TOK/<tok>}")" test "$rc" -ne 0 -a ! -s "$TMP/o"
+done
+# URL 净化（错误日志里打印 URL 之前必经）
+disp() { printf '%s' "$1" | rl_gh_url_display; }
+check "净化: userinfo(token) 被去掉" test "$(disp "https://$FAKE_TOK@github.com/a/b.git")" == "https://github.com/a/b.git"
+check "净化: user:token + query + fragment 全去掉" test "$(disp "https://x-access-token:$FAKE_TOK@github.com/a/b.git?k=$FAKE_TOK#f")" == "https://github.com/a/b.git"
+check "净化: query 里的 token 被去掉" test "$(disp "$CANON?token=$FAKE_TOK")" == "$CANON"
+check "净化: scp 形式 user@host:path 去掉 user" test "$(disp "git@github.com:a/b.git")" == "github.com:a/b.git"
+check "净化: 控制字符 → '?'" test "$(disp $'https://github.com/a\x01b')" == "https://github.com/a?b"
+check "净化: 超长截断（≤63 字符）" test "${#"$(disp "https://github.com/$(printf 'a%.0s' $(seq 1 200))")"}" -le 63
+check "净化: 路径里的 '@' 之前内容也丢弃（保守）" bash -c '! grep -q "$2" <<<"$1"' _ "$(disp "https://github.com/x/$FAKE_TOK@y")" "$FAKE_TOK"
+
+VR_DIR=$TMP/vr; VR_LIB=$LIB
+vr() { # vr <setup 片段(在新建的沙箱仓库里 eval)> [ENV=val ...] → VR_RC / VR_OUT / $TMP/vr.err（git 配置隔离：无全局/系统配置）
+  local setup=$1; shift
+  rm -rf -- "$VR_DIR"; git init -q "$VR_DIR"
+  ( cd "$VR_DIR" && git remote add github "$CANON" && eval "$setup" ) >/dev/null 2>&1
+  VR_OUT=$( cd "$VR_DIR" && env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 "$@" \
+      bash -c 'source "$1"; rl_gh_verify_remote github && echo "PIN=$RL_GH_PINNED_URL"' _ "$VR_LIB" 2>"$TMP/vr.err" ); VR_RC=$?
+}
+vr_ok() { vr "$2" "${@:3}"; check "目的地放行: $1" test "$VR_RC" -eq 0 -a "$VR_OUT" == "PIN=$CANON"; }
+vr_bad() { # vr_bad <desc> <setup> <stderr 需含的正则> [ENV...]
+  vr "$2" "${@:4}"
+  check "目的地拒绝: $1" test "$VR_RC" -ne 0 -a -z "$VR_OUT"
+  check "目的地拒绝: $1 → 错误含 /$3/" grep -q -E -- "$3" "$TMP/vr.err"
+  check "目的地拒绝: $1 → 错误不含令牌" bash -c '! grep -q "$2" "$1"' _ "$TMP/vr.err" "$FAKE_TOK"
+}
+vr_ok "基线：url/pushurl 均为公开 URL（无 pushurl）" ':'
+vr_ok "url 无 .git 后缀（规范等价）" 'git config remote.github.url "${CANON%.git}"'
+vr_ok "显式 pushurl 等于公开 URL" 'git config remote.github.pushurl "$CANON"'
+vr_ok "显式 pushurl 无 .git 后缀" 'git config remote.github.pushurl "${CANON%.git}"'
+vr_ok "remote.github.push/mirror 配置不影响目的地（传输钉死字面量后不参与）" 'git config remote.github.push "+refs/*:refs/*"; git config remote.github.mirror true'
+vr_bad "split：fetch=公开，pushurl=别的主机" 'git config remote.github.pushurl https://example.invalid/x.git' 'push\(github\).*必须精确为'
+vr_bad "split：pushurl=本地 bare 路径" 'git config remote.github.pushurl "$TMP/evil.git"' 'push\(github\).*必须精确为'
+vr_bad "split：pushurl http 降级" 'git config remote.github.pushurl http://github.com/mfreceiver/alpha-gps.git' 'push\(github\).*必须精确为'
+vr_bad "split：pushurl ssh" 'git config remote.github.pushurl git@github.com:mfreceiver/alpha-gps.git' 'push\(github\).*必须精确为'
+vr_bad "split：fetch=别处，pushurl=公开" 'git config remote.github.url https://example.invalid/x.git; git config remote.github.pushurl "$CANON"' 'fetch\(github\).*必须精确为'
+vr_bad "多 fetch URL（第二个是别处）" 'git config --add remote.github.url https://example.invalid/x.git' '2 个'
+vr_bad "多 fetch URL（两个都是公开 URL，仍拒绝：必须恰好一个）" 'git config --add remote.github.url "$CANON"' '2 个'
+vr_bad "多 pushurl（两个都是公开 URL）" 'git config --add remote.github.pushurl "$CANON"; git config --add remote.github.pushurl "$CANON"' 'push\(github\).*2 个'
+vr_bad "多 pushurl（第一个别处、第二个公开）" 'git config --add remote.github.pushurl https://example.invalid/x.git; git config --add remote.github.pushurl "$CANON"' 'push\(github\).*2 个'
+vr_bad "insteadOf 把公开 URL 改写到本地 bare（旧测试沙箱的做法）" 'git config "url.$TMP/evil.git.insteadOf" "$CANON"' 'fetch\(github\)'
+vr_bad "insteadOf 前缀整站改写" 'git config url.https://example.invalid/.insteadOf https://github.com/' 'fetch\(github\)'
+vr_bad "pushInsteadOf 只改写 push 侧（fetch 侧仍是公开 URL）" 'git config "url.$TMP/evil.git.pushInsteadOf" "$CANON"' 'push\(github\)'
+vr_bad "别名 url + insteadOf→公开，另有 pushInsteadOf 会改写公开 URL 字面量" \
+  'git config remote.github.url gh:x; git config "url.$CANON.insteadOf" gh:x; git config url.https://example.invalid/.pushInsteadOf https://github.com/' '改写公开 URL'
+vr_bad "别名 url + 值为空的 insteadOf 规则（保守拒绝）" \
+  'git config remote.github.url gh:x; git config "url.$CANON.insteadOf" gh:x; git config url.https://example.invalid/.insteadOf ""' '改写公开 URL'
+vr_bad "环境变量注入 GIT_CONFIG_COUNT insteadOf" ':' 'fetch\(github\)' GIT_CONFIG_COUNT=1 "GIT_CONFIG_KEY_0=url.$TMP/evil.git.insteadOf" "GIT_CONFIG_VALUE_0=$CANON"
+vr_bad "url 内嵌令牌（userinfo）" 'git config remote.github.url "https://$FAKE_TOK@github.com/mfreceiver/alpha-gps.git"' '必须精确为'
+vr_bad "url 内嵌 user:token + query" 'git config remote.github.url "https://x-access-token:$FAKE_TOK@github.com/mfreceiver/alpha-gps.git?t=$FAKE_TOK"' '必须精确为'
+vr_bad "pushurl 内嵌令牌" 'git config remote.github.pushurl "https://$FAKE_TOK@github.com/mfreceiver/alpha-gps.git"' 'push\(github\)'
+vr_bad "多个 pushurl 均含令牌" 'git config --add remote.github.pushurl "https://$FAKE_TOK@evil.example/a"; git config --add remote.github.pushurl "https://u:$FAKE_TOK@evil.example/b"' '2 个'
+vr_bad "url 末尾斜杠" 'git config remote.github.url "$CANON/"' '必须精确为'
+vr_bad "url 大小写主机" 'git config remote.github.url https://GitHub.com/mfreceiver/alpha-gps.git' '必须精确为'
+vr_bad "url 指向上游 Saschl" 'git config remote.github.url https://github.com/Saschl/alpha-gps.git' '必须精确为'
+( cd "$VR_DIR" && env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 bash -c 'source "$1"; rl_gh_verify_remote nosuch' _ "$LIB" ) >/dev/null 2>"$TMP/vr.err"; rc=$?
+check "远端不存在 → 非零，提示 git remote add nosuch $CANON" bash -c '[[ "$1" -ne 0 ]] && grep -q "git remote add nosuch $2" "$3"' _ "$rc" "$CANON" "$TMP/vr.err"
+
+# 库级变异：弱实现必须放过对应绕过（证明矩阵用例有效）
+MV=$TMP/lib_mv.sh
+mvlib() { # mvlib <sed 表达式...> → 生成变异库并断言确实改动
+  sed "$@" "$LIB" > "$MV"
+  check "库变异前置：sed 确实改动了 release_lib.sh" bash -c '! diff -q "$1" "$2" >/dev/null' _ "$LIB" "$MV"
+}
+mvlib -e '/cp=\$(rl_gh_single_canon "push(\$remote)"/d' -e '/\[\[ "\$cf" == "\$cp" \]\] ||/d'
+VR_LIB=$MV; vr 'git config remote.github.pushurl https://example.invalid/x.git'
+check "变异V1（只验 fetch 侧 = 原缺陷）放行 split pushurl（rc=0 才证明用例有效）" test "$VR_RC" -eq 0
+mvlib -e 's/if \[\[ "\$n" != 1 \]\]; then/if false; then/' -e 's/canon=\$(rl_gh_canon_url "\$list")/canon=$(rl_gh_canon_url "$(head -1 <<<"$list")")/'
+VR_LIB=$MV; vr 'git config --add remote.github.pushurl "$CANON"; git config --add remote.github.pushurl https://example.invalid/x.git'
+check "变异V2（只看第一条、无数量检查）放行多 pushurl（rc=0）" test "$VR_RC" -eq 0
+mvlib -e 's/rl_gh_url_unrewritten "\$cf" || return 1/:/'
+VR_LIB=$MV; vr 'git config remote.github.url gh:x; git config "url.$CANON.insteadOf" gh:x; git config url.https://example.invalid/.pushInsteadOf https://github.com/'
+check "变异V3（不检查字面量改写规则）放行别名+pushInsteadOf（rc=0）" test "$VR_RC" -eq 0
+mvlib -e 's/^rl_gh_canon_url() {$/rl_gh_canon_url() { case "${1-}" in "https:\/\/github.com\/mfreceiver\/"*) printf "%s\\n" "$RL_GH_CANON_URL"; return 0;; esac/'
+VR_LIB=$MV; vr 'git config remote.github.pushurl https://github.com/mfreceiver/other.git'
+check "变异V4（规范化只比对前缀）放行同账号其它仓库（rc=0）" test "$VR_RC" -eq 0
+VR_LIB=$LIB; vr 'git config remote.github.pushurl https://github.com/mfreceiver/other.git'
+check "真实库拒绝同账号其它仓库 pushurl" test "$VR_RC" -ne 0
+
+echo "== 场景 20: 脚本级目的地：绕过全部被拒 / 传输钉定到字面量 / 生产默认不可被环境变量绕过 =="
+no_gh_transport() { ! grep -q -E 'ls-remote|push|BLOCKED' "$FAKE_DIR/gitwire.log"; }
+dest_case() { # dest_case <名> <desc> <setup 片段(cwd=沙箱；$EVIL=诱饵 bare)> [VAR=val ...]
+  local n=$1 desc=$2 setup=$3; shift 3
+  make_sb "$n"; fake_reset; fake_clear_env
+  local SB=$TMP/$n EVIL=$TMP/$n-evil.git
+  git init -q --bare "$EVIL"
+  ( cd "$SB" && eval "$setup" ) >/dev/null 2>&1
+  ( for kv in "$@"; do export "$kv"; done; NOPRIMARY=1 rb "$SB" "$TMP/$n.log" --publish-github-only ); RC=$?
+  check "$desc → 退出码 1（前置阶段拒绝）" test "$RC" -eq 1
+  check "$desc → 零 HTTP 请求" test ! -s "$FAKE_LOG"
+  check "$desc → 零 git 传输调用（未 ls-remote/push，更无 BLOCKED）" no_gh_transport
+  check "$desc → 诱饵与 GitHub bare 均无任何 ref" test -z "$(git -C "$EVIL" for-each-ref)$(git -C "$SB-github.git" for-each-ref)"
+}
+dest_case d1 "pushurl 指向诱饵仓库(split fetch/push)" 'git config remote.github.pushurl "$EVIL"'
+dest_case d2 "insteadOf 把公开 URL 改写到本地 bare（旧测试的做法）" 'git config "url.$SB-github.git.insteadOf" "$CANON"'
+dest_case d3 "pushInsteadOf 把 push 改写到诱饵" 'git config "url.$EVIL.pushInsteadOf" "$CANON"'
+dest_case d4 "两个 fetch URL" 'git config --add remote.github.url "$CANON"'
+dest_case d5 "两个 pushurl（均为公开 URL）" 'git config --add remote.github.pushurl "$CANON"; git config --add remote.github.pushurl "$CANON"'
+dest_case d6 "GIT_CONFIG_COUNT 环境注入 insteadOf→诱饵" ':' GIT_CONFIG_COUNT=1 "GIT_CONFIG_KEY_0=url.$TMP/d6-evil.git.insteadOf" "GIT_CONFIG_VALUE_0=$CANON"
+dest_case d7 "别名 url + pushInsteadOf 改写公开 URL 字面量" 'git config remote.github.url gh:x; git config "url.$CANON.insteadOf" gh:x; git config "url.$EVIL.pushInsteadOf" "$CANON"'
+dest_case d8 "生产默认值不可被环境变量绕过（ALPHAGPS_SELFTEST/ALPHAGPS_TEST_*/RL_GH_* 全设为诱饵）" 'git remote set-url github "$EVIL"' \
+  ALPHAGPS_SELFTEST=1 "ALPHAGPS_TEST_GITHUB_URL=$TMP/d8-evil.git" "ALPHAGPS_GITHUB_URL=$TMP/d8-evil.git" \
+  "ALPHAGPS_GH_ALLOWED_URL=$TMP/d8-evil.git" "RL_GH_REPO=evil/x" "RL_GH_CANON_URL=$TMP/d8-evil.git"
+
+# 生产默认值：常量无条件赋值；库/脚本里没有任何测试覆盖入口
+check "库常量 RL_GH_REPO 为字面量无条件赋值" test "$(grep -c '^RL_GH_REPO=mfreceiver/alpha-gps$' "$LIB")" -eq 1
+check "库常量 RL_GH_CANON_URL 无条件由 RL_GH_REPO 派生" test "$(grep -c '^RL_GH_CANON_URL="https://github.com/\$RL_GH_REPO.git"$' "$LIB")" -eq 1
+check "入库脚本无 SELFTEST/ALPHAGPS_TEST_ 测试后门" bash -c '! grep -n -E "SELFTEST|ALPHAGPS_TEST_|ALLOWED_URL" "$1" "$2"' _ "$HERE/release_build.sh" "$LIB"
+OUT=$(RL_GH_REPO=evil/x RL_GH_CANON_URL=https://evil.example/x.git ALPHAGPS_SELFTEST=1 bash -c 'source "$1"; echo "$RL_GH_REPO $RL_GH_CANON_URL"' _ "$LIB")
+check "环境变量预置 RL_GH_* 后 source 库：仍是生产常量" test "$OUT" == "mfreceiver/alpha-gps https://github.com/mfreceiver/alpha-gps.git"
+sed 's|^RL_GH_REPO=mfreceiver/alpha-gps$|RL_GH_REPO=${RL_GH_REPO:-mfreceiver/alpha-gps}|' "$LIB" > "$TMP/lib_envmut.sh"
+OUT=$(RL_GH_REPO=evil/x bash -c 'source "$1"; echo "$RL_GH_REPO"' _ "$TMP/lib_envmut.sh")
+check "变异E（常量改成可被环境变量覆盖）：RL_GH_REPO=evil/x 生效（证明上面的免疫用例有效）" test "$OUT" == "evil/x"
+
+# 传输钉定：全链成功后核对 wire 日志不变量
+not_wire_ok() { ! wire_pinned_ok; }
+CANON_RE=${CANON//./\\.}
+wire_pinned_ok() { # 所有指向 GitHub 的传输调用都是 钉定字面量 + 显式 refspec；无 BLOCKED/force/mirror/delete
+  local w=$FAKE_DIR/gitwire.log
+  ! grep -q BLOCKED "$w" \
+  && ! grep -F "$CANON" "$w" | grep -q -E '(^| )(-f|--force|--mirror|--delete|--all|--prune)( |$)| \+refs/' \
+  && [[ "$(grep -F "$CANON" "$w" | grep -c ' push ')" -ge 1 ]] \
+  && ! grep -F "$CANON" "$w" | grep ' push ' | grep -v -q -E "^ARGV: -c push\.followTags=false push --no-recurse-submodules $CANON_RE refs/(tags|heads)/[^ :]+:refs/(tags|heads)/[^ :]+\$" \
+  && ! grep -F "$CANON" "$w" | grep ' ls-remote ' | grep -v -q -E "^ARGV: ls-remote --tags $CANON_RE refs/tags/[^ ]+ refs/tags/[^ ]+\^\{\}\$"
+}
+make_sb s20; fake_reset; fake_clear_env
+git -C "$TMP/s20" config push.followTags true                          # 用户全局式配置：本应顺带推送注解 tag
+git -C "$TMP/s20" config remote.github.push '+refs/*:refs/*'          # 远端级 push 配置：钉定字面量后不应参与
+git -C "$TMP/s20" tag -a extra-annotated -m extra                      # HEAD 上另一个注解 tag（followTags 会带上）
+NOPRIMARY=1 rb "$TMP/s20" "$TMP/s20.log" --publish-github-only --github-push-branch; RC=$?
+check "s20 全链（含 --github-push-branch）成功" test "$RC" -eq 0
+check "s20 wire：所有 GitHub 传输调用均钉定到字面量 URL + 显式 refspec + followTags=false，无 force" wire_pinned_ok
+check "s20 wire：tag push 与 branch push 各一次" test "$(grep -F "$CANON" "$FAKE_DIR/gitwire.log" | grep -c ' push ')" -eq 2
+check "s20：GitHub 远端只收到发布 tag（followTags/远端级 push 配置/注解 tag 均未扩大推送集）" \
+  test "$(gh_tags "$TMP/s20-github.git")" == "refs/tags/$TAGV"
+check "s20：分支 push 只推当前分支" test "$(gh_heads "$TMP/s20-github.git")" == "refs/heads/$(git -C "$TMP/s20" rev-parse --abbrev-ref HEAD)"
+# 变异：去掉 followTags=false → 注解 tag 被顺带推上去（证明上面的断言有效）
+make_sb mf; fake_reset; fake_clear_env
+sed -i 's/git -c push.followTags=false push /git push /' "$TMP/mf/scripts/release_build.sh"
+check "变异F 前置：sed 确实改动了脚本" bash -c '! diff -q "$1" "$2" >/dev/null' _ "$HERE/release_build.sh" "$TMP/mf/scripts/release_build.sh"
+git -C "$TMP/mf" config push.followTags true; git -C "$TMP/mf" tag -a extra-annotated -m extra; retag "$TMP/mf"
+NOPRIMARY=1 rb "$TMP/mf" "$TMP/mf.log" --publish-github-only --github-push-branch; RC=$?
+check "变异F（去掉 followTags=false）：注解 tag 被顺带推到 GitHub（用例能检出）" bash -c 'grep -q extra-annotated <<<"$1"' _ "$(gh_tags "$TMP/mf-github.git")"
+check "变异F：wire 不变量被检出违规" not_wire_ok
+# 变异：按远端名传输（原缺陷）→ fake git 记 BLOCKED（wire 不变量违规）
+make_sb mn; fake_reset; fake_clear_env
+sed -i -e 's/git ls-remote --tags "\$GH_URL"/git ls-remote --tags "$GITHUB_REMOTE"/' \
+       -e 's/push --no-recurse-submodules "\$GH_URL"/push --no-recurse-submodules "$GITHUB_REMOTE"/' "$TMP/mn/scripts/release_build.sh"
+check "变异N 前置：sed 确实改动了脚本" bash -c '! diff -q "$1" "$2" >/dev/null' _ "$HERE/release_build.sh" "$TMP/mn/scripts/release_build.sh"
+retag "$TMP/mn"
+NOPRIMARY=1 rb "$TMP/mn" "$TMP/mn.log" --publish-github-only; RC=$?
+check "变异N（按远端名传输）：被 fake git 判定为非钉定传输（BLOCKED）且退出 40" bash -c 'grep -q BLOCKED "$1/gitwire.log" && [[ "$2" -eq 40 ]]' _ "$FAKE_DIR" "$RC"
+check "变异N：wire 不变量被检出违规" not_wire_ok
+
+# 主仓库发布期间（GitHub 前置之后）本机配置被改出 pushurl → GitHub 步骤重验证拒绝（40），诱饵零 ref
+make_sb mid; fake_reset; fake_clear_env
+git init -q --bare "$TMP/mid-evil.git"
+FAKE_PRIMARY_HOOK="git -C $TMP/mid config remote.github.pushurl $TMP/mid-evil.git" rb "$TMP/mid" "$TMP/mid.log" --publish-only; RC=$?
+check "中途被加 pushurl：退出码 40（GitHub 步骤重验证拒绝）" test "$RC" -eq 40
+check "中途被加 pushurl：输出主仓库已成功、GitHub 失败" grep -q "主仓库发布已成功，但 GitHub 步骤失败" "$TMP/mid.log"
+check "中途被加 pushurl：零 GitHub 传输、诱饵无 ref" bash -c '! grep -q -F -e "$3" -e BLOCKED "$1/gitwire.log" && [[ -z "$(git -C "$2" for-each-ref)" ]]' _ "$FAKE_DIR" "$TMP/mid-evil.git" "$CANON"
 
 echo
 SCENARIOS=$(grep -c '^echo "== 场景' -- "$0")
