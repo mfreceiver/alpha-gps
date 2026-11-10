@@ -457,7 +457,7 @@
 | `APP/ui/about/*` | `bodyMedium` 等 | `Body/Caption` | `textPrimary/textSecondary/accent` |
 
 ### 3.6 集中到哪里
-- 扩展 `SN/ui/theme/Type.kt`：新增 `object AlphaType { Title, Heading, Body, Label, Caption, Tag }`（`AlphaTextStyles` 过渡期保留别名，随后删除），并把 `MaterialTheme.typography` 的常用槽映射到同一 6 档（避免遗漏的原生/第三方组件“长回”M3 默认）。
+- 扩展 `SN/ui/theme/Type.kt`：新增 `object AlphaType { Title, Heading, Body, Label, Caption, Tag }`（`AlphaTextStyles` 过渡期保留别名，已于 0.3.0 删除），并把 `MaterialTheme.typography` 的常用槽映射到同一 6 档（避免遗漏的原生/第三方组件“长回”M3 默认）。
 - 扩展 `SN/ui/theme/Color.kt`：在 `AlphaColors` 增加 `textMuted`、`onPhoto`、`onPhotoMuted`、（可选）`warningIcon`；以别名属性暴露 8 角色。
 - 玻璃观感 token（边缘光/内高光/噪点/双层阴影）放 `SN/ui/theme/Glass.kt`，不再散落到组件内。
 - 测试：在 `PaletteContrastTest.kt` 基础上扩展 6 档×8 色×（4 个玻璃 level × 亮/暗）的对比度；再加一个“`ui/` 内除 token 文件外不得出现 `fontSize =`/`MaterialTheme.typography`/`Color.White`/`Color(0x`”的 grep 守卫（`scripts/*_test.sh` 风格）。
@@ -521,7 +521,7 @@
 4. **帮助入口约定冲突**：`AGENTS.md`“应用内通用帮助只在设备清单提供入口”必须同步修改；排障页入口也在设备清单底部。
 5. **字号收敛的视觉回归**：`Body 15` 比现 `dialogBody 13.5/bodyMedium 14` 更大，弹窗/卡片会变高；需在 318dp 弹窗宽度与 200% 字体缩放下核对折行。
 6. **网格 Fit**：留白会让竖/横图在方格里出现空边，锚点仍在方框角；若期待“框随图”需换瀑布流（改动面大）。
-7. **`SharedPairingPreparationScreen` 疑似死代码**：仅 `androidTest` 引用；删除需同步改 `AdaptiveLayoutTest.kt:204`；`PairingPreparationState` 有 commonTest 在用（`sharednew/src/commonTest/kotlin/com/sasch/cameragps/sharednew/ui/pairing/PairingPreparationStateTest.kt`）。
+7. **`SharedPairingPreparationScreen` 疑似死代码**（已决：已删除，0.3.0；下述为审计当时状态）：仅 `androidTest` 引用；删除需同步改 `AdaptiveLayoutTest.kt:204`；`PairingPreparationState` 有 commonTest 在用（`sharednew/src/commonTest/kotlin/com/sasch/cameragps/sharednew/ui/pairing/PairingPreparationStateTest.kt`）。
 8. **新增组件一律页内**：任何窗口式组件都会重现“无法取样/无法玻璃”。
 9. **`GlassPageScaffold` 嵌套 `GlassBackground`**：若 B0 改成“只在根部一个 `GlassBackground`”，二级页对话框 host 行为会变，需回归 `LogLevel/EventSounds/Language/Logs` 的对话框。
 10. **通知/Toast**：系统通知与（Android 13 以下）Toast 无法玻璃化；`GlassSnackbar` 仅覆盖应用内提示。
@@ -536,7 +536,7 @@
 - **D7** 预览详情入口：A 档“点击信息条 → 底部抽屉”还是显式 ⓘ？三个开关是否改为“默认展开哪些块”（建议默认开参数+镜头、直方图关）？B/C 面板是否常驻？
 - **D8** 设备详情页整合布局：方案 1 还是方案 2？“断开蓝牙”下沉到 Ⓘ 弹窗是否可接受？
 - **D9** 日期列表标题：保留原始 `yyyy-MM-dd`，还是本地化“11月10日”？
-- **D10** `SharedPairingPreparationScreen`（疑似死代码）直接删除？
+- **D10** `SharedPairingPreparationScreen`（疑似死代码）直接删除？——**已决：已删除（0.3.0）**，连同 `PairingPreparationState`/测试与 8 个 `pairing_preparation_*` 字符串。
 
 ### 6.3 任务 C：多语言与资源
 
