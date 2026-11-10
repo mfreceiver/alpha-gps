@@ -272,6 +272,36 @@ succeeded and retain a completed photo. Cancellation is checked before that boun
 cancellation arrives during a successful commit, that photo can still be reported as saved; the
 batch checks cancellation before starting the next photo.
 
+## Live status and photo metadata (data layer only)
+
+Two read-only data layers sit beside the Wi-Fi remote. Neither draws UI; pages consume their flows.
+
+**Per-camera live status.** `CameraSessionOrchestrator.liveStatus` (a `CameraLiveStatusHub`) exposes
+`statuses: StateFlow<Map<String, CameraLiveStatus>>` and `observe(address)`. It merges the registry's
+`CameraSession` (phase, MTU) with telemetry recorded by the BLE and Wi-Fi layers:
+
+- time-sync outcome (`TimeSyncStatus`: NotRun/InProgress/Applied/Unconfirmed/Rejected/Failed/Unsupported);
+- GPS write counters: `queuedCount` (packets accepted into the GATT queue) is kept apart from
+  `writtenCount` (GATT write confirmations) and `failedCount`, plus last success/failure times. Counters
+  reset when a BLE session starts; timestamps survive disconnects, and the last write time is persisted
+  through `CameraStatusPersistence` (SharedPreferences, throttled to once a minute) so it can be shown while
+  disconnected. No coordinates are recorded;
+- signal: `acquireSignalMonitoring(address)` returns a refcounted lease; while at least one lease is open
+  and the session is `Transmitting`, `readRemoteRssi` runs every 10 s, bypassing the ATT operation queue
+  (so a lost callback can never delay GPS writes). Level mapping is the pure `signalLevelFromRssi`;
+- battery: one best-effort read after the PTP session is ready (`SonyBatteryReader`), cached with the
+  time it was obtained (`CameraBattery.freshness`).
+
+**Photo metadata.** `WifiRemoteController.loadMetadata(identifier, handle, extended)` publishes
+`metadata: StateFlow<PhotoMetadataState>` (Idle/Loading/Ready/Unavailable(reason)). Basic data (format,
+size, capture time, ObjectInfo resolution/protection on the v3 path) comes from the catalog and costs no
+traffic. With `extended` and a JPEG, `PhotoMetadataLoader` waits 250 ms (a swipe cancels the previous
+request), waits for `thumbnailHolds == 0`, holds the camera, then reads the first 64 KB of the original
+with one partial read (`SonyImageTransfer.metadataHead`) and parses EXIF with `ExifMetadataParser`.
+Results are cached per handle (LRU, 200) and dropped when the browser generation changes or the session
+ends. A browse/download interrupts a pending read; failures only yield `Unavailable` and never touch
+preview or download state. RAW/HEIF stay basic.
+
 ## Coroutines and threads
 
 A scope groups work by lifetime. A dispatcher decides where work executes. Neither a new scope nor
