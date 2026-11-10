@@ -18,17 +18,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
@@ -36,13 +32,14 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LifecycleStartEffect
 import cameragps.sharednew.generated.resources.Res
+import cameragps.sharednew.generated.resources.a1_bluetooth_connected_24px
 import cameragps.sharednew.generated.resources.cancel
-import cameragps.sharednew.generated.resources.cancel_button
 import cameragps.sharednew.generated.resources.device_connection_connect
 import cameragps.sharednew.generated.resources.m2_age_days
 import cameragps.sharednew.generated.resources.m2_age_hours
@@ -53,7 +50,6 @@ import cameragps.sharednew.generated.resources.m2_battery_value
 import cameragps.sharednew.generated.resources.m2_battery_value_hours
 import cameragps.sharednew.generated.resources.m2_battery_value_minutes
 import cameragps.sharednew.generated.resources.m2_bluetooth_24px
-import cameragps.sharednew.generated.resources.m2_bluetooth_disabled_24px
 import cameragps.sharednew.generated.resources.m2_bt_auto_reconnect
 import cameragps.sharednew.generated.resources.m2_bt_connected
 import cameragps.sharednew.generated.resources.m2_bt_connecting
@@ -64,10 +60,6 @@ import cameragps.sharednew.generated.resources.m2_card_location
 import cameragps.sharednew.generated.resources.m2_cell_last_write
 import cameragps.sharednew.generated.resources.m2_cell_signal
 import cameragps.sharednew.generated.resources.m2_cell_written
-import cameragps.sharednew.generated.resources.m2_disconnect_bt
-import cameragps.sharednew.generated.resources.m2_disconnect_bt_confirm
-import cameragps.sharednew.generated.resources.m2_disconnect_bt_message
-import cameragps.sharednew.generated.resources.m2_disconnect_bt_title
 import cameragps.sharednew.generated.resources.m2_error_24px
 import cameragps.sharednew.generated.resources.m2_photo_library_24px
 import cameragps.sharednew.generated.resources.m2_photo_transfer
@@ -93,18 +85,15 @@ import com.sasch.cameragps.sharednew.bluetooth.status.CameraLiveStatus
 import com.sasch.cameragps.sharednew.bluetooth.status.SignalLevel
 import com.sasch.cameragps.sharednew.bluetooth.status.TimeSyncOutcome
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
-import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleSize
-import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
-import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
-import com.sasch.cameragps.sharednew.ui.components.glass.IconEmphasis
 import com.sasch.cameragps.sharednew.ui.components.glass.InfoTag
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusItem
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusLine
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusRow
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusTone
+import com.sasch.cameragps.sharednew.ui.components.glass.statusIconColor
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
@@ -119,14 +108,16 @@ import kotlin.time.Clock
  * Shared device page body (design v3, task M2). The host draws the top bar (title = camera name,
  * Ⓘ) and the [com.sasch.cameragps.sharednew.ui.components.glass.GlassBackground].
  *
- * - Connection card: status line (Bluetooth state; while connected the time-correction state is
- *   its supporting text) with the connection control in a fixed trailing slot — a small
- *   disconnect icon (confirmed in a danger dialog), "Cancel" while connecting, "Connect" when off.
- *   A manual disconnect is persisted by [DeviceDetailViewModel.disconnect]; nothing reconnects
- *   until the user taps Connect.
- * - Location card: one row of three cells (signal / written / last write).
- * - "Photo transfer" pinned to the bottom: opens the Wi-Fi flow ([onWifiRemote]) once Bluetooth is
- *   ready, connecting Bluetooth first when needed ([DeviceDetailViewModel.requestPhotoTransfer]).
+ * - One status card (connection + location transfer as one unit, one glass level and spacing):
+ *   status line (Bluetooth state; while connected the location/time-correction state is its
+ *   supporting text) with a fixed trailing slot — a non-interactive "connected" Bluetooth icon,
+ *   "Cancel" while connecting, "Connect" when off ([connectionCardTrailing]); the battery tag; then
+ *   the "Location transfer" caption over three tinted cells (signal by level / written / last
+ *   write). The manual disconnect lives in the Ⓘ dialog ([DeviceDialogs]) and is persisted by
+ *   [DeviceDetailViewModel.disconnect]; nothing reconnects until the user taps Connect.
+ * - "Photo transfer" pinned to the bottom (52 dp, aligned with the card edges): opens the Wi-Fi
+ *   flow ([onWifiRemote]) once Bluetooth is ready, connecting Bluetooth first when needed
+ *   ([DeviceDetailViewModel.requestPhotoTransfer]).
  *
  * Auto time correction / auto area adjustment have no switches: they are kept on automatically
  * ([DeviceDetailViewModel.enforceAutoCorrection]). The page never opens a Wi-Fi session on its
@@ -155,8 +146,6 @@ fun DeviceDetailContent(
             value = Clock.System.now().toEpochMilliseconds()
         }
     }
-    var confirmDisconnect by rememberSaveable(deviceId) { mutableStateOf(false) }
-
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         viewModel.refreshCameraSettings(deviceId)
     }
@@ -189,19 +178,17 @@ fun DeviceDetailContent(
         onDispose { viewModel.abandonPhotoTransfer() }
     }
 
-    val connectionCard: @Composable () -> Unit = {
-        ConnectionCard(
+    val statusCard: @Composable () -> Unit = {
+        DeviceStatusCard(
             headline = connectionHeadline(status, pending),
-            action = connectionAction(status, pending),
+            trailing = connectionCardTrailing(status, pending),
             manuallyOff = !state.isDeviceEnabled,
             live = live,
             nowMillis = now,
             onConnect = { viewModel.connect(deviceId) },
             onCancelConnecting = { viewModel.cancelConnecting(deviceId) },
-            onDisconnect = { confirmDisconnect = true },
         )
     }
-    val locationCard: @Composable () -> Unit = { LocationCard(live = live, nowMillis = now) }
     val photoEntry: @Composable (Modifier) -> Unit = { entryModifier ->
         if (onWifiRemote != null) {
             PhotoTransferEntryBlock(
@@ -226,8 +213,7 @@ fun DeviceDetailContent(
                     Modifier.weight(1.2f).fillMaxHeight().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(AlphaDimens.cardGap),
                 ) {
-                    connectionCard()
-                    locationCard()
+                    statusCard()
                 }
                 Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.BottomCenter) {
                     photoEntry(Modifier.fillMaxWidth())
@@ -252,50 +238,31 @@ fun DeviceDetailContent(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(AlphaDimens.cardGap),
                 ) {
-                    connectionCard()
-                    locationCard()
+                    statusCard()
                 }
                 photoEntry(Modifier.widthIn(max = maxContentWidth).fillMaxWidth())
             }
         }
     }
-
-    if (confirmDisconnect) {
-        CapsuleDialog(
-            onDismissRequest = { confirmDisconnect = false },
-            title = stringResource(Res.string.m2_disconnect_bt_title),
-            message = stringResource(Res.string.m2_disconnect_bt_message),
-            icon = painterResource(Res.drawable.m2_bluetooth_disabled_24px),
-            destructive = true,
-            confirm = DialogAction(stringResource(Res.string.m2_disconnect_bt_confirm), onClick = {
-                confirmDisconnect = false
-                viewModel.disconnect(deviceId)
-            }),
-            dismiss = DialogAction(stringResource(Res.string.cancel_button), onClick = {
-                confirmDisconnect = false
-            }),
-        )
-    }
 }
 
+/**
+ * The page's one status card: connection state + battery + the location-transfer metrics. One glass
+ * level, one padding and one caption style, so connection and transfer read as one unit.
+ */
 @Composable
-private fun ConnectionCard(
+private fun DeviceStatusCard(
     headline: ConnectionHeadline,
-    action: ConnectionAction,
+    trailing: ConnectionCardTrailing,
     manuallyOff: Boolean,
     live: CameraLiveStatus?,
     nowMillis: Long,
     onConnect: () -> Unit,
     onCancelConnecting: () -> Unit,
-    onDisconnect: () -> Unit,
 ) {
     GlassCard(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            val tone = when (headline) {
-                ConnectionHeadline.Connected -> StatusTone.Success
-                ConnectionHeadline.Connecting, ConnectionHeadline.Disconnecting -> StatusTone.Active
-                ConnectionHeadline.Disconnected -> StatusTone.Neutral
-            }
+            val tone = connectionTone(headline)
             val title = stringResource(
                 when (headline) {
                     ConnectionHeadline.Connected -> Res.string.m2_bt_connected
@@ -318,38 +285,42 @@ private fun ConnectionCard(
                     .weight(1f)
                     .semantics { liveRegion = LiveRegionMode.Polite },
             )
-            // Fixed trailing slot: the control changes, its place does not.
+            // Fixed trailing slot: the content changes, its place does not.
             Box(
-                Modifier.padding(start = 8.dp).heightIn(min = AlphaDimens.minTouchTarget),
+                Modifier
+                    .padding(start = 8.dp)
+                    .heightIn(min = AlphaDimens.minTouchTarget)
+                    .widthIn(min = AlphaDimens.minTouchTarget),
                 contentAlignment = Alignment.CenterEnd,
             ) {
-                when (action) {
-                    ConnectionAction.Disconnect -> GlassIconButton(
-                        icon = painterResource(Res.drawable.m2_bluetooth_disabled_24px),
-                        contentDescription = stringResource(Res.string.m2_disconnect_bt),
-                        onClick = onDisconnect,
-                        emphasis = IconEmphasis.Subtle,
-                    )
-
-                    ConnectionAction.CancelConnecting -> TextButton(
-                        onClick = onCancelConnecting,
-                        modifier = Modifier.heightIn(min = AlphaDimens.minTouchTarget),
+                when (trailing) {
+                    // A state, not an action: no click, no ripple; the status line already says it.
+                    ConnectionCardTrailing.ConnectedIndicator -> Box(
+                        Modifier.size(AlphaDimens.minTouchTarget),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            stringResource(Res.string.cancel),
-                            style = AlphaTextStyles.button,
-                            color = AlphaTheme.colors.primary,
+                        Image(
+                            painterResource(Res.drawable.a1_bluetooth_connected_24px),
+                            contentDescription = null,
+                            colorFilter = ColorFilter.tint(statusIconColor(StatusTone.Success, AlphaTheme.colors)),
+                            modifier = Modifier.size(AlphaDimens.iconSize),
                         )
                     }
 
-                    ConnectionAction.Connect -> CapsuleButton(
+                    ConnectionCardTrailing.CancelConnecting -> CapsuleButton(
+                        text = stringResource(Res.string.cancel),
+                        onClick = onCancelConnecting,
+                        role = CapsuleRole.Secondary,
+                    )
+
+                    ConnectionCardTrailing.Connect -> CapsuleButton(
                         text = stringResource(Res.string.device_connection_connect),
                         onClick = onConnect,
                         role = CapsuleRole.Tonal,
                         icon = painterResource(Res.drawable.m2_bluetooth_24px),
                     )
 
-                    ConnectionAction.None -> CircularProgressIndicator(
+                    ConnectionCardTrailing.Busy -> CircularProgressIndicator(
                         modifier = Modifier.padding(12.dp).size(24.dp),
                         strokeWidth = 2.dp,
                         color = AlphaTheme.colors.onSurfaceVariant,
@@ -358,12 +329,14 @@ private fun ConnectionCard(
             }
         }
         InfoTag(text = batteryText(batteryDisplay(live?.battery, nowMillis)))
+        LocationMetrics(live = live, nowMillis = nowMillis)
     }
 }
 
+/** "Location transfer" caption + three cells; icons tinted by meaning (see [signalTone]). */
 @Composable
-private fun LocationCard(live: CameraLiveStatus?, nowMillis: Long) {
-    GlassCard(Modifier.fillMaxWidth()) {
+private fun LocationMetrics(live: CameraLiveStatus?, nowMillis: Long) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             stringResource(Res.string.m2_card_location),
             style = AlphaTextStyles.statusLabel,
@@ -377,17 +350,19 @@ private fun LocationCard(live: CameraLiveStatus?, nowMillis: Long) {
                     label = stringResource(Res.string.m2_cell_signal),
                     value = signalText(signal) ?: none,
                     icon = painterResource(Res.drawable.m2_signal_24px),
-                    tone = if (signal == SignalLevel.Poor) StatusTone.Warning else StatusTone.Neutral,
+                    iconTone = signalTone(signal),
                 ),
                 StatusItem(
                     label = stringResource(Res.string.m2_cell_written),
                     value = live?.gps?.writtenCount?.toString() ?: none,
                     icon = painterResource(Res.drawable.m2_upload_24px),
+                    iconTone = WrittenMetricTone,
                 ),
                 StatusItem(
                     label = stringResource(Res.string.m2_cell_last_write),
                     value = ageText(relativeAge(live?.lastWriteAtMillis, nowMillis)) ?: none,
                     icon = painterResource(Res.drawable.m2_schedule_24px),
+                    iconTone = LastWriteMetricTone,
                 ),
             ),
         )
@@ -405,7 +380,7 @@ private fun PhotoTransferEntryBlock(
     Column(
         modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (entry == PhotoTransferEntry.Failed) {
             // Red icon + short text, no fill; tapping the button again is the retry.
@@ -418,11 +393,11 @@ private fun PhotoTransferEntryBlock(
                     painterResource(Res.drawable.m2_error_24px),
                     contentDescription = null,
                     colorFilter = ColorFilter.tint(AlphaTheme.colors.error),
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(16.dp),
                 )
                 Text(
                     stringResource(Res.string.m2_photo_transfer_bt_failed),
-                    style = AlphaTextStyles.statusLabel.copy(fontSize = AlphaTextStyles.dialogBody.fontSize),
+                    style = AlphaTextStyles.statusLabel,
                     color = AlphaTheme.colors.error,
                 )
             }
@@ -431,16 +406,18 @@ private fun PhotoTransferEntryBlock(
                 stringResource(
                     if (bluetoothReady) Res.string.m2_photo_transfer_hint else Res.string.m2_photo_transfer_hint_bt_first,
                 ),
-                style = AlphaTextStyles.statusLabel.copy(fontSize = AlphaTextStyles.dialogBody.fontSize),
+                style = AlphaTextStyles.statusLabel,
                 color = AlphaTheme.colors.onSurfaceVariant,
                 textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         CapsuleButton(
             text = stringResource(Res.string.m2_photo_transfer),
             onClick = onClick,
             role = CapsuleRole.Primary,
-            size = CapsuleSize.Hero,
+            size = CapsuleSize.Medium,
             icon = painterResource(Res.drawable.m2_photo_library_24px),
             enabled = enabled,
             loading = entry == PhotoTransferEntry.ConnectingBluetooth,
