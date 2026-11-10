@@ -35,6 +35,11 @@
 - 验收：逐项无异常；预览不重复旋转（EXIF 方向正确）；读取/下载/直方图不阻塞主线程；退后台/划卡语义与 M1 一致。
 - 依据：wave3/m7 实现与 sol 对 0c9b324..ef196de 的复审（Compose 手势/窗口适配/真实相机部分读取无法在 JVM 验证）；`docs/wifi-architecture.md` “Live status and photo metadata” 的 Viewer use 段。
 
+### 23. 真机核对：0.3.0 B0 玻璃材质与新组件
+- 做什么：装含 B0 的版本（亮/暗各一遍，Android 12 与 14+ 各一台）打开调试预览或已迁移页面，核对：①背景彩色光斑可见但不抢眼；卡片/浮条/对话框能明显看出毛玻璃（双向边缘光、顶部高光带、双层阴影、细噪点），文字清晰；②API 31/32 低端机长列表滚动不掉帧（噪点 + 每卡片模糊）；③对话框/菜单/面板/Snackbar 背后的页面模糊随滚动刷新；④动态字体 200% 下 GlassSegmented/StatusBadge/GlassTopBar 标题不截断；⑤TalkBack：Snackbar 播报、RevealValueRow 状态、图标长按 tooltip 不被朗读；⑥暗色开关/复选框选中态（浅蓝底 + 深蓝滑块/勾）观感可接受。
+- 验收：不满意的项按 `docs/glass-material-notes.md` 的参数说明调 token，调后 `PaletteContrastTest` 仍全部通过（不放宽阈值）。
+- 依据：B0 只能在 JVM 做对比度矩阵与纯逻辑测试，渲染观感/性能/无障碍需真机（`docs/glass-material-notes.md` §7）。
+
 ## P2
 
 ### 13. 恢复遥控拍摄功能（后续计划，暂不实现）
@@ -42,6 +47,11 @@
 - 验收：设计评审后分阶段实施；恢复入口不得影响 GPS 写入/时间校正/照片下载；保留的协议层测试继续通过；需实机矩阵（型号/固件/协议版本/GPS 并用/单拍释放/取景首帧/浏览切换）。
 - 待用户决策/实机核实：①第一版做到 R1 还是 R1+R2；②ILCE-7M4 上蓝牙遥控是否与位置联动冲突（官方只明确 α6400 互斥）；③v4 取景能否稳定出帧；④参数面板与独立对焦是否后置。
 - 依据：用户 2026-11-10 决定；astra 研究报告。
+
+### 24. 页面迁移到 AlphaType/颜色角色，清空样式守卫基线
+- 做什么：0.3.0 后续批次逐页把 `MaterialTheme.typography`/`fontSize =`/`Color.White`/`Color(0x` 换成 `AlphaType` 与 `AlphaTheme.colors` 角色、原生控件换成玻璃组件（对照 `docs/ui-components-cheatsheet.md` §5）；每迁完一页运行 `scripts/ui_style_guard.sh --update-baseline` 下调基线；全部清零后删除 `AlphaTextStyles`、把验证改为 `scripts/ui_style_guard.sh --strict`。
+- 验收：`docs/ui-style-guard-baseline.txt` 只剩注释，`--strict` 通过；`AlphaTextStyles` 无引用后删除。
+- 依据：`docs/ui-audit-2026-11.md` §5 批次划分；B0 基线 24 个文件 122 处。
 
 ## P3
 
