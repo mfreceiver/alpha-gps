@@ -422,4 +422,15 @@
     <string name="device_info_mtu_value">%1$d 字节</string>
     <string name="m0_dialog_close">关闭</string>
     <string name="m0_button_loading">正在加载</string>
+    <string name="m9_photo_transfer_title">照片传输</string>
+    <string name="m9_download_format_hint">批量下载与单张下载都按此格式。</string>
+    <string name="m9_download_format_jpeg_desc">只下载 JPG；没有 JPG 的照片会被跳过，并在汇总里提示。</string>
+    <string name="m9_viewer_info_title">预览页信息</string>
+    <string name="m9_viewer_histogram">显示直方图</string>
+    <string name="m9_viewer_histogram_desc">显示照片的亮度直方图。</string>
+    <string name="m9_viewer_exif_params">显示拍摄参数</string>
+    <string name="m9_viewer_exif_params_desc">光圈、快门、ISO、焦距、曝光补偿。</string>
+    <string name="m9_viewer_lens">显示镜头信息</string>
+    <string name="m9_viewer_lens_desc">镜头型号等镜头信息。</string>
+    <string name="m9_viewer_info_note">这些信息仅在预览页的信息区显示。开启任意一项后，进入预览会额外读取一次照片头部数据，轻微增加与相机的通信。</string>
 </resources>

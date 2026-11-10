@@ -12,12 +12,11 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,6 +44,8 @@ import cameragps.sharednew.generated.resources.battery_optimization_settings_sho
 import cameragps.sharednew.generated.resources.battery_optimization_settings_title
 import cameragps.sharednew.generated.resources.learn_more
 import cameragps.sharednew.generated.resources.show_less
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.saschl.cameragps.R
 import com.saschl.cameragps.utils.BatteryOptimizationUtil
 import org.jetbrains.compose.resources.stringResource
@@ -73,6 +74,7 @@ internal fun BatteryOptimizationCard() {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = 48.dp)
                 .clickable { isBatteryInfoExpanded = !isBatteryInfoExpanded },
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -110,13 +112,9 @@ internal fun BatteryOptimizationCard() {
             )
         }
 
-        HorizontalDivider(
-            modifier = Modifier.padding(vertical = 8.dp),
-            color = MaterialTheme.colorScheme.outlineVariant
-        )
-
         // Battery Optimization Button
-        OutlinedButton(
+        CapsuleButton(
+            text = stringResource(Res.string.battery_optimization_open_settings),
             onClick = {
                 try {
                     val uri = "package:${context.packageName}".toUri()
@@ -151,20 +149,17 @@ internal fun BatteryOptimizationCard() {
                     }
                 }
             },
+            role = CapsuleRole.Secondary,
             modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = stringResource(Res.string.battery_optimization_open_settings),
-                fontWeight = FontWeight.Medium
-            )
-        }
+        )
 
         // Autostart Settings Button (vendor-specific)
         val autostartIntent =
             remember { BatteryOptimizationUtil.getResolveableComponentName(context) }
 
         if (autostartIntent != null) {
-            OutlinedButton(
+            CapsuleButton(
+                text = stringResource(Res.string.battery_optimization_open_autostart),
                 onClick = {
                     try {
                         val uri = "package:${context.packageName}".toUri()
@@ -203,17 +198,14 @@ internal fun BatteryOptimizationCard() {
                         }
                     }
                 },
+                role = CapsuleRole.Secondary,
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = stringResource(Res.string.battery_optimization_open_autostart),
-                    fontWeight = FontWeight.Medium
-                )
-            }
+            )
         }
 
         // App Details Settings Button
-        OutlinedButton(
+        CapsuleButton(
+            text = stringResource(Res.string.battery_optimization_open_app_settings),
             onClick = {
                 try {
                     val intent =
@@ -233,13 +225,9 @@ internal fun BatteryOptimizationCard() {
                     ).show()
                 }
             },
+            role = CapsuleRole.Secondary,
             modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = stringResource(Res.string.battery_optimization_open_app_settings),
-                fontWeight = FontWeight.Medium
-            )
-        }
+        )
     }
 }
 

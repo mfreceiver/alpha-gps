@@ -451,4 +451,15 @@
     <string name="device_info_mtu_value">%1$d bytes</string>
     <string name="m0_dialog_close">Close</string>
     <string name="m0_button_loading">Loading</string>
+    <string name="m9_photo_transfer_title">Photo transfer</string>
+    <string name="m9_download_format_hint">Batch and single-photo downloads both follow this format.</string>
+    <string name="m9_download_format_jpeg_desc">Only the JPG is downloaded. Photos without a JPG are skipped and listed in the summary.</string>
+    <string name="m9_viewer_info_title">Preview info</string>
+    <string name="m9_viewer_histogram">Show histogram</string>
+    <string name="m9_viewer_histogram_desc">A brightness histogram of the photo.</string>
+    <string name="m9_viewer_exif_params">Show shooting parameters</string>
+    <string name="m9_viewer_exif_params_desc">Aperture, shutter speed, ISO, focal length and exposure compensation.</string>
+    <string name="m9_viewer_lens">Show lens info</string>
+    <string name="m9_viewer_lens_desc">Lens model and lens details.</string>
+    <string name="m9_viewer_info_note">These details appear only in the info area of the preview. When any of them is on, opening a preview reads the photo header once more, which slightly increases communication with the camera.</string>
 </resources>
