@@ -30,6 +30,11 @@
 - 验收：逐项无异常；叠层不跳变；长日滚动不卡顿、内存稳定（缩略图缓存上限 300）；退后台/划卡语义与 M1 一致。
 - 依据：wave2/wifi 包（M4/M5/M6）自报需真机验证（Compose 手势/弹层/窗口适配与真实相机目录无法在 JVM 验证）。
 
+### 19. 真机冒烟：0.2.0 照片预览页（M7 全屏查看器）
+- 做什么：装新版后验证：①顶栏仅 返回/文件名/拍摄时间（第二行）/“k / N”（该日内）；保护照片显示锁标签；②底部玻璃信息条“格式 · 分辨率 · 大小”，大小只出现一次（JPG-only 为 JPG 大小，Original 为全部文件之和），J+R 显示“JPG + RAW”；③设置三开关：全关/只开直方图时 `adb logcat` 无元数据部分读取（零额外传输），开拍摄参数或镜头才读原片头部，参数/镜头在约 250ms 后出现，快速横滑不堆积请求，读取失败只省略扩展块；直方图随预览图出现、不卡顿；④单张“下载”按默认格式直接下载，下载中玻璃进度叠层可取消、横滑与胶片条锁定，完成后按钮变灰“已保存”；JPG-only 下 RAW-only 照片标“仅 RAW”、提示“此照片没有 JPG”并可手动“下载 RAW”；批量下载进行中进入预览按钮禁用并提示；下载中按 Home 不断 Wi-Fi（M1 例外）；⑤右下方形复选框与网格选择共享，返回网格保留选择；⑥胶片条当前项高亮、点击跳转，长日（>100 张）快速拖动 `adb logcat -s AlphaThumb` 只见可见±4 的 batch；⑦窗口三档：竖屏（A）、折叠屏展开/平板近方形（B，右侧 360dp 详情面板）、横屏（C，顶栏叠在图上、底部单行），信息条不拉伸；旋转后停留在同一张。
+- 验收：逐项无异常；预览不重复旋转（EXIF 方向正确）；读取/下载/直方图不阻塞主线程；退后台/划卡语义与 M1 一致。
+- 依据：wave3/m7 实现（Compose 手势/窗口适配/真实相机部分读取无法在 JVM 验证）；`docs/wifi-architecture.md` “Live status and photo metadata” 的 Viewer use 段。
+
 ## P2
 
 ### 13. 恢复遥控拍摄功能（后续计划，暂不实现）
@@ -50,7 +55,7 @@
 - 验收：实机读数与相机一致或确认不可得。
 - 依据：`sharednew/.../remote/wifi/SonyBatteryReader.kt`；libgphoto2 `camlibs/ptp2/ptp.h`（`PTP_DPC_BatteryLevel`、`PTP_DPC_SONY_BatteryLevel`）；ui-v3 设计"待实机核实"。
 
-### 15. 实机核实：M3 状态数据层与 M8 照片元数据（UI 接入前）
+### 15. 实机核实：M3 状态数据层与 M8 照片元数据（M8 已由预览页接入）
 - 做什么：①RSSI：`readRemoteRssi` 每 10s 一次在 Transmitting 时是否影响 GPS 写入/耗电，Android 回调 status 是否恒为 0；②EXIF：`GetPartialObject(0x101b)`/`0x9211`/catalog `0x923d` 读原片前 64KB 在 ILCE-7M4/其它机型是否稳定，EXIF 是否在首个 APP1 且 ≤64KB（否则退化为 Unavailable，需评估读 preview 字节）；③v4 目录记录 `take(8)`（评分/保护标志）布局未知，v4 路径目前不暴露分辨率与保护状态（`PhotoMetadata.width/height/isProtected` 为 null），待抓包确定字节布局后再解析；v3 路径取自 PTP ObjectInfo（ProtectionStatus@6、ImagePixWidth@26、ImagePixHeight@30）；④GPS 统计：「已写入」= GATT 写确认（相机 ATT 应答）次数，「入队」= 已入队发送次数，两者在断连/超时时可能不等。
 - 验收：逐项在 ≥1 台实机上确认或记录例外；不稳定项在数据层降级而非报错。
 - 依据：本批 M3/M8 实现自报风险；`docs/wifi-architecture.md` 新增"Live status and photo metadata"一节。
@@ -66,6 +71,6 @@
 - 依据：`docs/design/ui-v3/content3a.py` 日期列表；wave2/wifi 报告“对设计稿的偏离”。
 
 ### 18. 清理平铺分页遗留路径
-- 做什么：Android UI 只走按日分组浏览（`browseDates`/`browseDate`）；`WifiRemoteController.browsePhotos(offset)`、`WifiRemoteConnection.openPhotoBrowser/photoPage`、`WifiRemoteViewModel.viewPhotoAt` 的平铺翻页分支与 `SonyImageTransfer.page()`/`PAGE_SIZE` 仍保留（大量测试以其为夹具）。评估迁移测试夹具到按日路径后删除平铺分页。
+- 做什么：Android UI 只走按日分组浏览（`browseDates`/`browseDate`）；`WifiRemoteController.browsePhotos(offset)`、`WifiRemoteConnection.openPhotoBrowser/photoPage`、`WifiRemoteViewModel.viewPhotoAt` 的平铺翻页分支、`WifiPhotoViewer` 的平铺边界页（加载/失败/传输等待）与 `SonyImageTransfer.page()`/`PAGE_SIZE` 仍保留（大量测试以其为夹具）。评估迁移测试夹具到按日路径后删除平铺分页。
 - 验收：全仓无 UI 可达的平铺翻页代码；测试改用按日路径且覆盖不降；全量验证通过。
 - 依据：wave2/wifi 取消日期内分页时为控制风险保留（见 `docs/wifi-architecture.md` “Day list, day grid, and thumbnails”）。

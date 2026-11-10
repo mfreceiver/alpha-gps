@@ -341,6 +341,15 @@ Results are cached per handle (LRU, 200) and dropped when the browser generation
 ends. A browse/download interrupts a pending read; failures only yield `Unavailable` and never touch
 preview or download state. RAW/HEIF stay basic.
 
+**Viewer use.** The full-screen viewer (`WifiPhotoViewer`) requests the shown capture's preview file
+through `WifiRemoteViewModel.showViewerMetadata(options)` on entry and after every settled swipe, and
+calls `stopViewerMetadata()` (→ `cancelMetadata`) when it closes. `extended` is set only when the
+"shooting parameters" or "lens" viewer preference is on (`viewerNeedsExtendedMetadata`); with all three
+preferences off, or only the histogram on, the viewer uses basic data and never reads the original. The
+histogram is computed from the decoded preview bitmap on `Dispatchers.Default` (rows sampled so at most
+~40 000 pixels are read). No request is made while a transfer is busy; `Unavailable` just drops the
+extended block from the info strip.
+
 ## Coroutines and threads
 
 A scope groups work by lifetime. A dispatcher decides where work executes. Neither a new scope nor
