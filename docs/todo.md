@@ -45,9 +45,9 @@
 - 验收：用例通过；去掉 `ensureResponded` 对 Closed 的映射时该用例必须失败。
 - 依据：sol 对 a4f756f 的复核（实现分支直接，仅覆盖缺口）；`PtpIpCommandQueueTest.kt:57-67` 现只验证 Closed 解挂。
 
-### 10. Info 里的电池电量：实机核实 + UI 接入
-- 做什么：数据层已实现（best-effort）：Wi-Fi/PTP 会话就绪后读 1 次，标准 `0x5001`（DeviceInfo 的 DevicePropertiesSupported 列出时走 GetDevicePropValue 0x1015）否则 Sony 扩展 `0xD218`（ExtDeviceInfo 列出时走 0x9209），结果经 `CameraLiveStatus.battery`（{percent, obtainedAtMillis, cameraId}，`freshness`：≤30min 新鲜 / ≤24h 灰显带时间 / 更久显示"—"）暴露。依据仅来自 libgphoto2 的 USB Sony PTP 属性表（0x5001 UINT8 0..100；0xD218 INT8 −1=未知），**Wi-Fi 传输模式下相机是否列出/允许读取尚未验证**。待办：①实机（至少 ILCE-7M4）抓 `Wi-Fi PTP` 日志确认 DeviceInfo 的 DevicePropertiesSupported 与 ExtDeviceInfo 是否含 0x5001/0xD218、读数是否与相机屏幕一致；②若两者都不可读，删除 `SonyBatteryReader` 并在本条记录结论；③设备页接入（UI 批次）。
-- 验收：实机读数与相机一致或确认不可得；设备页不建 Wi-Fi 会话；无缓存时显示未知。
+### 10. 电池电量：实机核实
+- 做什么：数据层已实现（best-effort）：Wi-Fi/PTP 会话就绪后读 1 次，标准 `0x5001`（DeviceInfo 的 DevicePropertiesSupported 列出时走 GetDevicePropValue 0x1015）否则 Sony 扩展 `0xD218`（ExtDeviceInfo 列出时走 0x9209），结果经 `CameraLiveStatus.battery`（{percent, obtainedAtMillis, cameraId}，`freshness`：≤30min 新鲜 / ≤24h 灰显带时间 / 更久显示"—"）暴露。依据仅来自 libgphoto2 的 USB Sony PTP 属性表（0x5001 UINT8 0..100；0xD218 INT8 −1=未知），**Wi-Fi 传输模式下相机是否列出/允许读取尚未验证**。待办：①实机（至少 ILCE-7M4）抓 `Wi-Fi PTP` 日志确认 DeviceInfo 的 DevicePropertiesSupported 与 ExtDeviceInfo 是否含 0x5001/0xD218、读数是否与相机屏幕一致；②若两者都不可读，删除 `SonyBatteryReader` 并在本条记录结论（设备页已按缓存显示：无缓存显示未知，缓存 >30 分钟带获取时间，不建 Wi-Fi 会话）。
+- 验收：实机读数与相机一致或确认不可得。
 - 依据：`sharednew/.../remote/wifi/SonyBatteryReader.kt`；libgphoto2 `camlibs/ptp2/ptp.h`（`PTP_DPC_BatteryLevel`、`PTP_DPC_SONY_BatteryLevel`）；ui-v3 设计"待实机核实"。
 
 ### 15. 实机核实：M3 状态数据层与 M8 照片元数据（UI 接入前）
@@ -55,10 +55,10 @@
 - 验收：逐项在 ≥1 台实机上确认或记录例外；不稳定项在数据层降级而非报错。
 - 依据：本批 M3/M8 实现自报风险；`docs/wifi-architecture.md` 新增"Live status and photo metadata"一节。
 
-### 11. "连接中…" 无取消
-- 做什么：设备页连接按钮 Connecting 态目前双禁用（不可重复点也不可取消）；评估加"取消连接"（enabled=false→close GATT 的反向路径）并处理超时（CONNECT_SETTLE 8s 仅解除 UI pending，不中止系统 autoConnect）。
-- 验收：Connecting 可取消且不留残余 GATT；与 disconnectDevice 的 retiredGatts 机制兼容。
-- 依据：本轮 E 设计状态机（Connecting→禁用）与 AndroidBleTransport.connect 使用 autoConnect。
+### 11. 实机核实：连接中"取消"不留残余 GATT
+- 做什么：设备页连接中已提供"取消"（`DeviceDetailViewModel.cancelConnecting` = 持久化的手动断开：deviceEnabled=false、停 presence 观察、`ACTION_DISCONNECT_DEVICE` → `AndroidBleTransport.disconnectDevice` 关闭含 autoConnect 等待中的 GATT）。需实机确认：相机不在范围/未开机时点"连接"再"取消"，之后相机开机靠近不会自动连上；日志无残余 GATT 回调。
+- 验收：≥1 台实机确认取消后无自动重连、无残余 GATT；与 retiredGatts 机制兼容。
+- 依据：M2 设备页实现；AndroidBleTransport.connect 使用 autoConnect。
 
 ### 14. 清理 Play Services 定位选择器残留
 - 做什么：单一构建后 `LOCATION_PROVIDER_SELECTABLE` 恒为 false，选择入口不可达，但仍保留：`SettingsScreen.kt` 的目的地与页面、`LocationProviderCard.kt`、`PreferencesManager.kt` 的 PLAY_SERVICES 枚举/偏好读写、中英文"Play Services 推荐"文案。删除这些不可达代码与无消费者的偏好 API（旧存储 key 可留在用户数据里不再读取）。
