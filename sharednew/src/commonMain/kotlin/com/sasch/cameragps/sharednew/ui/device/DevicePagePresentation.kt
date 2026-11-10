@@ -25,9 +25,13 @@ interface DeviceLiveStatusSource {
     }
 }
 
-/** What the connection slot of the device page offers (fixed position, see [connectionAction]). */
+/**
+ * What the user can do about the Bluetooth link right now (see [connectionAction]). The Ⓘ dialog's
+ * Bluetooth row offers all of them; the device page's connection card shows a state instead of
+ * [Disconnect] (see [connectionCardTrailing]).
+ */
 enum class ConnectionAction {
-    /** Small icon button with a confirmation dialog. */
+    /** Ⓘ dialog: small danger-outlined "Disconnect" capsule with a confirmation dialog. */
     Disconnect,
 
     /** Plain text "Cancel" while the link is being set up (= stop trying, like a manual disconnect). */
@@ -47,6 +51,33 @@ fun connectionAction(status: DeviceConnectionStatus, pending: PendingConnection)
         ConnectionAction.CancelConnecting
     else -> ConnectionAction.Connect
 }
+
+/** Fixed trailing slot of the device page's connection card. */
+enum class ConnectionCardTrailing {
+    /** Connected: a non-interactive "Bluetooth connected" status icon (disconnecting lives in Ⓘ). */
+    ConnectedIndicator,
+
+    /** "Cancel" while the link is being set up (= stop trying, like a manual disconnect). */
+    CancelConnecting,
+
+    /** Tonal "Connect" capsule. */
+    Connect,
+
+    /** Disconnect in flight: a spinner, nothing to tap. */
+    Busy,
+}
+
+/**
+ * The card keeps the two actions the page needs (connect / cancel) but reports a connected link as
+ * a state: the manual disconnect is in the Ⓘ dialog.
+ */
+fun connectionCardTrailing(status: DeviceConnectionStatus, pending: PendingConnection): ConnectionCardTrailing =
+    when (connectionAction(status, pending)) {
+        ConnectionAction.Disconnect -> ConnectionCardTrailing.ConnectedIndicator
+        ConnectionAction.CancelConnecting -> ConnectionCardTrailing.CancelConnecting
+        ConnectionAction.Connect -> ConnectionCardTrailing.Connect
+        ConnectionAction.None -> ConnectionCardTrailing.Busy
+    }
 
 /** Headline of the connection status line. */
 enum class ConnectionHeadline { Connected, Connecting, Disconnecting, Disconnected }
