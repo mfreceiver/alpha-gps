@@ -21,6 +21,12 @@
 #     pushInsteadOf 重写后，且各恰好一个）都等于公开 URL，之后 ls-remote/push 直接对已验证的
 #     URL 字面量执行（见 release_lib.sh rl_gh_verify_remote）；日志里的 URL 一律净化（无 userinfo/query）
 
+# 第一条命令即关闭 xtrace（`bash -x scripts/release_build.sh` / SHELLOPTS=xtrace 也一样），先于读取
+# 任何配置/签名口令/token；并把 BASH_XTRACEFD 指向 /dev/null，即使之后某处误开 set -x，
+# 轨迹也不会落到 stderr。敏感函数内再各自 `set +x` 做纵深防御。
+{ set +x; } 2>/dev/null
+exec {_XTRACE_NULL_FD}>/dev/null
+BASH_XTRACEFD=$_XTRACE_NULL_FD
 set -euo pipefail
 
 fail() { echo "FAIL $1" >&2; exit 1; }
@@ -135,6 +141,7 @@ apk_version_code() { sed -nE "s/^package:.*versionCode='([0-9]+)'.*$/\1/p" <<< "
 
 # ─── 对外发布（--publish / --publish-only 公共出口）──────────────────────
 publish_release() {
+  { set +x; } 2>/dev/null
   # 上传白名单（硬红线）：只允许本次版本 APK；逐条自检排除密钥/证书形态
   local -a UPLOAD_ASSETS=("$RELEASE_DIR/$APK_NAME")
   local u
@@ -526,6 +533,7 @@ run_github_step() {
 }
 
 # ─── 签名预检（fail-closed）──────────────────────────────────────────────
+{ set +x; } 2>/dev/null   # 纵深防御：下面开始读取/赋值签名口令
 log "签名预检"
 [[ -f "$GRADLE_PROPS" ]] || fail "未找到 $GRADLE_PROPS（DSH_* 签名凭据应位于其中）"
 prop_of() { sed -nE "s/^$1=(.*)$/\1/p" "$GRADLE_PROPS" | head -1; }
