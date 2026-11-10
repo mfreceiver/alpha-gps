@@ -27,17 +27,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import cameragps.sharednew.generated.resources.Res
-import cameragps.sharednew.generated.resources.baseline_view_list_24
 import cameragps.sharednew.generated.resources.header_device_list
-import cameragps.sharednew.generated.resources.help_menu_item
-import cameragps.sharednew.generated.resources.m2_help_24px
 import cameragps.sharednew.generated.resources.m2_list_grant
 import cameragps.sharednew.generated.resources.m2_warning_24px
 import cameragps.sharednew.generated.resources.permissions_missing_description
 import cameragps.sharednew.generated.resources.permissions_missing_title
 import cameragps.sharednew.generated.resources.settings
 import cameragps.sharednew.generated.resources.settings_24px
-import cameragps.sharednew.generated.resources.view_logs
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
@@ -67,9 +63,7 @@ fun DevicesScreen(
     onConnect: (AssociatedDeviceCompat) -> Unit,
     onDisassociate: (AssociatedDeviceCompat) -> Unit,
     onSettingsClick: () -> Unit = {},
-    onHelpClick: () -> Unit = {},
     onTroubleshootingClick: () -> Unit = {},
-    onLogsClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     // State for managing pairing after association
@@ -95,17 +89,7 @@ fun DevicesScreen(
     SharedDevicesScreen(
         title = stringResource(Res.string.header_device_list),
         topBarActions = {
-            // The app's general help lives only here (device list).
-            GlassIconButton(
-                icon = painterResource(Res.drawable.m2_help_24px),
-                contentDescription = stringResource(Res.string.help_menu_item),
-                onClick = onHelpClick,
-            )
-            GlassIconButton(
-                icon = painterResource(Res.drawable.baseline_view_list_24),
-                contentDescription = stringResource(Res.string.view_logs),
-                onClick = onLogsClick,
-            )
+            // Help and the activity log are reached from Settings; only the settings icon stays here.
             GlassIconButton(
                 icon = painterResource(Res.drawable.settings_24px),
                 contentDescription = stringResource(Res.string.settings),

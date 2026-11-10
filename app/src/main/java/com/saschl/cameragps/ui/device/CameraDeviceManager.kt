@@ -69,9 +69,7 @@ fun CameraDeviceManager(
     whatsNew: WhatsNewState? = null,
     startupPromptActive: Boolean = false,
     onSettingsClick: () -> Unit = {},
-    onHelpClick: () -> Unit = {},
-    onTroubleshootingClick: () -> Unit = {},
-    onLogsClick: () -> Unit = {}
+    onTroubleshootingClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -280,9 +278,7 @@ fun CameraDeviceManager(
                         },
                         onDisassociate = disassociateDevice,
                         onSettingsClick = onSettingsClick,
-                        onHelpClick = onHelpClick,
-                        onTroubleshootingClick = onTroubleshootingClick,
-                        onLogsClick = onLogsClick
+                        onTroubleshootingClick = onTroubleshootingClick
                     )
                 }
             } else {

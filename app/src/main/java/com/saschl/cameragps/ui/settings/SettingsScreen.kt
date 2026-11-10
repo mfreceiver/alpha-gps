@@ -14,6 +14,10 @@ import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import cameragps.sharednew.generated.resources.Res
+import cameragps.sharednew.generated.resources.a1_settings_help_desc
+import cameragps.sharednew.generated.resources.a1_settings_help_title
+import cameragps.sharednew.generated.resources.a1_settings_logs_desc
+import cameragps.sharednew.generated.resources.a1_settings_logs_title
 import cameragps.sharednew.generated.resources.battery_optimization_settings_title
 import cameragps.sharednew.generated.resources.event_sounds_open_section_description
 import cameragps.sharednew.generated.resources.event_sounds_title
@@ -32,6 +36,8 @@ import org.jetbrains.compose.resources.stringResource
 fun SettingsScreen(
     whatsNew: WhatsNewState,
     onBackClick: () -> Unit,
+    onHelpClick: () -> Unit = {},
+    onLogsClick: () -> Unit = {},
 ) {
     val settingsBackStack = rememberNavBackStack(SettingsDestination.Overview)
 
@@ -53,6 +59,8 @@ fun SettingsScreen(
                     SettingsOverviewScreen(
                         whatsNew = whatsNew,
                         onBackClick = { navigateBack() },
+                        onHelpClick = onHelpClick,
+                        onLogsClick = onLogsClick,
                         onOpenDestination = { nextDestination ->
                             settingsBackStack.add(nextDestination)
                         }
@@ -83,6 +91,8 @@ fun SettingsScreen(
 private fun SettingsOverviewScreen(
     whatsNew: WhatsNewState,
     onBackClick: () -> Unit,
+    onHelpClick: () -> Unit,
+    onLogsClick: () -> Unit,
     onOpenDestination: (SettingsDestination) -> Unit,
 ) {
     SharedSettingsScreen(
@@ -107,6 +117,17 @@ private fun SettingsOverviewScreen(
                 onClick = { onOpenDestination(SettingsDestination.BatteryOptimization) }
             )
             SharedLanguageSettingsCard()
+            // Help and the activity log moved here from the device list's top bar.
+            SharedSettingsNavRow(
+                title = stringResource(Res.string.a1_settings_help_title),
+                description = stringResource(Res.string.a1_settings_help_desc),
+                onClick = onHelpClick
+            )
+            SharedSettingsNavRow(
+                title = stringResource(Res.string.a1_settings_logs_title),
+                description = stringResource(Res.string.a1_settings_logs_desc),
+                onClick = onLogsClick
+            )
             WhatsNewSettingsCard(whatsNew)
         }
     }
