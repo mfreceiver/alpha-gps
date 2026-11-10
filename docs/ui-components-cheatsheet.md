@@ -111,6 +111,12 @@ GlassTopBar(title, modifier = Modifier, subtitle: String? = null,
 ```
 标题左对齐；`scrolled = true` 时淡入 Float 玻璃底。让列表内容"真的经过"顶栏玻璃需要把顶栏放到内容取样区之外（见 glass-material-notes §5.1），属页面结构改动。
 
+二级页面（设置/帮助/关于/许可证/隐私/日志）直接用页面骨架 `GlassPageScaffold`（`ui/components/page/`）：`GlassBackground` + 带返回键的 `GlassTopBar` + `ScreenContent` 限宽。
+```kotlin
+GlassPageScaffold(title, onBackClick, modifier = Modifier, actions = { … },
+                  scrolled = scrollState.isScrolledUnderTopBar) { padding -> … }   // scrolled 默认 false
+```
+
 ### 弹出菜单 / 气泡（N6）
 ```kotlin
 val anchor = rememberGlassAnchor()
