@@ -10,10 +10,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,12 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.cancel_button
 import cameragps.sharednew.generated.resources.content_copy_24px
@@ -47,12 +40,15 @@ import com.sasch.cameragps.sharednew.logging.LogFormatter
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
 import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSnackbarHost
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassSurface
+import com.sasch.cameragps.sharednew.ui.components.glass.isScrolledUnderTopBar
+import com.sasch.cameragps.sharednew.ui.components.glass.rememberGlassSnackbarHostState
 import com.sasch.cameragps.sharednew.ui.components.page.GlassPageScaffold
 import com.sasch.cameragps.sharednew.ui.components.verticalScrollbar
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
-import kotlinx.coroutines.delay
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -80,7 +76,8 @@ fun SharedLogViewerScreen(
     val clipboard = LocalClipboardManager.current
     val logs by remember(logFormatter) { logFormatter.format() }.collectAsState(emptyList())
     var showClearConfirm by remember { mutableStateOf(false) }
-    var copyNotice by remember { mutableStateOf<String?>(null) }
+    // Copy feedback (formerly an inline notice line) is an in-page glass snackbar.
+    val snackbar = rememberGlassSnackbarHostState()
 
     val copyLabel = stringResource(Res.string.m9_logs_copy)
     val clearLabel = stringResource(Res.string.logs_clear_all)
@@ -88,16 +85,10 @@ fun SharedLogViewerScreen(
     val copiedAll = stringResource(Res.string.m9_logs_copied, logs.size.coerceAtMost(LOG_COPY_MAX_ENTRIES))
     val copiedLatest = stringResource(Res.string.m9_logs_copied_latest, LOG_COPY_MAX_ENTRIES)
 
-    LaunchedEffect(copyNotice) {
-        if (copyNotice != null) {
-            delay(2500)
-            copyNotice = null
-        }
-    }
-
     GlassPageScaffold(
         title = stringResource(Res.string.logs_title),
         onBackClick = onBackClick,
+        scrolled = scrollState.isScrolledUnderTopBar,
         actions = {
             GlassIconButton(
                 icon = painterResource(Res.drawable.content_copy_24px),
@@ -106,11 +97,11 @@ fun SharedLogViewerScreen(
                 onClick = {
                     val payload = buildLogClipboardText(logs)
                     if (payload.count == 0) {
-                        copyNotice = nothingToCopy
+                        snackbar.show(nothingToCopy)
                     } else {
                         @Suppress("DEPRECATION")
                         clipboard.setText(AnnotatedString(payload.text))
-                        copyNotice = if (payload.truncated) copiedLatest else copiedAll
+                        snackbar.show(if (payload.truncated) copiedLatest else copiedAll)
                     }
                 },
             )
@@ -122,6 +113,7 @@ fun SharedLogViewerScreen(
             )
         },
     ) { paddingValues ->
+        GlassSnackbarHost(snackbar)
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -146,33 +138,20 @@ fun SharedLogViewerScreen(
                         if (logs.isEmpty()) {
                             Text(
                                 text = stringResource(Res.string.logs_empty),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = AlphaTheme.colors.onSurfaceVariant,
+                                style = AlphaType.Body,
+                                color = AlphaTheme.colors.textSecondary,
                                 modifier = Modifier.padding(16.dp)
                             )
                         } else {
                             Text(
                                 text = logs.joinToString("\n\n"),
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 12.sp
-                                ),
-                                color = AlphaTheme.colors.onSurface,
+                                style = AlphaType.Mono,
+                                color = AlphaTheme.colors.textSecondary,
                                 modifier = Modifier.padding(16.dp)
                             )
                         }
                     }
                 }
-            }
-            copyNotice?.let { notice ->
-                Text(
-                    text = notice,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AlphaTheme.colors.onSurface,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .semantics { liveRegion = LiveRegionMode.Polite },
-                )
             }
         }
     }
