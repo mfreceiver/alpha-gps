@@ -31,6 +31,8 @@ kotlinxDatetime = "0.8.0"
 # Haze (Apache-2.0): backdrop blur for the glass components. 2.1.0 is built against
 # Compose Multiplatform 1.12.2 / Kotlin 2.4.21; re-verify when Compose is upgraded.
 haze = "2.1.0"
+# Host (JVM) Compose UI tests of sharednew (glass overlay focus); 4.14.1 runs up to SDK 35.
+robolectric = "4.14.1"
 
 
 
@@ -83,6 +85,7 @@ kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.
 androidx-lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
 haze-blur = { module = "dev.chrisbanes.haze:haze-blur", version.ref = "haze" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 
 
 
