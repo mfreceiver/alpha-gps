@@ -1,4 +1,4 @@
-"""alpha-gps UI design v3 — SVG primitives, colour themes and the glass surface tokens.
+"""AlphaGPS UI design v3 — SVG primitives, colour themes and the glass surface tokens.
 
 Standalone (no dependency on the v1/v2 toolchain under ../history).
 Mockups approximate backdrop blur statically: a soft gradient backdrop plus translucent fills.
@@ -423,3 +423,25 @@ def dot(cx, cy, col, r=4.5, halo=True):
 
 def section_label(x, y, label):
     return t(x, y, label, 12.5, 600, C["primary"], extra='letter-spacing="0.6"')
+
+
+# ---------------------------------------------------------------- brand icon (docs/brand, original artwork)
+_BRAND = {"n": 0, "src": None}
+
+
+def brand_icon(x, y, size):
+    """Embed docs/brand/alpha-gps-icon.svg (1024 viewBox) at x,y; ids are made unique per use."""
+    import os, re
+    if _BRAND["src"] is None:
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "brand", "alpha-gps-icon.svg")
+        src = open(p, encoding="utf-8").read()
+        src = re.sub(r"<\?xml.*?\?>", "", src, flags=re.S)
+        src = re.sub(r"<!--.*?-->", "", src, flags=re.S)
+        src = re.sub(r"<title>.*?</title>", "", src, flags=re.S)
+        m = re.search(r"<svg[^>]*>(.*)</svg>", src, re.S)
+        _BRAND["src"] = m.group(1)
+    _BRAND["n"] += 1
+    p_ = f"br{_BRAND['n']}_"
+    inner = re.sub(r'id="([^"]+)"', lambda m: f'id="{p_}{m.group(1)}"', _BRAND["src"])
+    inner = re.sub(r"url\(#([^)]+)\)", lambda m: f"url(#{p_}{m.group(1)})", inner)
+    return f'<svg x="{x}" y="{y}" width="{size}" height="{size}" viewBox="0 0 1024 1024">{inner}</svg>'

@@ -1,4 +1,4 @@
-"""alpha-gps UI design v3 — screens part A: device list, pairing, device page, dialogs, connection overlay."""
+"""AlphaGPS UI design v3 — screens part A: device list, pairing, device page, dialogs, connection overlay."""
 from lib3 import *  # noqa: F401,F403
 import lib3 as L
 
@@ -82,9 +82,8 @@ def device_list_screen(state="normal", callouts=False):
 # ================================================================ welcome + pairing
 def welcome_screen():
     s = base()
-    s += glass(195 - 52, 120, 104, 104, 34, 1)
-    s += icon("gps", 195 - 30, 142, 60, C["primary"])
-    s += t(195, 268, "alpha-gps", 28, 700, anchor="middle")
+    s += brand_icon(195 - 52, 120, 104)
+    s += t(195, 268, "AlphaGPS", 28, 700, anchor="middle")
     s += t(195, 296, "为 Sony 相机的每张照片写入位置", 14.5, 400, C["onSurfV"], "middle")
     items = [("gps", "自动写入位置", "连接后持续把手机定位发送到相机"),
              ("wifi", "照片传输", "浏览并下载相机存储卡里的照片"),
@@ -158,7 +157,8 @@ def pairing_failed_dialog():
 
 # ================================================================ device page
 def _cell(x, y, kind, state, stale=None):
-    """Flat inner tile (information, not glass): icon / value / fixed item name. 104x88."""
+    """Flat inner tile (information, not glass): icon / value / fixed item name. 104x88.
+    Camera card kinds: time | sig | bat. GPS card kinds: sent | failed | last."""
     w_, h_ = 104, 88
     off = state == "off"
     s = rect(x, y, w_, h_, C["onSurf"], 18, op=0.05 if mode() == "light" else 0.07)
@@ -174,10 +174,22 @@ def _cell(x, y, kind, state, stale=None):
         s += bars(cx - 11, y + 13, lvl, C["primary"], dim=off)
         val, name = ("强" if lvl else "—"), "信号"
         vcol = C["onSurf"] if lvl else C["onSurfV"]
-    else:
+    elif kind == "bat":
         pct = None if state == "connecting" else 78
         s += battery(cx - 13, y + 16, pct, dim=off)
         val, name = ("78%" if pct else "—"), "电量"
+    elif kind == "sent":
+        s += icon("upload", cx - 11, y + 11, 22, C["primary"], op=0.5 if off else None)
+        val, name = "1,284 次", "已写入"
+    elif kind == "failed":
+        bad = state == "bad"
+        s += icon("error", cx - 11, y + 11, 22, C["error"] if bad else C["onSurfV"], op=None if bad else 0.55)
+        val, name = ("3" if bad else "0"), "失败"
+        vcol = C["error"] if bad else vcol
+    else:
+        s += icon("schedule", cx - 11, y + 11, 22, C["green"] if state == "ok" else C["onSurfV"], op=0.5 if off else None)
+        val, name = {"ok": "3 秒前", "off": "14:02", "bad": "2 分钟前", "connecting": "—"}[state], "最近"
+        vcol = C["amberText"] if state == "bad" else vcol
     s += t(cx, y + 52, val, 15, 600, vcol, "middle")
     s += t(cx, y + 69, name, 11.5, 400, C["onSurfV"], "middle")
     if stale:
@@ -186,16 +198,17 @@ def _cell(x, y, kind, state, stale=None):
 
 
 def device_screen(state="ok", callouts=False):
-    """state: ok | off | warn | connecting"""
+    """state: ok | off | warn | connecting | nogps (phone location unavailable)"""
     s = base()
     s += top_bar(CAM, acts=("info",))
+    bt_on = state in ("ok", "warn", "nogps")
     # --- camera card
     s += glass(16, 104, 358, 214, 28, 1)
     s += section_label(36, 134, "相机")
-    if state in ("ok", "warn"):
+    if bt_on:
         s += dot(42, 161, C["green"], 5)
         s += t(56, 167, "蓝牙已连接", 18, 600)
-        s += t(36, 190, "ILCE-7M4 · 固件 2.00", 12.5, 400, C["onSurfV"])
+        s += t(36, 190, "ILCE-7M4", 12.5, 400, C["onSurfV"])
         # subdued 'disconnect bluetooth' icon — above the battery cell
         s += icon("bluetooth_disabled", 322, 124, 20, C["onSurfV"], op=0.62)
     elif state == "connecting":
@@ -213,31 +226,52 @@ def device_screen(state="ok", callouts=False):
     s += _cell(143, 214, "sig", cs)
     # battery cache age appears only when older than 30 minutes
     s += _cell(258, 214, "bat", cs, stale={"off": "昨天 18:20", "warn": "42 分钟前"}.get(state))
-    # --- GPS card: one line
-    s += glass(16, 330, 358, 92, 28, 1)
-    s += section_label(36, 360, "位置传输")
+    # --- GPS card: same anatomy as the camera card (title / status line + subtitle / three cells)
+    gy = 330
+    s += glass(16, gy, 358, 214, 28, 1)
+    s += section_label(36, gy + 30, "位置传输")
     if state in ("ok", "warn"):
-        s += info_tag(354, 346, "传输中", on_photo=False, col=C["green"], anchor="end", size=11.5, h=20, pad=8)[0]
-        s += dot(42, 391, C["green"], 5)
-        s += t(56, 396, "已写入 1,284 次 · 失败 0 · 最近 3 秒前", 14.5, 500)
+        s += dot(42, gy + 57, C["green"], 5)
+        s += t(56, gy + 63, "GPS 已定位", 18, 600)
+        s += t(36, gy + 86, "31.2304° N, 121.4737° E · 误差 ±6 m", 12.5, 400, C["onSurfV"])
+        gs = "ok"
+    elif state == "nogps":
+        s += dot(42, gy + 57, C["error"], 5)
+        s += t(56, gy + 63, "定位不可用", 18, 600)
+        s += t(36, gy + 86, "手机定位服务已关闭，暂停写入", 12.5, 400, C["onSurfV"])
+        gs = "bad"
+    elif state == "connecting":
+        s += spinner(43, gy + 57, 7)
+        s += t(58, gy + 63, "正在定位…", 18, 600)
+        s += t(36, gy + 86, "连接完成后自动开始写入", 12.5, 400, C["onSurfV"])
+        gs = "connecting"
     else:
-        s += info_tag(354, 346, "未传输", on_photo=False, anchor="end", size=11.5, h=20, pad=8)[0]
-        s += circle(42, 391, 5, "none", C["outline"], 1.8)
-        tail = "上次写入 今天 14:02" if state == "off" else "连接完成后自动开始"
-        s += t(56, 396, "已写入 1,284 次 · " + tail, 14.5, 400, C["onSurfV"])
-    # --- warn banner slot
+        s += circle(42, gy + 57, 5, "none", C["outline"], 1.8)
+        s += t(56, gy + 63, "未在传输", 18, 600)
+        s += t(36, gy + 86, "连接蓝牙后开始写入位置", 12.5, 400, C["onSurfV"])
+        gs = "off"
+    s += _cell(28, gy + 110, "sent", "off" if gs in ("off", "connecting") else "ok")
+    s += _cell(143, gy + 110, "failed", gs if gs == "bad" else ("off" if gs in ("off", "connecting") else "ok"))
+    s += _cell(258, gy + 110, "last", gs)
+    # --- notice banner slot (fixed position below the two cards)
     if state == "warn":
-        s += glass(16, 434, 358, 60, 20, 1, shadow=False, tint=C["amberC"], a=0.8 if mode() == "light" else 0.55)
-        s += icon("warning", 30, 452, 22, C["amberText"])
-        s += t(62, 460, "相机时间未校正", 13.5, 600, C["onAmberC"])
-        s += t(62, 479, "相机拒绝了校时，照片时间可能有偏差", 12, 400, C["onAmberC"])
+        s += glass(16, 556, 358, 60, 20, 1, shadow=False, tint=C["amberC"], a=0.8 if mode() == "light" else 0.55)
+        s += icon("warning", 30, 574, 22, C["amberText"])
+        s += t(62, 582, "相机时间未校正", 13.5, 600, C["onAmberC"])
+        s += t(62, 601, "相机拒绝了校时，照片时间可能有偏差", 12, 400, C["onAmberC"])
+    elif state == "nogps":
+        s += glass(16, 556, 358, 60, 20, 1, shadow=False, tint=C["errorC"], a=0.8 if mode() == "light" else 0.55)
+        s += icon("location_off", 30, 574, 22, C["onErrorC"])
+        s += t(62, 582, "手机定位服务已关闭", 13.5, 600, C["onErrorC"])
+        s += t(62, 601, "开启后自动恢复写入", 12, 400, C["onErrorC"])
+        s += tonal_btn(282, 566, 80, 40, "去开启")
     # --- primary action (bottom, thumb zone)
     cap = "将先连接蓝牙，再开始传输" if state == "off" else "浏览并下载相机里的照片"
     s += t(195, 690, cap, 12.5, 400, C["onSurfV"], "middle")
     s += primary_btn(16, 706, 358, 68, "照片传输", "wifi", size=17)
     if callouts:
         s += callout(1, 372, 110) + callout(2, 318, 118) + callout(3, 372, 336) + callout(4, 28, 716) + callout(5, 44, 48)
-        s += callout(6, 24, 220)
+        s += callout(6, 24, 220) + callout(7, 24, 446)
     return s + end()
 
 
@@ -254,13 +288,14 @@ def bt_disconnect_dialog():
 
 def info_dialog(callouts=False):
     s = device_screen("ok").replace(nav_pill(), "") + scrim()
-    x, y, w_, h_ = 24, 150, 342, 536
+    x, y, w_, h_ = 24, 172, 342, 492
     s += glass(x, y, w_, h_, 28, 3)
     s += t(x + 24, y + 44, CAM, 22, 600)
     s += icon("edit", x + 24 + 112, y + 26, 20, C["primary"])
     s += icon("close", x + w_ - 44, y + 22, 24, C["onSurfV"])
-    rows = [("型号", "ILCE-7M4", None), ("固件", "2.00", None), ("序列号", "•••• 4821", "visibility"),
-            ("蓝牙", "已配对", "check"), ("存储卡 1", "64 GB · 剩余 21.3 GB", None), ("存储卡 2", "128 GB · 剩余 96.0 GB", None)]
+    # bluetooth-side facts first; firmware / serial are cached from the last photo-transfer session
+    rows = [("型号", "ILCE-7M4", None), ("蓝牙", "已配对", "check"), ("地址", "AC:80:0A:••:••:21", "visibility"),
+            ("固件", "2.00", None), ("序列号", "•••• 4821", "visibility")]
     yy = y + 74
     for k, v, ic_ in rows:
         s += t(x + 24, yy + 22, k, 13.5, 400, C["onSurfV"])
@@ -272,19 +307,19 @@ def info_dialog(callouts=False):
             if ic_:
                 s += icon(ic_, x + w_ - 44, yy + 6, 20, C["onSurfV"])
         yy += 42
+    s += t(x + 24, yy + 12, "固件与序列号为上次照片传输时读取", 11.5, 400, C["onSurfV"])
+    yy += 22
     s += rect(x + 12, yy + 8, w_ - 24, 60, C["onSurf"], 18, op=0.05 if mode() == "light" else 0.07)
     s += t(x + 28, yy + 44, "相机离开后保持待命", 15, 500)
     s += switch(x + w_ - 76, yy + 24, True)
-    yy += 84
-    s += t(x + 24, yy + 14, "卡容量为上次照片传输时读取", 11.5, 400, C["onSurfV"])
     # danger zone — outlined red button (operation, destructive)
     by = y + h_ - 72
     s += rect(x + 20, by, w_ - 40, 52, "none", 26, C["error"], 1.5)
     s += icon("delete", x + w_ / 2 - 52, by + 15, 22, C["error"])
     s += t(x + w_ / 2 - 22, by + 32, "移除相机", 15, 600, C["error"])
     if callouts:
-        s += callout(1, x + 166, y + 24) + callout(2, x + w_ - 14, y + 20) + callout(3, x + 14, y + 256)
-        s += callout(4, x + w_ - 16, y + 344) + callout(5, x + 14, by + 4)
+        s += callout(1, x + 166, y + 24) + callout(2, x + w_ - 14, y + 20) + callout(3, x + 14, y + 214)
+        s += callout(4, x + w_ - 16, y + 322) + callout(5, x + 14, by + 4)
     return s + end()
 
 
