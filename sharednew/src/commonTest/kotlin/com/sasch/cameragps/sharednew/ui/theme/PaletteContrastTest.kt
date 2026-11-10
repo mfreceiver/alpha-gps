@@ -8,6 +8,7 @@ import com.sasch.cameragps.sharednew.ui.components.glass.IconEmphasis
 import com.sasch.cameragps.sharednew.ui.components.glass.InfoTagStyle
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusTone
 import com.sasch.cameragps.sharednew.ui.components.glass.capsuleColors
+import com.sasch.cameragps.sharednew.ui.components.glass.glassSwitchColors
 import com.sasch.cameragps.sharednew.ui.components.glass.iconButtonTint
 import com.sasch.cameragps.sharednew.ui.components.glass.infoTagColors
 import com.sasch.cameragps.sharednew.ui.components.glass.statusIconColor
@@ -218,6 +219,42 @@ class PaletteContrastTest {
         listOf(light, dark).forEach { c ->
             assertEquals(c.accentTeal, statusToneColor(StatusTone.Accent, c))
             assertTrue(c.accentTeal != c.primary && c.accentTeal != c.success, "teal must be its own colour")
+        }
+    }
+
+    @Test
+    fun glassPrimaryIsTranslucentWithoutAGlowRingAndStaysReadable() {
+        listOf(light, dark).forEach { c ->
+            listOf(false, true).forEach { raised ->
+                val cc = capsuleColors(CapsuleRole.GlassPrimary, enabled = true, colors = c, raised = raised)
+                assertEquals(null, cc.glow, "no dark glow ring (the old floating download button had one)")
+                assertTrue(cc.containerTop.alpha < 1f && cc.containerBottom.alpha < 1f, "glass tint, not a solid fill")
+                assertTrue(cc.rimAlpha > 0f, "white glass rim")
+                // The tint sits on the floating glass base; that base sits on anything (photo grid, photo).
+                listOf(Color.Black, Color.White, if (c.isDark) darkWorstBackdrop else lightWorstBackdrop).forEach { back ->
+                    val base = glass(GlassLevel.Float, c.isDark, back)
+                    val middle = Contrast.over(lerp(cc.containerTop, cc.containerBottom, 0.5f), base)
+                    assertAa(cc.content, middle, what = "glass primary raised=$raised dark=${c.isDark} over $back")
+                }
+            }
+        }
+        // The viewer is always dark-themed: its download capsule must read over a black photo too.
+        val viewerButton = capsuleColors(CapsuleRole.GlassPrimary, true, dark)
+        assertAa(viewerButton.content, Contrast.over(viewerButton.containerBottom, glass(GlassLevel.Float, true, Color.Black)), what = "viewer download")
+    }
+
+    @Test
+    fun glassSwitchStatesAreDistinguishable() {
+        listOf(light, dark).forEach { c ->
+            val modal = glass(GlassLevel.Modal, c.isDark, if (c.isDark) darkWorstBackdrop else lightWorstBackdrop)
+            val on = glassSwitchColors(true, c)
+            val off = glassSwitchColors(false, c)
+            assertEquals(c.primary, on.track)
+            // Non-text contrast: the thumb against its track, and the "on" track against the popover.
+            assertAa(on.thumb, on.track, Contrast.AA_LARGE, "on thumb dark=${c.isDark}")
+            assertAa(on.track, modal, Contrast.AA_LARGE, "on track dark=${c.isDark}")
+            assertAa(off.thumb, Contrast.over(off.track, modal), Contrast.AA_LARGE, "off thumb dark=${c.isDark}")
+            assertTrue(off.track.alpha < 1f, "the off track is a glass veil")
         }
     }
 }
