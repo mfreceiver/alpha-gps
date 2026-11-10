@@ -25,10 +25,11 @@
 
 ## P2
 
-### 13. 恢复遥控拍摄功能（后续计划）
-- 做什么：用户计划之后把遥控拍摄加回来。当前决定：UI 入口已移除，**协议层整体保留**（BLE FF01/FF02 + coordinator + `triggerShutterSequence`、Wi-Fi capture/liveview、DB `remoteControlEnabled`），仅清理了"快门广播命令"死链；恢复时需重新设计入口（设备页/浏览互斥/浏览模式开关）、重接快门命令链与 Wi-Fi 取景，并评估与 GPS 联动的冲突警告（旧"启用遥控功能"提示）。
-- 验收：设计方案评审通过后分阶段实施；恢复入口不得影响 GPS 写入/时间校正/照片下载；保留的协议层测试继续通过。
-- 依据：用户 2026-11-10 决定；清理评估见会话记录（遥控协议"只删广播死链，协议整体保留"）。
+### 13. 恢复遥控拍摄功能（后续计划，暂不实现）
+- 做什么：遥控与"照片传输"做平级入口。**协议层整体保留**（BLE FF01/FF02 + RemoteControlCoordinator + `triggerShutterSequence`、Wi-Fi capture/liveview、DB `remoteControlEnabled`），UI 入口已移除。研究与设计见 `docs/design/remote-control/`（`research.md`、`remote-control-design.pdf`）。拆分：R1 蓝牙单次拍摄恢复（入口/状态/防重复/离页释放/与位置联动互斥提示）；R2 Wi-Fi 取景+单拍（按用途建会话，当前 Android `AppServices.kt:72` 固定 `browseOnly=true` 是取景被关的原因，并非 v4 不支持 HTTP 取景）；R3 参数面板（缺 access/form 完整属性模型与写入读回链，先单机型单属性白名单）；R4 独立对焦。后台语义沿用 v3：后台/划卡结束 Wi-Fi，蓝牙+GPS 常驻（有用户指定下载时保留 Wi-Fi 至完成）。
+- 验收：设计评审后分阶段实施；恢复入口不得影响 GPS 写入/时间校正/照片下载；保留的协议层测试继续通过；需实机矩阵（型号/固件/协议版本/GPS 并用/单拍释放/取景首帧/浏览切换）。
+- 待用户决策/实机核实：①第一版做到 R1 还是 R1+R2；②ILCE-7M4 上蓝牙遥控是否与位置联动冲突（官方只明确 α6400 互斥）；③v4 取景能否稳定出帧；④参数面板与独立对焦是否后置。
+- 依据：用户 2026-11-10 决定；astra 研究报告。
 
 ### 3. 补强回归测试：Original 批量“已锁存旧汇总”场景
 - 做什么：`originalBatchDropsASettledJpegOnlyBatchSummary`（`sharednew/src/commonTest/.../WifiRemoteControllerTest.kt` 约 :723-760）在提交 Original 批量 B 之前，先让 A Saved 后 `previewPhoto("photo:0")` → `closePhoto()`，断言 transfer=Idle 且 `batchSummarySettled()==true`，再提交 B；并在传入的 callback 内 `assertNull(batchSummary)` 证明清理早于提交。
@@ -56,3 +57,8 @@
 - 做什么：设备页连接按钮 Connecting 态目前双禁用（不可重复点也不可取消）；评估加"取消连接"（enabled=false→close GATT 的反向路径）并处理超时（CONNECT_SETTLE 8s 仅解除 UI pending，不中止系统 autoConnect）。
 - 验收：Connecting 可取消且不留残余 GATT；与 disconnectDevice 的 retiredGatts 机制兼容。
 - 依据：本轮 E 设计状态机（Connecting→禁用）与 AndroidBleTransport.connect 使用 autoConnect。
+
+### 14. 清理 Play Services 定位选择器残留
+- 做什么：单一构建后 `LOCATION_PROVIDER_SELECTABLE` 恒为 false，选择入口不可达，但仍保留：`SettingsScreen.kt` 的目的地与页面、`LocationProviderCard.kt`、`PreferencesManager.kt` 的 PLAY_SERVICES 枚举/偏好读写、中英文"Play Services 推荐"文案。删除这些不可达代码与无消费者的偏好 API（旧存储 key 可留在用户数据里不再读取）。
+- 验收：全仓 grep 无 PLAY_SERVICES/LocationProviderCard 引用；全量测试与构建通过；设置页行为不变。
+- 依据：sol 审阅 974eae74（P3，flavor 合并残留）。
