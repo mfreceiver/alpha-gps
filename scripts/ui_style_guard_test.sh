@@ -11,7 +11,8 @@
 #   场景 9  app/src/main/java/.../ui/ 同样受管；非 ui 目录（如 data/）不受管
 #   场景 10 变异验证：去掉任一模式（只剩三种）时，对应的故意违规必须能被区分
 #   场景 11 扫描必须真实发生：ROOT 不是目录（/dev/null、不存在）、任一扫描目录缺失、
-#           受管 *.kt 为 0 个、文件不可读（grep rc>1）→ rc=2 且报告原因；输出报告"扫描了 N 个文件"
+#           受管 *.kt 为 0 个、grep 出错（rc>1，经 PATH 注入返回 2 的 fake grep 确定性模拟，
+#           root 与非 root 都执行）→ rc=2 且报告原因；输出报告"扫描了 N 个文件"
 #   场景 12 变异验证：逐条删掉场景 11 的检查（# mut: 标记行），对应用例必须失败
 set -uo pipefail
 
@@ -142,6 +143,21 @@ done
 # 场景 11：扫描必须真实发生（曾经 ROOT=/dev/null --strict 也输出 ok）
 REAL_BASELINE=$HERE/../docs/ui-style-guard-baseline.txt
 out_has() { grep -q -- "$1" "$TMP/out"; }
+# fake grep：守卫的扫描调用（首参 -HnE）记一笔并以 rc=2 失败（模拟不可读文件等读错误），
+# 其余调用转交真实 grep。只对守卫进程注入 PATH，不依赖文件权限，root 下同样有效。
+FAKEBIN=$TMP/fakebin; FAKE_GREP_LOG=$TMP/fake-grep.log
+REAL_GREP=$(command -v grep)
+mkdir -p "$FAKEBIN"
+cat > "$FAKEBIN/grep" <<EOF
+#!/usr/bin/env bash
+if [ "\${1:-}" = "-HnE" ]; then
+  echo scan >> "$FAKE_GREP_LOG"
+  echo "grep: simulated read error" >&2
+  exit 2
+fi
+exec "$REAL_GREP" "\$@"
+EOF
+chmod +x "$FAKEBIN/grep"
 # scan_cases <guard>：跑场景 11 的全部用例，结果写入 CASE_<名字>=<rc>|<stderr 是否含预期原因>
 scan_cases() {
   local g=$1 r
@@ -158,11 +174,9 @@ scan_cases() {
   r=$(new_repo empty); rm -f -- "${r:?}/$SN/ui/components/glass/Clean.kt"
   UI_STYLE_GUARD_ROOT=$r "$g" >"$TMP/out" 2>"$TMP/err"
   CASE_empty="$?|$(err_has '扫描了 0 个文件' && echo y)"
-  r=$(new_repo unreadable)
-  printf 'package x\nval a = Color.White\n' > "$r/$SN/ui/page/Secret.kt"; chmod 000 "$r/$SN/ui/page/Secret.kt"
-  UI_STYLE_GUARD_ROOT=$r "$g" >"$TMP/out" 2>"$TMP/err"
-  CASE_unreadable="$?|$(err_has 'grep 扫描出错' && echo y)"
-  chmod 644 "$r/$SN/ui/page/Secret.kt"
+  r=$(new_repo grepfail); rm -f -- "$FAKE_GREP_LOG"
+  PATH=$FAKEBIN:$PATH UI_STYLE_GUARD_ROOT=$r "$g" >"$TMP/out" 2>"$TMP/err"
+  CASE_grepfail="$?|$(err_has 'grep 扫描出错' && echo y)"
 }
 scan_cases "$GUARD"
 check "ROOT=/dev/null + 真实基线 --strict → rc=2 且报告根无效" test "$CASE_devnull" = "2|y"
@@ -170,13 +184,9 @@ check "ROOT 不存在 → rc=2 且报告根无效" test "$CASE_noroot" = "2|y"
 check "缺 sharednew ui 扫描目录 → rc=2 且报告该目录" test "$CASE_nosn" = "2|y"
 check "缺 app ui 扫描目录 → rc=2 且报告该目录" test "$CASE_noapp" = "2|y"
 check "受管 *.kt 为 0 个 → rc=2 且报告扫描了 0 个文件" test "$CASE_empty" = "2|y"
-UNREADABLE_TESTABLE=1
-probe=$TMP/probe; : > "$probe"; chmod 000 "$probe"; [ -r "$probe" ] && UNREADABLE_TESTABLE=0
-if [ "$UNREADABLE_TESTABLE" -eq 1 ]; then
-  check "不可读文件（grep rc=2）→ rc=2 且报告扫描出错" test "$CASE_unreadable" = "2|y"
-else
-  echo "skip - 不可读文件用例（当前用户可读 000 文件，如 root）"
-fi
+check "grep 出错（fake grep rc=2）→ rc=2 且报告扫描出错" test "$CASE_grepfail" = "2|y"
+check "  fake grep 确实接管了守卫的扫描调用" grep -qx scan "$FAKE_GREP_LOG"
+PATH=$FAKEBIN:$PATH "$FAKEBIN/grep" -c x "$GUARD" >/dev/null; check "  fake grep 对非扫描调用转交真实 grep" test "$?" -eq 0
 R=$(new_repo count)
 printf 'package x\nval a = AlphaType.Body\n' > "$R/$APPUI/Screen.kt"
 guard "$R"; check "干净骨架报告扫描了 2 个文件（不含 ui/theme/ 豁免文件）" out_has '扫描了 2 个文件'
@@ -193,10 +203,7 @@ for m in root dirs zero grep; do
     root) check "变异：删去根目录检查 → /dev/null 用例失效" test "$CASE_devnull" != "2|y" ;;
     dirs) check "变异：删去扫描目录检查 → 缺目录用例失效" test "$CASE_nosn" != "2|y" -o "$CASE_noapp" != "2|y" ;;
     zero) check "变异：删去 0 文件检查 → 空扫描用例失效" test "$CASE_empty" != "2|y" ;;
-    grep)
-      if [ "$UNREADABLE_TESTABLE" -eq 1 ]; then
-        check "变异：删去 grep 退出码检查 → 不可读用例失效" test "$CASE_unreadable" != "2|y"
-      fi ;;
+    grep) check "变异：删去 grep 退出码检查 → grep 出错用例失效" test "$CASE_grepfail" != "2|y" ;;
   esac
 done
 
