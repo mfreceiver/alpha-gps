@@ -20,8 +20,10 @@ import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.cancel_button
 import cameragps.sharednew.generated.resources.continue_button
+import cameragps.sharednew.generated.resources.help_report_issue
 import cameragps.sharednew.generated.resources.wifi_remote_experimental_message
 import cameragps.sharednew.generated.resources.wifi_remote_experimental_title
+import com.sasch.cameragps.sharednew.ui.help.AlphaGpsLinks
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -41,18 +43,10 @@ internal fun WifiRemoteExperimentalNotice(onContinue: () -> Unit, onCancel: () -
                         textDecoration = TextDecoration.Underline,
                     )
                 )
+                val reportIssue = stringResource(Res.string.help_report_issue)
                 Text(buildAnnotatedString {
-                    withLink(LinkAnnotation.Url("mailto:saschl.ra@web.de", linkStyle)) {
-                        append("saschl.ra@web.de")
-                    }
-                    append("\n")
-                    withLink(
-                        LinkAnnotation.Url(
-                            "https://github.com/Saschl/camera-gps/issues",
-                            linkStyle
-                        )
-                    ) {
-                        append("GitHub")
+                    withLink(LinkAnnotation.Url(AlphaGpsLinks.ISSUES, linkStyle)) {
+                        append(reportIssue)
                     }
                 })
             }

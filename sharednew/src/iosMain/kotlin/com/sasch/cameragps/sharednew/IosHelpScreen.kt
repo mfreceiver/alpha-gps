@@ -47,12 +47,14 @@ import cameragps.sharednew.generated.resources.help_close_description
 import cameragps.sharednew.generated.resources.help_faq_title
 import cameragps.sharednew.generated.resources.help_need_more_description
 import cameragps.sharednew.generated.resources.help_need_more_title
+import cameragps.sharednew.generated.resources.help_report_issue
 import cameragps.sharednew.generated.resources.how_about_privacy
 import cameragps.sharednew.generated.resources.how_about_privacy_answer
 import cameragps.sharednew.generated.resources.is_there_documenation
 import cameragps.sharednew.generated.resources.is_there_documenation_answer
 import cameragps.sharednew.generated.resources.is_there_documenation_answer_coffee
 import com.sasch.cameragps.sharednew.ui.components.ScrollbarLazyColumn
+import com.sasch.cameragps.sharednew.ui.help.AlphaGpsLinks
 import com.sasch.cameragps.sharednew.ui.help.TroubleshootingGuideContent
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsScreen
 import org.jetbrains.compose.resources.StringResource
@@ -207,7 +209,7 @@ internal fun IosHelpScreen(
                                         append("\n")
                                         withLink(
                                             LinkAnnotation.Url(
-                                                "mailto:saschl.ra@web.de",
+                                                AlphaGpsLinks.ISSUES,
                                                 TextLinkStyles(
                                                     style = SpanStyle(
                                                         color = MaterialTheme.colorScheme.primary,
@@ -216,7 +218,7 @@ internal fun IosHelpScreen(
                                                 ),
                                             ),
                                         ) {
-                                            append("saschl.ra@web.de")
+                                            append(stringResource(Res.string.help_report_issue))
                                         }
                                         append("\n\n")
                                         append(stringResource(Res.string.is_there_documenation_answer_coffee))
