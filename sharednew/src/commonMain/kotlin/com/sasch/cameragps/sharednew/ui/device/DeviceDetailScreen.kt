@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -88,6 +87,8 @@ import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleSize
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressCircle
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressSize
 import com.sasch.cameragps.sharednew.ui.components.glass.InfoTag
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusItem
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusLine
@@ -95,8 +96,8 @@ import com.sasch.cameragps.sharednew.ui.components.glass.StatusRow
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusTone
 import com.sasch.cameragps.sharednew.ui.components.glass.statusIconColor
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
-import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import com.sasch.cameragps.sharednew.ui.theme.WindowClass
 import com.sasch.cameragps.sharednew.ui.theme.windowClassOf
 import kotlinx.coroutines.delay
@@ -320,10 +321,10 @@ private fun DeviceStatusCard(
                         icon = painterResource(Res.drawable.m2_bluetooth_24px),
                     )
 
-                    ConnectionCardTrailing.Busy -> CircularProgressIndicator(
-                        modifier = Modifier.padding(12.dp).size(24.dp),
-                        strokeWidth = 2.dp,
-                        color = AlphaTheme.colors.onSurfaceVariant,
+                    ConnectionCardTrailing.Busy -> GlassProgressCircle(
+                        modifier = Modifier.padding(12.dp),
+                        size = GlassProgressSize.Medium,
+                        color = AlphaTheme.colors.textSecondary,
                     )
                 }
             }
@@ -339,8 +340,8 @@ private fun LocationMetrics(live: CameraLiveStatus?, nowMillis: Long) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             stringResource(Res.string.m2_card_location),
-            style = AlphaTextStyles.statusLabel,
-            color = AlphaTheme.colors.onSurfaceVariant,
+            style = AlphaType.Caption,
+            color = AlphaTheme.colors.textSecondary,
         )
         val none = stringResource(Res.string.m2_value_none)
         val signal = if (live?.connected == true) live.signalLevel else SignalLevel.Unknown
@@ -392,13 +393,13 @@ private fun PhotoTransferEntryBlock(
                 Image(
                     painterResource(Res.drawable.m2_error_24px),
                     contentDescription = null,
-                    colorFilter = ColorFilter.tint(AlphaTheme.colors.error),
+                    colorFilter = ColorFilter.tint(AlphaTheme.colors.danger),
                     modifier = Modifier.size(16.dp),
                 )
                 Text(
                     stringResource(Res.string.m2_photo_transfer_bt_failed),
-                    style = AlphaTextStyles.statusLabel,
-                    color = AlphaTheme.colors.error,
+                    style = AlphaType.Caption,
+                    color = AlphaTheme.colors.danger,
                 )
             }
         } else {
@@ -406,8 +407,8 @@ private fun PhotoTransferEntryBlock(
                 stringResource(
                     if (bluetoothReady) Res.string.m2_photo_transfer_hint else Res.string.m2_photo_transfer_hint_bt_first,
                 ),
-                style = AlphaTextStyles.statusLabel,
-                color = AlphaTheme.colors.onSurfaceVariant,
+                style = AlphaType.Caption,
+                color = AlphaTheme.colors.textSecondary,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
