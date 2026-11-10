@@ -105,11 +105,6 @@
     <string name="log_settings">Log Settings</string>
     <string name="log_level">Log Level</string>
     <string name="log_level_description">Minimum log level to record</string>
-    <string name="location_provider_title">Location Provider</string>
-    <string name="location_provider_play_services">Google Play Services (recommended)</string>
-    <string name="location_provider_platform">Android platform (LocationManager)</string>
-    <string name="location_provider_hint">If Google Play Services are missing or unreliable on your device, switch to the platform provider.</string>
-    <string name="location_provider_restart_required">Restart the app and turn off the camera to apply this change. If always on mode is active, turn it off beforehand</string>
     <string name="event_sounds_title">Transmission Event Sounds</string>
     <string name="event_sounds_description">Play short sounds for camera and GPS transmission events.</string>
     <string name="event_sounds_enable_all">Enable event sounds</string>
