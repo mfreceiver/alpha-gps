@@ -544,7 +544,7 @@ class AndroidBleTransport(
                 Timber.d("Characteristic write not initiated because device disconnected")
                 return false
             }
-            // 201 == device busy, spams sentry, but I do not know the cause yet
+            // 201 == device busy (spams the log), cause unknown yet
             if (result != 0 && result != 201) {
                 Timber.e("Writing characteristic failed. Result: $result")
                 false

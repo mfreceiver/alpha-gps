@@ -49,7 +49,6 @@ import cameragps.sharednew.generated.resources.pairing_failed_title
 import cameragps.sharednew.generated.resources.precise_location
 import com.sasch.cameragps.sharednew.bluetooth.IosBluetoothController
 import com.sasch.cameragps.sharednew.ui.dialog.DialogHost
-import com.sasch.cameragps.sharednew.ui.settings.SharedSentryConsentDialog
 import com.sasch.cameragps.sharednew.whatsnew.WhatsNewDialog
 import com.sasch.cameragps.sharednew.whatsnew.WhatsNewState
 import kotlinx.coroutines.launch
@@ -65,7 +64,6 @@ internal fun IosAppDialogHost(
     canShow: Boolean,
     whatsNew: WhatsNewState,
     migrationSnackbarHostState: SnackbarHostState,
-    onSentryEnabledChange: (Boolean) -> Unit,
     onOpenTroubleshooting: () -> Unit,
     onOpenTipJar: () -> Unit,
 ) {
@@ -153,23 +151,6 @@ internal fun IosAppDialogHost(
                                 Text(stringResource(Res.string.ios_accessory_migration_dialog_later))
                             }
                         }
-                    },
-                )
-            }
-
-            IosDialog.SentryConsent -> {
-                SharedSentryConsentDialog(
-                    onAllow = {
-                        onSentryEnabledChange(true)
-                        dismiss()
-                    },
-                    onDecline = {
-                        onSentryEnabledChange(false)
-                        dismiss()
-                    },
-                    onDontShowAgain = {
-                        onSentryEnabledChange(false)
-                        dismiss()
                     },
                 )
             }
