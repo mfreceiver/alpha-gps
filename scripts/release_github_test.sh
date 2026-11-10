@@ -32,6 +32,8 @@
 #           pushInsteadOf、多 URL、别名+字面量改写、env 注入配置）+ 库级变异
 #   场景 20 脚本级目的地：上述绕过 → 退出码 1 且零请求零传输；传输钉定到 URL 字面量（wire 日志不变量、
 #           followTags=false、无 force）；中途被改 pushurl → 40；生产默认值不可被环境变量绕过 + 变异
+#   场景 21 错误日志不回显 URL 内嵌令牌（假 token）+ 变异
+#   场景 22 `bash -x` / SHELLOPTS=xtrace 下 stderr 不含假口令/假 token（各层防护独立有效）+ 变异
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)
@@ -931,6 +933,81 @@ FAKE_PRIMARY_HOOK="git -C $TMP/mid config remote.github.pushurl $TMP/mid-evil.gi
 check "中途被加 pushurl：退出码 40（GitHub 步骤重验证拒绝）" test "$RC" -eq 40
 check "中途被加 pushurl：输出主仓库已成功、GitHub 失败" grep -q "主仓库发布已成功，但 GitHub 步骤失败" "$TMP/mid.log"
 check "中途被加 pushurl：零 GitHub 传输、诱饵无 ref" bash -c '! grep -q -F -e "$3" -e BLOCKED "$1/gitwire.log" && [[ -z "$(git -C "$2" for-each-ref)" ]]' _ "$FAKE_DIR" "$TMP/mid-evil.git" "$CANON"
+
+echo "== 场景 21: 错误日志不回显 URL 内嵌令牌（假 token） =="
+TOKCASES=(
+  "userinfo 令牌|remote set-url github https://$FAKE_TOK@github.com/mfreceiver/alpha-gps.git"
+  "user:token + query|remote set-url github https://x-access-token:$FAKE_TOK@github.com/mfreceiver/alpha-gps.git?t=$FAKE_TOK"
+  "query 令牌|remote set-url github https://github.com/mfreceiver/alpha-gps.git?token=$FAKE_TOK"
+  "pushurl 令牌|config remote.github.pushurl https://$FAKE_TOK@github.com/mfreceiver/alpha-gps.git"
+  "多 pushurl 令牌|config --add remote.github.pushurl https://u:$FAKE_TOK@evil.example/a"
+)
+tok_case() { # tok_case <名> <desc> <git 子命令...>  （LIBOV=追加到沙箱库的覆盖片段）
+  local n=$1 desc=$2; shift 2
+  make_sb "$n"; fake_reset; fake_clear_env
+  git -C "$TMP/$n" "$@"
+  [[ "$desc" == 多* ]] && git -C "$TMP/$n" config --add remote.github.pushurl "https://$FAKE_TOK@evil.example/b"
+  if [[ -n "${LIBOV:-}" ]]; then printf '%s\n' "$LIBOV" >> "$TMP/$n/scripts/release_lib.sh"; fi
+  retag "$TMP/$n"
+  rb "$TMP/$n" "$TMP/$n.log" --publish-only; RC=$?
+}
+ti=0
+for tc in "${TOKCASES[@]}"; do
+  ti=$((ti+1)); desc=${tc%%|*}; gitcmd=${tc#*|}
+  set -f   # URL 含 '?'，禁止 glob
+  # shellcheck disable=SC2086
+  tok_case "t$ti" "$desc" $gitcmd
+  set +f
+  check "令牌用例[$desc]: 退出码 1 且零请求" test "$RC" -eq 1 -a ! -s "$FAKE_LOG"
+  check "令牌用例[$desc]: 日志含 FAIL 但不含令牌（stdout+stderr）" bash -c 'grep -q FAIL "$1" && ! grep -q "$2" "$1"' _ "$TMP/t$ti.log" "$FAKE_TOK"
+  check "令牌用例[$desc]: 无 git 传输调用" no_gh_transport
+done
+check "令牌用例: 错误里的 URL 已净化（仍能看到 github.com 主机，便于排查）" grep -q "https://github.com/mfreceiver/alpha-gps.git" "$TMP/t1.log"
+check "入库脚本不再打印未净化的 \$raw" bash -c '! grep -n -E "实际: \$raw|\$raw" "$1"' _ "$HERE/release_build.sh"
+# 变异：净化函数退化为原样输出 → 令牌泄漏（证明用例有效）
+LIBOV='rl_gh_url_display() { cat; }'
+tok_case tm "userinfo 令牌" remote set-url github "https://$FAKE_TOK@github.com/mfreceiver/alpha-gps.git"
+check "变异T（净化退化为原样输出）：令牌出现在日志中（用例能检出）" grep -q "$FAKE_TOK" "$TMP/tm.log"
+unset LIBOV
+
+echo "== 场景 22: bash -x / SHELLOPTS=xtrace 下假口令/假 token 不进 stderr =="
+SECRETS=(FAKEks_pw_91Zq FAKEkey_pw_72Yp ghp_FAKEleakTOK_55 PRIMfakePW_33)
+xt_sb() { # xt_sb <名> → 沙箱写入假口令/假 token（含主仓库口令）
+  make_sb "$1"; fake_reset; fake_clear_env
+  printf 'DSH_KEYSTORE_PASSWORD=%s\nDSH_KEY_PASSWORD=%s\n' "${SECRETS[0]}" "${SECRETS[1]}" > "$TMP/$1/home/.gradle/gradle.properties"
+  printf 'https://ghuser:%s@github.com\nhttps://puser:%s@forge.example.com:443\n' "${SECRETS[2]}" "${SECRETS[3]}" > "$TMP/$1/home/.git-credentials"
+  retag "$TMP/$1"   # home/ 已入沙箱仓库：提交改动以保持干净树，并让 tag 回到 HEAD
+}
+leaks() { local f=$1 s n=0; for s in "${SECRETS[@]}"; do grep -q -- "$s" "$f" && n=$((n+1)); done; echo "$n"; }
+xt_run() { # xt_run <名> <模式: bashx|shellopts> <release_build 参数...> → RC
+  local n=$1 how=$2; shift 2
+  if [[ "$how" == bashx ]]; then RB_BASH_FLAGS=-x rb "$TMP/$n" "$TMP/$n.log" "$@"; else RB_SHELLOPTS=1 rb "$TMP/$n" "$TMP/$n.log" "$@"; fi; RC=$?
+}
+for how in bashx shellopts; do
+  xt_sb "xa-$how"; xt_run "xa-$how" "$how" --publish-only --no-github
+  check "[$how] --publish-only --no-github：退出 0，日志不含任何假口令/假 token（签名预检+主仓库凭据）" test "$RC" -eq 0 -a "$(leaks "$TMP/xa-$how.log")" -eq 0
+  xt_sb "xb-$how"; xt_run "xb-$how" "$how" --publish-only
+  check "[$how] --publish-only（主仓库→GitHub）：退出 0，日志不含任何假口令/假 token" test "$RC" -eq 0 -a "$(leaks "$TMP/xb-$how.log")" -eq 0
+  xt_sb "xc-$how"; NOPRIMARY=1 xt_run "xc-$how" "$how" --publish-github-only
+  check "[$how] --publish-github-only：退出 0，日志不含任何假口令/假 token" test "$RC" -eq 0 -a "$(leaks "$TMP/xc-$how.log")" -eq 0
+done
+# 变异：各层防护的有效性
+xt_mut() { # xt_mut <名> <sed 表达式...>
+  local n=$1; shift
+  xt_sb "$n"; sed -i "$@" "$TMP/$n/scripts/release_build.sh"
+  check "变异[$n] 前置：sed 确实改动了脚本" bash -c '! diff -q "$1" "$2" >/dev/null' _ "$HERE/release_build.sh" "$TMP/$n/scripts/release_build.sh"
+  retag "$TMP/$n"
+  xt_run "$n" bashx --publish-only
+}
+xt_mut xm1 -e '/{ set +x; } 2>\/dev\/null/d' -e '/^exec {_XTRACE_NULL_FD}/d' -e '/^BASH_XTRACEFD=/d'
+check "变异X1（删除全部 xtrace 防护）：bash -x 泄漏全部 4 个假口令/假 token（证明用例有效）" test "$RC" -eq 0 -a "$(leaks "$TMP/xm1.log")" -eq 4
+xt_mut xm2 -e '/^  { set +x; } 2>\/dev\/null/d' -e '/^{ set +x; } 2>\/dev\/null   #/d'
+check "变异X2（只留入口防护）：bash -x 无泄漏（入口层单独足够）" test "$RC" -eq 0 -a "$(leaks "$TMP/xm2.log")" -eq 0
+xt_mut xm3 -e '/^{ set +x; } 2>\/dev\/null$/d' -e '/^exec {_XTRACE_NULL_FD}/d' -e '/^BASH_XTRACEFD=/d'
+check "变异X3（只留函数内/签名前防护）：bash -x 无泄漏（函数层单独足够）" test "$RC" -eq 0 -a "$(leaks "$TMP/xm3.log")" -eq 0
+xt_mut xm4 -e '/^{ set +x; } 2>\/dev\/null$/d' -e '/^  { set +x; } 2>\/dev\/null/d' -e '/^{ set +x; } 2>\/dev\/null   #/d'
+check "变异X4（只留 BASH_XTRACEFD=/dev/null，删所有 set +x）：xtrace 轨迹被丢弃，无泄漏" test "$RC" -eq 0 -a "$(leaks "$TMP/xm4.log")" -eq 0
+fake_clear_env
 
 echo
 SCENARIOS=$(grep -c '^echo "== 场景' -- "$0")
