@@ -590,14 +590,133 @@ print(locs[0])
 PY
 }
 
-# rl_gh_remote_url_ok <git config 里的原始 remote url>
-#   本机 GitHub 远端必须精确指向 https://github.com/<RL_GH_REPO>[.git]（防配错远端把公开推送
-#   发到别处）。比较原始配置值（git config --get remote.X.url，不含 insteadOf 重写）。
-rl_gh_remote_url_ok() {
-  case "${1:-}" in
-    "https://github.com/$RL_GH_REPO"|"https://github.com/$RL_GH_REPO.git") return 0 ;;
+# ── GitHub 推送目的地校验（P2-1：验证 push 的**全部有效目的地**，并把传输钉死在已验证 URL）──
+# 允许的公开 URL 只有一个规范形式（常量，**没有任何环境变量/配置可以覆盖**；自测靠沙箱里的
+# fake git 在传输层替换，不削弱本校验）：
+RL_GH_CANON_URL="https://github.com/$RL_GH_REPO.git"
+
+# rl_gh_canon_url <url>
+#   规范化比较函数：url 与 https://github.com/<RL_GH_REPO> 或 …/<RL_GH_REPO>.git **逐字节精确相等**
+#   （大小写敏感；拒绝尾斜杠/userinfo/query/fragment/端口/空白/http/ssh/本地路径）才合法，
+#   合法时 stdout 输出规范形式 RL_GH_CANON_URL（统一带 .git），否则 rc=1 且无输出。
+rl_gh_canon_url() {
+  case "${1-}" in
+    "https://github.com/$RL_GH_REPO"|"https://github.com/$RL_GH_REPO.git") printf '%s\n' "$RL_GH_CANON_URL" ;;
     *) return 1 ;;
   esac
+}
+
+# rl_gh_remote_url_ok <url>   谓词封装：url 是否等于允许的公开 URL（任一规范等价形式）
+rl_gh_remote_url_ok() { rl_gh_canon_url "${1-}" >/dev/null; }
+
+# rl_gh_url_display   stdin=URL → stdout 净化后的展示串（错误日志里打印 URL 一律先经此函数）：
+#   丢弃 userinfo（最后一个 '@' 之前的全部内容，含 token）、query、fragment，控制字符→'?'，
+#   最多 60 字符。URL 经 stdin 传入（不进 argv，避免 /proc 可见）。
+rl_gh_url_display() {
+  python3 -c '
+import sys
+u = sys.stdin.read()
+scheme = ""
+if "://" in u:
+    scheme, _, rest = u.partition("://")
+    scheme += "://"
+    if not scheme.replace("://", "").isalnum():
+        scheme = "?://"
+else:
+    rest = u
+if "@" in rest:
+    rest = rest[rest.rindex("@") + 1:]
+for sep in "?#":
+    if sep in rest:
+        rest = rest.split(sep, 1)[0]
+out = scheme + rest
+out = "".join(c if 0x20 <= ord(c) < 0x7F else "?" for c in out)
+sys.stdout.write(out if len(out) <= 60 else out[:60] + "...")'
+}
+
+# rl_gh_urls_describe <换行分隔的 URL 列表>   → stdout 净化后的逗号分隔展示（最多 3 条）
+rl_gh_urls_describe() {
+  local line out="" n=0
+  while IFS= read -r line; do
+    n=$((n+1)); (( n <= 3 )) || break
+    out+="${out:+, }$(printf '%s' "$line" | rl_gh_url_display)"
+  done <<<"${1-}"
+  printf '%s' "$out"
+}
+
+# rl_gh_single_canon <标签> <换行分隔的 URL 列表>
+#   列表必须**恰好一条**且等于允许的公开 URL（rl_gh_canon_url），否则 fail-closed（0 条/多条/不符）。
+#   stdout 输出规范 URL。错误中的 URL 一律净化（见 rl_gh_url_display）。
+rl_gh_single_canon() {
+  local label=${1:-} list=${2-} n canon
+  if [[ -z "$list" ]]; then
+    rl_fail "GitHub 远端 $label 有效目的地为空（fail-closed）"; return 1
+  fi
+  n=$(printf '%s\n' "$list" | wc -l | tr -d ' ')
+  if [[ "$n" != 1 ]]; then
+    rl_fail "GitHub 远端 $label 有效目的地有 $n 个（必须恰好 1 个且等于 $RL_GH_CANON_URL；净化后: $(rl_gh_urls_describe "$list")）（fail-closed）"
+    return 1
+  fi
+  canon=$(rl_gh_canon_url "$list") || {
+    rl_fail "GitHub 远端 $label 有效目的地必须精确为 $RL_GH_CANON_URL（或无 .git 后缀的等价形式）（实际，已净化: $(printf '%s' "$list" | rl_gh_url_display)）（fail-closed）"
+    return 1
+  }
+  printf '%s\n' "$canon"
+}
+
+# rl_gh_url_unrewritten <url>
+#   传输直接用 URL 字面量（不经远端名）；git 仍会对字面量套用 url.<base>.insteadOf / pushInsteadOf。
+#   本函数读取全部生效配置里的这两类规则：任何规则的**值**是该 URL 的前缀（含空值）→ 会被改写 → 拒绝。
+#   读配置失败（rc 非 0/1）同样 fail-closed。URL 经 argv 传入（仅公开常量）。
+rl_gh_url_unrewritten() {
+  python3 - "${1-}" <<'PY'
+import subprocess, sys
+url = sys.argv[1].encode()
+r = subprocess.run(["git", "config", "-z", "--get-regexp", r"^url\..*\.(insteadof|pushinsteadof)$"],
+                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+if r.returncode not in (0, 1):
+    sys.stderr.write(f"FAIL GitHub 目的地: 读取 git 配置失败（rc={r.returncode}），fail-closed\n"); sys.exit(1)
+bad = []
+for ent in r.stdout.split(b"\0"):
+    if not ent:
+        continue
+    key, _, val = ent.partition(b"\n")
+    if url.startswith(val):
+        kind = "pushInsteadOf" if key.lower().endswith(b".pushinsteadof") else "insteadOf"
+        shown = "".join(chr(c) if 0x20 <= c < 0x7F else "?" for c in val.split(b"@")[-1][:60])
+        bad.append(f"{kind}(值前缀 '{shown}')")
+if bad:
+    sys.stderr.write("FAIL GitHub 目的地: 存在会改写公开 URL 的 url.<base>.insteadOf/pushInsteadOf 规则 "
+                     + ", ".join(bad) + "，fail-closed\n")
+    sys.exit(1)
+PY
+}
+
+# rl_gh_verify_remote <远端名>
+#   验证本机 GitHub 远端的**全部有效目的地**，成功时设置全局 RL_GH_PINNED_URL（= 规范公开 URL）：
+#     ① git remote get-url --all  <名>：fetch 侧（含 insteadOf 重写后）逐条检查，恰好 1 条且等于允许 URL
+#     ② git remote get-url --push --all <名>：push 侧（含 pushurl / pushInsteadOf 重写后）同上
+#     ③ 两侧规范形式一致
+#     ④ 规范 URL 字面量本身不被任何 insteadOf/pushInsteadOf 规则改写（rl_gh_url_unrewritten）
+#   调用方随后对 RL_GH_PINNED_URL **字面量**做 ls-remote/push（不再经远端名，从而 remote.<名>.push/
+#   mirror/pushurl 等一切远端级配置都不再参与目的地决策）。任一不符 → rc=1（fail-closed）。
+rl_gh_verify_remote() {
+  local remote=${1:-} fetch_list push_list cf cp
+  RL_GH_PINNED_URL=""
+  [[ -n "$remote" ]] || { rl_fail "GitHub 远端名为空（fail-closed）"; return 1; }
+  fetch_list=$(git remote get-url --all "$remote" 2>/dev/null) || {
+    rl_fail "GitHub 远端 '$remote' 不存在（fail-closed，脚本不自动创建）。请先执行: git remote add $remote $RL_GH_CANON_URL"
+    return 1
+  }
+  push_list=$(git remote get-url --push --all "$remote" 2>/dev/null) || {
+    rl_fail "GitHub 远端 '$remote' 的 push 目的地解析失败（fail-closed）"; return 1
+  }
+  cf=$(rl_gh_single_canon "fetch($remote)" "$fetch_list") || return 1
+  cp=$(rl_gh_single_canon "push($remote)" "$push_list") || return 1
+  [[ "$cf" == "$cp" ]] || { rl_fail "GitHub 远端 '$remote' fetch/push 目的地不一致（fail-closed）"; return 1; }
+  rl_gh_url_unrewritten "$cf" || return 1
+  RL_GH_PINNED_URL=$cf
+  return 0
 }
 
 # rl_gh_curl_config   stdin=token → stdout curl 配置（-K - 用；token 只经配置流，绝不进 argv）

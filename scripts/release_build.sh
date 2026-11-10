@@ -17,6 +17,10 @@
 #     环境变量（见 scripts/release.local.env.example）；缺失 fail-closed
 #   - 硬红线：release 资产只上传本次 APK；任何 *.jks/*.keystore/*.p12/*.pass/*.key
 #     绝不上传；口令/token 只经 stdin/curl 配置流传递，绝不进 argv/日志
+#   - GitHub 推送目的地：验证远端的**全部**有效目的地（fetch 与 push 两侧、含 insteadOf/pushurl/
+#     pushInsteadOf 重写后，且各恰好一个）都等于公开 URL，之后 ls-remote/push 直接对已验证的
+#     URL 字面量执行（见 release_lib.sh rl_gh_verify_remote）；日志里的 URL 一律净化（无 userinfo/query）
+
 set -euo pipefail
 
 fail() { echo "FAIL $1" >&2; exit 1; }
@@ -335,11 +339,9 @@ gh_err() { echo "FAIL $1" >&2; }
 # gh_preflight：本地前置检查（在构建/任何对外动作之前执行；失败 → 普通失败 exit 1，尚未发布任何东西）
 gh_preflight() {
   { set +x; } 2>/dev/null
-  local raw CRED
-  raw=$(git config --get "remote.$GITHUB_REMOTE.url" 2>/dev/null) \
-    || fail "GitHub 远端 '$GITHUB_REMOTE' 不存在（fail-closed，脚本不自动创建）。请先执行: git remote add $GITHUB_REMOTE https://github.com/$GITHUB_REPO.git"
-  rl_gh_remote_url_ok "$raw" \
-    || fail "GitHub 远端 '$GITHUB_REMOTE' 的 url 必须精确为 https://github.com/$GITHUB_REPO[.git]（实际: $raw）"
+  local CRED
+  # 校验远端的全部有效目的地（fetch+push、含重写，各恰好一个且等于公开 URL）；错误信息由库净化后输出
+  rl_gh_verify_remote "$GITHUB_REMOTE" || exit 1
   [[ "$GITHUB_REMOTE" != "${PRIMARY_REMOTE:-}" ]] \
     || fail "GitHub 远端名不能与主仓库远端名相同（$GITHUB_REMOTE）"
   CRED="$(printf 'protocol=https\nhost=github.com\n\n' | timeout 15 git credential fill)" \
@@ -403,6 +405,9 @@ publish_github() {
   GH_WORK=$(mktemp -d)
   trap 'rm -rf -- "$GH_WORK"' EXIT
   [[ -n "$GH_TOKEN" ]] || fail "GitHub token 未就绪（内部错误）"
+  # 推送前（主仓库发布之后）重新验证并钉定目的地：后续 ls-remote/push 只对该 URL 字面量执行
+  rl_gh_verify_remote "$GITHUB_REMOTE" || exit 1
+  local GH_URL=$RL_GH_PINNED_URL
   log "GitHub 步骤: 推送 tag $TAG_NAME$( (( GH_PUSH_BRANCH )) && echo ' + 当前分支' ) 到远端 $GITHUB_REMOTE（github.com/$GITHUB_REPO）"
   warn "GitHub 步骤会推送 tag$( (( GH_PUSH_BRANCH )) && echo ' 与当前分支' )，其可达的全部提交历史对公开可见"
 
@@ -413,7 +418,7 @@ publish_github() {
 
   # ① 远端 tag：已存在且同 commit → 跳过 push；不一致 → 中止（禁止移动已发布 tag）
   LOCAL_SHA="$(git rev-parse "$TAG_NAME^{commit}")" || fail "本地 tag $TAG_NAME 不可解析"
-  if ! REMOTE_OUT="$(timeout 30 git ls-remote --tags "$GITHUB_REMOTE" "refs/tags/$TAG_NAME" "refs/tags/$TAG_NAME^{}" 2>&1)"; then
+  if ! REMOTE_OUT="$(timeout 30 git ls-remote --tags "$GH_URL" "refs/tags/$TAG_NAME" "refs/tags/$TAG_NAME^{}" 2>&1)"; then
     fail "GitHub 远端 tag 查询失败（$GITHUB_REMOTE 不可达/网络错误，fail-closed）"
   fi
   REMOTE_SHA="$(awk -v t="refs/tags/$TAG_NAME" -v p="refs/tags/$TAG_NAME^{}" '
@@ -425,13 +430,13 @@ publish_github() {
       || fail "GitHub 远端 tag $TAG_NAME 指向 $REMOTE_SHA ≠ 本地 $LOCAL_SHA（禁止移动已发布 tag）"
     log "GitHub 远端 tag $TAG_NAME 已存在且同 commit → 跳过 tag push"
   else
-    timeout 120 git push "$GITHUB_REMOTE" "refs/tags/$TAG_NAME:refs/tags/$TAG_NAME" \
+    timeout 120 git -c push.followTags=false push --no-recurse-submodules "$GH_URL" "refs/tags/$TAG_NAME:refs/tags/$TAG_NAME" \
       || fail "git push $GITHUB_REMOTE $TAG_NAME 失败"
   fi
   if (( GH_PUSH_BRANCH )); then
     BRANCH=$(git rev-parse --abbrev-ref HEAD)
     [[ "$BRANCH" != HEAD ]] || fail "--github-push-branch：当前是游离 HEAD，无分支可推"
-    timeout 120 git push "$GITHUB_REMOTE" "refs/heads/$BRANCH:refs/heads/$BRANCH" \
+    timeout 120 git -c push.followTags=false push --no-recurse-submodules "$GH_URL" "refs/heads/$BRANCH:refs/heads/$BRANCH" \
       || fail "git push $GITHUB_REMOTE $BRANCH 失败"
   fi
 
