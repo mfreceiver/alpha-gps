@@ -89,14 +89,65 @@ class WifiBrowserModelTest {
     }
 
     @Test
-    fun sizeTagsAreMegabytesWithOneDecimal() {
+    fun sizeTagsAreUnitlessMegabytesWithOneDecimal() {
         val mb = 1024L * 1024L
-        assertEquals("0.0 MB", formatSizeTag(0))
-        assertEquals("0.1 MB", formatSizeTag(mb / 10))
-        assertEquals("1.0 MB", formatSizeTag(mb))
-        assertEquals("24.5 MB", formatSizeTag(mb * 49 / 2))
-        assertEquals("1.1 MB", formatSizeTag(mb + 52_429), "1.05 MB rounds half up")
-        assertEquals("1.0 MB", formatSizeTag(mb + 52_428), "just below 1.05 MB rounds down")
+        assertNull(formatSizeTag(0), "unknown size: no tag")
+        assertEquals("<0.1", formatSizeTag(1))
+        assertEquals("<0.1", formatSizeTag(mb / 10 - 1))
+        assertEquals("0.1", formatSizeTag(mb / 10 + 1))
+        assertEquals("1.0", formatSizeTag(mb))
+        assertEquals("6.6", formatSizeTag(mb * 66 / 10))
+        assertEquals("24.5", formatSizeTag(mb * 49 / 2))
+        assertEquals("1.1", formatSizeTag(mb + 52_429), "1.05 MB rounds half up")
+        assertEquals("1.0", formatSizeTag(mb + 52_428), "just below 1.05 MB rounds down")
+    }
+
+    @Test
+    fun cornerElementsAreAnchoredToDistinctFrameCorners() {
+        assertEquals(TileCorner.TopStart, tileCorner(TileElement.Preview))
+        assertEquals(TileCorner.TopEnd, tileCorner(TileElement.SizeTag))
+        assertEquals(TileCorner.BottomStart, tileCorner(TileElement.FormatTag))
+        assertEquals(TileCorner.BottomEnd, tileCorner(TileElement.Checkbox))
+        assertEquals(TileCorner.entries.toSet(), TileElement.entries.map(::tileCorner).toSet(), "one per corner")
+        assertTrue(TILE_ACTION_DP >= 40, "touch targets stay at least 40 dp")
+        assertTrue(TILE_CORNER_INSET_DP + TILE_BADGE_DP <= TILE_ACTION_DP, "the visible badge sits inside its target")
+    }
+
+    @Test
+    fun theGridGestureZonesMatchTheCornerAnchors() {
+        // The long-press range gesture must treat the preview and check box corners as theirs.
+        val tile = TileBounds(captureIndex = 0, left = 0f, top = 0f, width = 100f, height = 100f)
+        val action = TILE_ACTION_DP.toFloat()
+        assertEquals(TileZone.Preview, hitTestTile(listOf(tile), 5f, 5f, action)?.zone)
+        assertEquals(TileZone.Checkbox, hitTestTile(listOf(tile), 95f, 95f, action)?.zone)
+        // Size (top-right) and format (bottom-left) tags are not buttons: their corners are the body.
+        assertEquals(TileZone.Body, hitTestTile(listOf(tile), 95f, 5f, action)?.zone)
+        assertEquals(TileZone.Body, hitTestTile(listOf(tile), 5f, 95f, action)?.zone)
+    }
+
+    @Test
+    fun theTileFrameIsPaleGlassNeverBlack() {
+        listOf(false, true).forEach { dark ->
+            val fill = tileFrameColor(dark)
+            assertEquals(1f, fill.red); assertEquals(1f, fill.green); assertEquals(1f, fill.blue)
+            assertTrue(fill.alpha in 0.05f..0.7f, "translucent veil, dark=$dark")
+        }
+    }
+
+    @Test
+    fun letterboxBarsAreTrimmedOnlyWhenSymmetric() {
+        // 120 rows, 7 black on each side (a 3:2 picture in a 4:3 thumbnail).
+        fun bars(top: Int, bottom: Int, length: Int = 120): (Int) -> Boolean = { it < top || it >= length - bottom }
+        assertEquals(7 until 113, letterboxSpan(120, bars(7, 7)))
+        assertEquals(7 until 112, letterboxSpan(120, bars(7, 8)), "a pixel of rounding is fine")
+        assertEquals(0 until 120, letterboxSpan(120, bars(0, 0)), "no bars")
+        assertEquals(0 until 120, letterboxSpan(120, bars(30, 0)), "a dark sky on one side is the picture")
+        assertEquals(0 until 120, letterboxSpan(120, bars(1, 1)), "hairlines are not letterboxing")
+        assertEquals(0 until 120, letterboxSpan(120, bars(40, 40)), "too little would remain")
+        assertEquals(0 until 120, letterboxSpan(120) { true }, "an all-black frame is kept")
+        assertTrue(isLetterboxBlack(0xFF000000.toInt()))
+        assertTrue(isLetterboxBlack(0xFF101410.toInt()))
+        assertFalse(isLetterboxBlack(0xFF203040.toInt()))
     }
 
     @Test

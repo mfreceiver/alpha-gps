@@ -108,6 +108,25 @@ internal fun planDownloads(
     return WifiDownloadPlan(files.values.toList(), skipped)
 }
 
+/**
+ * The size shown for one capture (grid size tag, viewer info strip): what a download of it under
+ * [policy] fetches, from the same [planDownloads] as the batch button ("Download N JPG (x MB)"), so a
+ * selection's tags add up to the button. Saved files are not excluded — the label is the photo's,
+ * not the remaining work.
+ *
+ * When the policy would download nothing (RAW-only / HEIF-only under JPG only — those are never
+ * fetched silently — or every file is over the limit) the size of the original files is shown with
+ * [CaptureDownloadSize.notDownloaded] set, so the UI marks it ("only RAW") instead of implying a
+ * download.
+ */
+internal data class CaptureDownloadSize(val bytes: Long, val notDownloaded: Boolean)
+
+internal fun captureDownloadSize(capture: WifiCameraCapture, policy: WifiFormatPolicy): CaptureDownloadSize {
+    val plan = planDownloads(listOf(capture), policy, emptySet())
+    return if (plan.files.isNotEmpty()) CaptureDownloadSize(plan.totalBytes, notDownloaded = false)
+    else CaptureDownloadSize(capture.files.sumOf { it.size }, notDownloaded = true)
+}
+
 /** Result line shown after a batch: how many files were downloaded, how many skipped. */
 internal data class WifiBatchSummary(val downloaded: Int, val skipped: Map<WifiSkipReason, Int>) {
     val skippedCount: Int get() = skipped.values.sum()

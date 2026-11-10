@@ -585,4 +585,6 @@
     <string name="a1_address_show">显示</string>
     <string name="a1_address_hide">隐藏</string>
     <string name="a1_address_hidden">已隐藏</string>
+    <string name="b1_tile_size">%1$s MB</string>
+    <string name="b1_tile_size_not_downloaded">%1$s MB，不包含在仅 JPG 下载中</string>
 </resources>

@@ -614,4 +614,6 @@
     <string name="a1_address_show">Show</string>
     <string name="a1_address_hide">Hide</string>
     <string name="a1_address_hidden">Hidden</string>
+    <string name="b1_tile_size">%1$s MB</string>
+    <string name="b1_tile_size_not_downloaded">%1$s MB, not included in JPG-only downloads</string>
 </resources>
