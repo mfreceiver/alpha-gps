@@ -120,14 +120,12 @@ class WifiBrowserModelTest {
     }
 
     @Test
-    fun todayAndYesterdayAreRecognisedAndUnknownDaysAreNeither() {
-        val today = LocalDate(2024, 5, 2)
-        assertEquals(DayRelation.Today, dayRelation("2024-05-02", today))
-        assertEquals(DayRelation.Yesterday, dayRelation("2024-05-01", today))
-        assertEquals(DayRelation.Other, dayRelation("2024-04-30", today))
-        assertEquals(DayRelation.Yesterday, dayRelation("2023-12-31", LocalDate(2024, 1, 1)))
-        assertEquals(DayRelation.Other, dayRelation(UNKNOWN_DATE_KEY, today))
-        assertEquals(DayRelation.Other, dayRelation("garbage", today))
+    fun daySubtitlesAreOnlyTheWeekdayAndUnknownDaysHaveNone() {
+        // No relative words any more: today's and yesterday's rows show their weekday like every day.
+        assertEquals(4, dateKeyWeekday("2024-05-02")) // Thursday, whatever "today" is
+        assertEquals(LocalDate(2024, 5, 2), dateKeyToLocalDate("2024-05-02"))
+        assertNull(dateKeyToLocalDate(UNKNOWN_DATE_KEY), "the unknown-date group keeps no subtitle")
+        assertNull(dateKeyWeekday("garbage"))
     }
 
     @Test

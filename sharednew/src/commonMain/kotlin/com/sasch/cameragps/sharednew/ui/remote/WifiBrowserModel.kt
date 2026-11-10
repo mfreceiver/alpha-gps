@@ -147,24 +147,14 @@ internal data class WifiCaptureDetails(
 
 // ---- Day list --------------------------------------------------------------------------------
 
-internal enum class DayRelation { Today, Yesterday, Other }
-
 /** Parses a "yyyy-MM-dd" day key; null for the unknown group or anything malformed. */
 internal fun dateKeyToLocalDate(key: String): LocalDate? {
     if (key == UNKNOWN_DATE_KEY) return null
     return runCatching { LocalDate.parse(key) }.getOrNull()
 }
 
-/** Today / yesterday relative to [today], else Other (also for unknown dates). */
-internal fun dayRelation(key: String, today: LocalDate): DayRelation {
-    val date = dateKeyToLocalDate(key) ?: return DayRelation.Other
-    val days = today.toEpochDays() - date.toEpochDays()
-    return when (days) {
-        0L -> DayRelation.Today
-        1L -> DayRelation.Yesterday
-        else -> DayRelation.Other
-    }
-}
-
-/** ISO weekday 1 (Monday) … 7 (Sunday) of a day key, null when unknown. */
+/**
+ * ISO weekday 1 (Monday) … 7 (Sunday) of a day key, null when unknown. The day row's subtitle is only
+ * this weekday — no relative words ("today" / "yesterday"); the unknown group has no subtitle.
+ */
 internal fun dateKeyWeekday(key: String): Int? = dateKeyToLocalDate(key)?.dayOfWeek?.ordinal?.plus(1)
