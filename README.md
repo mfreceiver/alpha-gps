@@ -79,8 +79,13 @@ only after that succeeds, to GitHub (`--no-github` skips it; `--publish-github-o
 GitHub step). The GitHub step pushes the release tag (plus the current branch only with
 `--github-push-branch`), so the commit history reachable from it is publicly visible. The primary
 repository address is kept in an untracked local file (see
-[`scripts/release.local.env.example`](scripts/release.local.env.example)). Exit codes: `0` ok, `1`
-failure, `40` GitHub step failed after the primary release succeeded.
+[`scripts/release.local.env.example`](scripts/release.local.env.example)). The local GitHub remote
+must resolve (fetch and push side, after `insteadOf`/`pushurl` rewriting) to exactly one URL,
+`https://github.com/mfreceiver/alpha-gps.git`; anything else is rejected before any push. Exit codes:
+`0` ok, `1` failure (usage/config/preflight/build/primary release; the GitHub step did not run),
+`40` GitHub step failed — only in the dual-source modes (`--publish` / `--publish-only`) does this
+mean the primary release already succeeded (it is not rolled back; fix the cause and re-run with
+`--publish-github-only`); `--publish-github-only` never touches the primary repository.
 
 This fork ships only English (`values/`) and Simplified Chinese (`values-zh-rCN/`) — do not add
 other language directories.
