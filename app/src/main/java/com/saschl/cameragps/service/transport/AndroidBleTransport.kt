@@ -359,26 +359,6 @@ class AndroidBleTransport(
             Timber.d("Ignoring connection callback with status=$status and state=$newState")
         }
 
-        /**
-         * Hidden in the SDK but dispatched by signature at runtime: reports the
-         * actual negotiated connection parameters (interval unit = 1.25 ms).
-         * Tells us whether the CONNECTION_PRIORITY_HIGH request stuck or the
-         * camera overrode it with its own preferred parameters.
-         */
-        /* @Suppress("unused")
-         fun onConnectionUpdated(
-             gatt: BluetoothGatt,
-             interval: Int,
-             latency: Int,
-             timeout: Int,
-             status: Int,
-         ) {
-             Timber.i(
-                 "Connection updated for %s: interval=%d (%.1f ms), latency=%d, timeout=%d, status=%d",
-                 gatt.device.address, interval, interval * 1.25, latency, timeout, status,
-             )
-         }*/
-
         override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
             Timber.i("MTU changed for %s: mtu=%d status=%d", gatt.device.address, mtu, status)
             val address = gatt.device.address.uppercase()

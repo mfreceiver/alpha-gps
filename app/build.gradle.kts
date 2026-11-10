@@ -150,7 +150,6 @@ dependencies {
 
     implementation(libs.timber)
     implementation(libs.logging)
-    //implementation(libs.androidx.swiperefreshlayout)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.accompanist.permissions)
 
@@ -164,15 +163,12 @@ dependencies {
 
     implementation(libs.androidx.lifecycle.process)
 
-    implementation(libs.androidx.compose.runtime.livedata)
-    //implementation(libs.betterypermissionhelper)
 
     // Room database dependencies
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
-    //implementation(libs.androidx.work.runtime.ktx)
 
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
