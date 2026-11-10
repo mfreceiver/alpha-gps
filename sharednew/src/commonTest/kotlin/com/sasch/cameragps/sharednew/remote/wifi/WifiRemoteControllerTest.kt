@@ -685,7 +685,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         }
         val controller = WifiRemoteController(
             backgroundScope, registry, connector, {}, {},
-            automaticConnector = { _, _, _ -> error("Unexpected Bluetooth setup") },
+            automaticConnector = testAutomaticConnector { _, _, _ -> error("Unexpected Bluetooth setup") },
         )
         assertTrue(controller.supportsAddressDiscovery)
         controller.connect("camera", "  ")
@@ -1803,7 +1803,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         var attempts = 0
         var released = false
         val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> error("Not manual") }, {},
-            { released = true }, WifiAutomaticConnector { id, _, onPhase ->
+            { released = true }, testAutomaticConnector { id, _, onPhase ->
                 assertEquals("CAMERA", id)
                 attempts++
                 onPhase(WifiRemotePhase.AwaitingNetworkApproval)
