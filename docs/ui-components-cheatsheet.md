@@ -131,7 +131,7 @@ GlassPopover(expanded, onDismissRequest, anchor, modifier, placement = PopoverPl
 // GlassMenuItem(label, onClick, icon: Painter? = null, enabled = true, destructive = false, selected: Boolean? = null)
 // PopoverPlacement { BelowEnd, BelowStart, AboveEnd, AboveStart }；放不下自动翻转并夹在屏内
 ```
-- 焦点（替代 `Popup(focusable = true)`，`GlassOverlayFocus.kt`）：Popover/Menu/`CapsuleDialog`/`GlassBottomSheet` 打开时键盘/方向键焦点移入面板容器（Tab/方向键再到条目）。**modal 叠层仅最顶层可获焦**：底页和被上层模态盖住的下层弹层是同一种层门控（焦点组拒绝进入 + 对读屏隐藏）；Snackbar/tooltip 等非模态叠层在最顶层模态之上时不受影响。关闭**逐层恢复**：关上层回到下层打开它的锚点（或下层原焦点项/面板容器），关最后一层回到 `glassAnchor`（锚点不可用则回到打开前底页的焦点项）；菜单条目同帧打开对话框时，对话框关闭后回到菜单的锚点；先关下层也不会丢失返回目标。打开前该层没有焦点（触屏使用）则关闭后不强加焦点。`glassAnchor` 同时登记焦点返回目标，放在打开弹层的按钮上。无 `GlassBackground` 时 `CapsuleDialog` 的平台 Dialog 回退不加这些处理（保持窗口焦点，面板不可聚焦）。
+- 焦点（替代 `Popup(focusable = true)`，`GlassOverlayFocus.kt`）：Popover/Menu/`CapsuleDialog`/`GlassBottomSheet` 打开时键盘/方向键焦点移入面板容器（Tab/方向键再到条目）。**modal 叠层仅最顶层可获焦**：底页和被上层模态盖住的下层弹层是同一种层门控（焦点组拒绝进入 + 对读屏隐藏）；Snackbar/tooltip 等非模态叠层在最顶层模态之上时不受影响。关闭**逐层恢复**：关上层回到下层打开它的锚点（或下层打开前焦点路径末端的原按钮/输入框，路径经面板、对话框/底部面板内容、`ScrollbarLazyColumn` 逐级保存；都不可用才落到面板容器），关最后一层回到 `glassAnchor`（锚点不可用则回到打开前底页的焦点项）；菜单条目同帧打开对话框时，对话框关闭后回到菜单的锚点；先关下层也不会丢失返回目标。打开前该层没有焦点（触屏使用）则关闭后不强加焦点。`glassAnchor` 同时登记焦点返回目标，放在打开弹层的按钮上。弹层或页面内的可聚焦列表用 `ScrollbarLazyColumn`（自带焦点层）；调用方自建的 `verticalScroll`/`LazyColumn` 是叠层系统看不到的焦点组，其内条目关闭上层后只回到最近一级（对话框面板容器），见 todo #27。已关闭的弹层（打开后首帧前即关闭）不入栈、不抢焦点。无 `GlassBackground` 时 `CapsuleDialog` 的平台 Dialog 回退不加这些处理（保持窗口焦点，面板不可聚焦）。
 
 ### 进度（N8）
 ```kotlin
