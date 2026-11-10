@@ -20,6 +20,26 @@ internal fun demandedThumbnailBatch(
     visible: List<Int>, margin: List<Int>, settled: Set<Int>, batchSize: Int = THUMBNAIL_BATCH_SIZE,
 ): List<Int> = (visible.sorted() + margin).distinct().filter { it !in settled }.take(batchSize)
 
+/**
+ * Upper bound of decoded thumbnails kept for the displayed day. A day is no longer paged, so without
+ * a bound scrolling through a long day would keep every bitmap; ≈300 small bitmaps stay well below
+ * the memory a few full previews take.
+ */
+internal const val THUMBNAIL_CACHE_LIMIT = 300
+
+/**
+ * Which cached thumbnails to drop once [cache] exceeds [limit]: the oldest-inserted first (cache maps
+ * keep insertion order), never one in [keep] (the current visible + margin demand). Returns an empty
+ * list while within the limit. Dropped thumbnails are simply fetched again when scrolled back to.
+ */
+internal fun <T> thumbnailsToEvict(
+    cache: Map<Long, T>, keep: Set<Long>, limit: Int = THUMBNAIL_CACHE_LIMIT,
+): List<Long> {
+    val excess = cache.size - limit.coerceAtLeast(0)
+    if (excess <= 0) return emptyList()
+    return cache.keys.asSequence().filter { it !in keep }.take(excess).toList()
+}
+
 /** Visible capture indices plus the neighbouring-row margin, clamped to the page. */
 internal data class ThumbnailWindow(val visible: List<Int>, val margin: List<Int>)
 

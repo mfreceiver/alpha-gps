@@ -327,7 +327,7 @@ class SonyContentCatalogTest : WifiLoggingTest() {
         val hidden = (1L shl 56) or (1L shl 32) or 2L // The May 2 JPEG: no page shows it yet.
         assertEquals(null, transfer.thumbnail(hidden))
         assertEquals(enumerated, requests.size)
-        val day = transfer.datePage("2024-05-01", 0)
+        val day = transfer.dayPhotos("2024-05-01")
         assertEquals(2, day.photos.size)
         assertEquals(1, day.totalObjects)
         // Full 64-bit handles are kept as they are; only a displayed page makes them addressable.

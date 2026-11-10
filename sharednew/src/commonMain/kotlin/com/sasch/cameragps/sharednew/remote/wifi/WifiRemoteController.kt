@@ -41,12 +41,15 @@ internal interface WifiRemoteConnection {
 
     /**
      * Enumerates the whole card and returns its days (newest first, unknown last) without showing any
-     * page: nothing is addressable until [datePage].
+     * day: nothing is addressable until [dayPhotos].
      */
     suspend fun openCatalog(): List<DateGroup> = error("Photo browsing unavailable")
 
-    /** One page of a single day from the enumerated catalog; becomes the displayed page. */
-    suspend fun datePage(dateKey: String, offset: Int): CameraPhotoPage =
+    /**
+     * Every photo of a single day from the enumerated catalog (unpaged: offset 0, no `hasMore`);
+     * becomes the displayed set that thumbnails and previews are limited to.
+     */
+    suspend fun dayPhotos(dateKey: String): CameraPhotoPage =
         error("Photo browsing unavailable")
 
     suspend fun photoThumbnail(handle: Long, stats: ThumbnailStatsSink? = null): ImageBitmap? = null
@@ -426,12 +429,14 @@ class WifiRemoteController internal constructor(
     }
 
     /**
-     * Shows one page of [dateKey] from the already enumerated catalog. Never opens a new generation:
-     * selections, saved markers and the handle index survive switching days and turning pages, and the
-     * camera is not asked to enumerate again.
+     * Shows the whole day [dateKey] (no paging) from the already enumerated catalog. Never opens a new
+     * generation: selections, saved markers and the handle index survive switching days, and the
+     * camera is not asked to enumerate again. Every call publishes a new `pageRevision`, which is the
+     * identity of this view of the day: thumbnail demand and range gestures of an earlier view are
+     * ignored. [preferredPhotoIndex] (day index) names a capture whose thumbnail is wanted first.
      */
     fun browseDate(
-        identifier: String, dateKey: String, offset: Int = 0, preferredPhotoIndex: Int? = null,
+        identifier: String, dateKey: String, preferredPhotoIndex: Int? = null,
         expectedRevision: Long? = null,
     ) {
         val browser = registry.get(identifier.uppercase())?.wifiRemote?.photoBrowser ?: return
@@ -454,7 +459,7 @@ class WifiRemoteController internal constructor(
             thumbJob?.cancelAndJoin()
             thumbJob = null
             thumbDemand.value = ThumbnailDemand(-1, emptyList(), emptyList())
-            val page = connection.datePage(dateKey, offset)
+            val page = connection.dayPhotos(dateKey)
             _thumbnails.value = emptyMap()
             photoCatalog += page.photos.associateBy { it.handle }
             val revision = (registry.get(id)?.wifiRemote?.photoBrowser?.pageRevision ?: 0L) + 1
@@ -625,6 +630,7 @@ class WifiRemoteController internal constructor(
         captures: List<WifiCameraCapture>
     ) {
         val indexOf = captures.withIndex().associate { it.value.id to it.index }
+        val indexOfHandle = captures.withIndex().associate { it.value.thumbnail.handle to it.index }
         val settled = HashSet<Int>()
         val pageStats = ThumbnailPageStats(pageOffset, captures.size)
         var batchNumber = 0
@@ -664,6 +670,7 @@ class WifiRemoteController internal constructor(
                     fetched++
                     requestMs += fetch.ms
                     bytes += fetch.bytes
+                    evictFarThumbnails(captures, indexOfHandle, settled, window(thumbDemand.value))
                 }
                 thumbLog.i {
                     thumbnailBatchLine(
@@ -678,6 +685,22 @@ class WifiRemoteController internal constructor(
         } finally {
             _thumbnailsLoading.value = false
         }
+    }
+
+    /**
+     * Keeps the decoded thumbnails of an (unpaged, possibly long) day bounded: beyond
+     * [THUMBNAIL_CACHE_LIMIT] the oldest ones outside the current demand are dropped and un-settled,
+     * so scrolling back to them asks for them again instead of showing a permanent placeholder.
+     */
+    private fun evictFarThumbnails(
+        captures: List<WifiCameraCapture>, indexOfHandle: Map<Long, Int>, settled: MutableSet<Int>,
+        window: Pair<List<Int>, List<Int>>,
+    ) {
+        val keep = (window.first + window.second).mapNotNull { captures.getOrNull(it)?.thumbnail?.handle }.toSet()
+        val evicted = thumbnailsToEvict(_thumbnails.value, keep)
+        if (evicted.isEmpty()) return
+        _thumbnails.value -= evicted.toSet()
+        evicted.forEach { handle -> indexOfHandle[handle]?.let(settled::remove) }
     }
 
     fun showPhotoPreview(identifier: String, handle: Long) {

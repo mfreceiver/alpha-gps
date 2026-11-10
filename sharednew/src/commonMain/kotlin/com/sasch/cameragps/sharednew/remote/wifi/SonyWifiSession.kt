@@ -142,8 +142,8 @@ private class SonyWifiConnection(
         return checkNotNull(current).transfer.openCatalog()
     }
 
-    override suspend fun datePage(dateKey: String, offset: Int) =
-        checkNotNull(current).transfer.datePage(dateKey, offset)
+    override suspend fun dayPhotos(dateKey: String) =
+        checkNotNull(current).transfer.dayPhotos(dateKey)
 
     override suspend fun photoPage(offset: Int) = checkNotNull(current).transfer.page(offset)
     override suspend fun photoThumbnail(handle: Long, stats: ThumbnailStatsSink?) =

@@ -99,21 +99,19 @@ class WifiCatalogSnapshotTest {
     }
 
     @Test
-    fun pagesAreLocalSlicesOfOneDayWithTheirOwnTotal() {
+    fun aDayIsTheWholeDayInOneListWithoutPages() {
+        // More than the old 60-capture page: a day is never sliced any more.
         val day = (1..SonyImageTransfer.PAGE_SIZE + 3).map { single("20240501T0000" + (it % 60).toString().padStart(2, '0')) }
         val other = (1..5).map { single("20240430T120000") }
         val snapshot = CatalogSnapshot.of(day + other)
-        val first = snapshot.page("2024-05-01", 0)
-        assertEquals(SonyImageTransfer.PAGE_SIZE, first.photos.size)
+        val first = snapshot.day("2024-05-01")
+        assertEquals(SonyImageTransfer.PAGE_SIZE + 3, first.photos.size)
         assertEquals(SonyImageTransfer.PAGE_SIZE + 3, first.totalObjects)
-        assertEquals(true, first.hasMore)
-        assertEquals(day.take(SonyImageTransfer.PAGE_SIZE).flatMap { it.files }, first.photos)
-        val last = snapshot.page("2024-05-01", SonyImageTransfer.PAGE_SIZE)
-        assertEquals(3, last.photos.size)
-        assertEquals(false, last.hasMore)
-        assertEquals(5, snapshot.page("2024-04-30", 0).totalObjects)
-        assertFailsWith<IllegalArgumentException> { snapshot.page("2024-04-29", 0) }
-        assertFailsWith<IllegalArgumentException> { snapshot.page("2024-04-30", 6) }
+        assertEquals(0, first.offset)
+        assertEquals(false, first.hasMore)
+        assertEquals(day.flatMap { it.files }, first.photos)
+        assertEquals(5, snapshot.day("2024-04-30").totalObjects)
+        assertFailsWith<IllegalArgumentException> { snapshot.day("2024-04-29") }
     }
 
     @Test
