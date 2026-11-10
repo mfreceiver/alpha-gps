@@ -2,6 +2,7 @@ package com.saschl.cameragps.ui.settings
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,6 +23,7 @@ import cameragps.sharednew.generated.resources.battery_optimization_settings_tit
 import cameragps.sharednew.generated.resources.event_sounds_open_section_description
 import cameragps.sharednew.generated.resources.event_sounds_title
 import cameragps.sharednew.generated.resources.settings
+import com.sasch.cameragps.sharednew.ui.components.glass.isScrolledUnderTopBar
 import com.sasch.cameragps.sharednew.ui.settings.SharedLanguageSettingsCard
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsColumn
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsNavRow
@@ -95,14 +97,17 @@ private fun SettingsOverviewScreen(
     onLogsClick: () -> Unit,
     onOpenDestination: (SettingsDestination) -> Unit,
 ) {
+    val scrollState = rememberScrollState()
     SharedSettingsScreen(
         title = stringResource(Res.string.settings),
         onBackClick = onBackClick,
+        scrolled = scrollState.isScrolledUnderTopBar,
     ) { paddingValues ->
         SharedSettingsColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
+            state = scrollState,
         ) {
             AppControlsInlineSection()
             PhotoTransferSettingsCard()

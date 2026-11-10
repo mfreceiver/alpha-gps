@@ -5,7 +5,6 @@ import android.net.Uri
 import android.provider.Settings
 import android.text.Spanned
 import android.text.style.StyleSpan
-import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -16,7 +15,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -46,6 +45,10 @@ import cameragps.sharednew.generated.resources.learn_more
 import cameragps.sharednew.generated.resources.show_less
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSnackbarHost
+import com.sasch.cameragps.sharednew.ui.components.glass.rememberGlassSnackbarHostState
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import com.saschl.cameragps.R
 import com.saschl.cameragps.utils.BatteryOptimizationUtil
 import org.jetbrains.compose.resources.stringResource
@@ -56,6 +59,9 @@ internal fun BatteryOptimizationCard() {
     val context = LocalContext.current
     var isBatteryInfoExpanded by remember { mutableStateOf(false) }
     val openFailedText = stringResource(Res.string.battery_optimization_open_failed)
+    // In-page error notice (no system Toast window); the host draws into the page's GlassBackground.
+    val snackbar = rememberGlassSnackbarHostState()
+    GlassSnackbarHost(snackbar)
 
     SettingsCard(title = stringResource(Res.string.battery_optimization_settings_title)) {
         // Short description always visible (with HTML bold support)
@@ -66,8 +72,8 @@ internal fun BatteryOptimizationCard() {
         }
         Text(
             text = shortDescSpanned.toAnnotatedString(),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            style = AlphaType.Body,
+            color = AlphaTheme.colors.textSecondary,
         )
 
         // Expandable "Learn more" section
@@ -75,7 +81,7 @@ internal fun BatteryOptimizationCard() {
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
-                .clickable { isBatteryInfoExpanded = !isBatteryInfoExpanded },
+                .clickable(role = Role.Button) { isBatteryInfoExpanded = !isBatteryInfoExpanded },
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -84,7 +90,7 @@ internal fun BatteryOptimizationCard() {
                     else R.drawable.expand_more_24px
                 ),
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = AlphaTheme.colors.accent,
                 modifier = Modifier.size(20.dp)
             )
             Text(
@@ -92,9 +98,8 @@ internal fun BatteryOptimizationCard() {
                     if (isBatteryInfoExpanded) Res.string.show_less
                     else Res.string.learn_more
                 ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Medium,
+                style = AlphaType.Label,
+                color = AlphaTheme.colors.accent,
                 modifier = Modifier.padding(start = 4.dp)
             )
         }
@@ -106,8 +111,8 @@ internal fun BatteryOptimizationCard() {
         ) {
             Text(
                 text = stringResource(Res.string.battery_optimization_settings_description),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = AlphaType.Body,
+                color = AlphaTheme.colors.textSecondary,
                 modifier = Modifier.padding(top = 8.dp)
             )
         }
@@ -141,11 +146,7 @@ internal fun BatteryOptimizationCard() {
                             fallbackException,
                             "Failed to open any battery optimization settings"
                         )
-                        Toast.makeText(
-                            context,
-                            openFailedText,
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        snackbar.show(openFailedText)
                     }
                 }
             },
@@ -190,11 +191,7 @@ internal fun BatteryOptimizationCard() {
                                 fallbackException,
                                 "Failed to open any settings"
                             )
-                            Toast.makeText(
-                                context,
-                                openFailedText,
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            snackbar.show(openFailedText)
                         }
                     }
                 },
@@ -218,11 +215,7 @@ internal fun BatteryOptimizationCard() {
                     Timber.i("Opened app details settings")
                 } catch (e: Exception) {
                     Timber.e(e, "Failed to open app details settings")
-                    Toast.makeText(
-                        context,
-                        openFailedText,
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    snackbar.show(openFailedText)
                 }
             },
             role = CapsuleRole.Secondary,

@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -21,15 +19,16 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.keyboard_arrow_right_24px
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassSurface
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSwitch
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import org.jetbrains.compose.resources.painterResource
 
 /**
@@ -45,9 +44,8 @@ fun SharedSettingsCard(
     GlassCard(modifier = modifier.fillMaxWidth()) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = AlphaTheme.colors.onSurface,
+            style = AlphaType.Heading,
+            color = AlphaTheme.colors.textPrimary,
             modifier = Modifier.semantics { heading() },
         )
         content()
@@ -55,7 +53,7 @@ fun SharedSettingsCard(
 }
 
 /**
- * A labelled toggle row (title + optional description + Switch) for use inside a settings card.
+ * A labelled toggle row (title + optional description + [GlassSwitch]) for use inside a settings card.
  * Without [trailing] the whole row is one ≥ 48 dp switch target announced as "title, description".
  */
 @Composable
@@ -91,15 +89,14 @@ fun SharedToggleRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                color = AlphaTheme.colors.onSurface,
+                style = AlphaType.Label,
+                color = AlphaTheme.colors.textPrimary,
             )
             if (description != null) {
                 Text(
                     text = description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AlphaTheme.colors.onSurfaceVariant,
+                    style = AlphaType.Caption,
+                    color = AlphaTheme.colors.textSecondary,
                 )
             }
         }
@@ -108,7 +105,7 @@ fun SharedToggleRow(
             trailing()
         } else {
             // The row handles the click; the switch only reflects state.
-            Switch(checked = checked, onCheckedChange = null, enabled = enabled)
+            GlassSwitch(checked = checked, onCheckedChange = null, enabled = enabled)
         }
     }
 }
@@ -140,22 +137,21 @@ fun SharedSettingsNavRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = AlphaTheme.colors.onSurface,
+                    style = AlphaType.Label,
+                    color = AlphaTheme.colors.textPrimary,
                 )
                 if (!secondary.isNullOrBlank()) {
                     Text(
                         text = secondary,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = AlphaTheme.colors.onSurfaceVariant,
+                        style = AlphaType.Caption,
+                        color = AlphaTheme.colors.textSecondary,
                     )
                 }
             }
             Icon(
                 painter = painterResource(Res.drawable.keyboard_arrow_right_24px),
                 contentDescription = null,
-                tint = AlphaTheme.colors.onSurfaceVariant,
+                tint = AlphaTheme.colors.textSecondary,
             )
         }
     }
