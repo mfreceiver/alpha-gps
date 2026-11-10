@@ -9,42 +9,49 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import cameragps.sharednew.generated.resources.Res
-import cameragps.sharednew.generated.resources.app_settings
+import cameragps.sharednew.generated.resources.baseline_view_list_24
 import cameragps.sharednew.generated.resources.header_device_list
 import cameragps.sharednew.generated.resources.help_menu_item
+import cameragps.sharednew.generated.resources.m2_help_24px
+import cameragps.sharednew.generated.resources.m2_list_grant
+import cameragps.sharednew.generated.resources.m2_warning_24px
 import cameragps.sharednew.generated.resources.permissions_missing_description
 import cameragps.sharednew.generated.resources.permissions_missing_title
 import cameragps.sharednew.generated.resources.settings
+import cameragps.sharednew.generated.resources.settings_24px
 import cameragps.sharednew.generated.resources.view_logs
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
 import com.sasch.cameragps.sharednew.ui.device.SharedDevicesScreen
 import com.sasch.cameragps.sharednew.ui.devicelist.DeviceListLayout
-import com.saschl.cameragps.R
+import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.saschl.cameragps.service.AssociatedDeviceCompat
 import com.saschl.cameragps.ui.AssociatedDevicesList
 import com.saschl.cameragps.ui.getPermissionDescription
 import com.saschl.cameragps.ui.pairing.PairingManager
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import timber.log.Timber
 
@@ -88,31 +95,22 @@ fun DevicesScreen(
     SharedDevicesScreen(
         title = stringResource(Res.string.header_device_list),
         topBarActions = {
-            IconButton(
-                onClick = onHelpClick
-            ) {
-                Icon(
-                    painterResource(R.drawable.info_24px),
-                    contentDescription = stringResource(Res.string.help_menu_item),
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            IconButton(
-                onClick = onLogsClick
-            ) {
-                Icon(
-                    painterResource(R.drawable.baseline_view_list_24),
-                    contentDescription = stringResource(Res.string.view_logs),
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            IconButton(onClick = { onSettingsClick() }) {
-                Icon(
-                    painterResource(R.drawable.settings_24px),
-                    contentDescription = stringResource(Res.string.settings),
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-            }
+            // The app's general help lives only here (device list).
+            GlassIconButton(
+                icon = painterResource(Res.drawable.m2_help_24px),
+                contentDescription = stringResource(Res.string.help_menu_item),
+                onClick = onHelpClick,
+            )
+            GlassIconButton(
+                icon = painterResource(Res.drawable.baseline_view_list_24),
+                contentDescription = stringResource(Res.string.view_logs),
+                onClick = onLogsClick,
+            )
+            GlassIconButton(
+                icon = painterResource(Res.drawable.settings_24px),
+                contentDescription = stringResource(Res.string.settings),
+                onClick = onSettingsClick,
+            )
         }
     ) {
 
@@ -120,52 +118,26 @@ fun DevicesScreen(
             onNeedHelp = onTroubleshootingClick,
             header = {
                 if (missingPermissions.isNotEmpty()) {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = stringResource(Res.string.permissions_missing_title),
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            val missingPermissionNames = missingPermissions
-                                .mapNotNull { permission ->
-                                    getPermissionDescription(permission)?.let { res ->
-                                        " - ${stringResource(res)}"
-                                    }
-                                }
-                                .joinToString("\n")
-                            Text(
-                                text = stringResource(
-                                    Res.string.permissions_missing_description,
-                                    missingPermissionNames
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            TextButton(
-                                onClick = {
-                                    val intent =
-                                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                            data =
-                                                Uri.fromParts("package", context.packageName, null)
-                                        }
-                                    context.startActivity(intent)
-                                }
-                            ) {
-                                Text(text = stringResource(Res.string.app_settings))
+                    val missingPermissionNames = missingPermissions
+                        .mapNotNull { permission ->
+                            getPermissionDescription(permission)?.let { res ->
+                                " - ${stringResource(res)}"
                             }
                         }
-                    }
+                        .joinToString("\n")
+                    MissingPermissionsCard(
+                        description = stringResource(
+                            Res.string.permissions_missing_description,
+                            missingPermissionNames
+                        ),
+                        onOpenSettings = {
+                            val intent =
+                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                }
+                            context.startActivity(intent)
+                        },
+                    )
                 }
 
                 ScanForDevicesMenu(
@@ -205,5 +177,40 @@ fun DevicesScreen(
                 }
             )
         }
+    }
+}
+
+/** Missing-permission notice (design v3 "list_perm"): glass card, warning icon, tonal action. */
+@Composable
+private fun MissingPermissionsCard(description: String, onOpenSettings: () -> Unit) {
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = AlphaDimens.screenMargin, vertical = 4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Icon(
+                painterResource(Res.drawable.m2_warning_24px),
+                contentDescription = null,
+                tint = AlphaTheme.colors.error,
+                modifier = Modifier.size(24.dp),
+            )
+            Text(
+                text = stringResource(Res.string.permissions_missing_title),
+                style = AlphaTextStyles.buttonLarge,
+                color = AlphaTheme.colors.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Text(
+            text = description,
+            style = AlphaTextStyles.dialogBody,
+            color = AlphaTheme.colors.onSurfaceVariant,
+        )
+        CapsuleButton(
+            text = stringResource(Res.string.m2_list_grant),
+            onClick = onOpenSettings,
+            role = CapsuleRole.Tonal,
+        )
     }
 }
