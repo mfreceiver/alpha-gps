@@ -67,8 +67,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -157,8 +155,11 @@ import com.sasch.cameragps.sharednew.remote.wifi.formatByteSize
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassCheckbox
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassFloatingBar
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressCircle
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressSize
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassSurface
 import com.sasch.cameragps.sharednew.ui.components.glass.InfoTag
 import com.sasch.cameragps.sharednew.ui.components.glass.InfoTagStyle
@@ -166,7 +167,7 @@ import com.sasch.cameragps.sharednew.ui.components.glass.LocalGlassBackdrop
 import com.sasch.cameragps.sharednew.ui.components.glass.glassSource
 import com.sasch.cameragps.sharednew.ui.components.glass.rememberGlassBackdrop
 import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
-import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.sasch.cameragps.sharednew.ui.theme.CameraGpsTheme
 import com.sasch.cameragps.sharednew.ui.theme.GlassLevel
@@ -192,7 +193,6 @@ private val StripShape = RoundedCornerShape(20.dp)
 private val DrawerShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
 private val FilmstripCell = 40.dp
 private val FilmstripShape = RoundedCornerShape(6.dp)
-private val WhiteSoft = Color.White.copy(alpha = 0.72f)
 
 /**
  * Full-screen viewer of the open day (design v3 pages 20–21): top bar (name, capture time, k / N),
@@ -530,18 +530,18 @@ private fun ViewerTopBar(
         )
         Column(Modifier.weight(1f)) {
             Text(
-                parts.title, color = Color.White, style = MaterialTheme.typography.titleMedium,
+                parts.title, color = AlphaTheme.colors.onPhoto, style = AlphaType.Heading,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             parts.capturedAt?.let {
                 Text(
-                    it, color = WhiteSoft, style = MaterialTheme.typography.bodySmall,
+                    it, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
         }
         trailing()
-        parts.position?.let { Text(it, color = WhiteSoft, style = MaterialTheme.typography.labelLarge) }
+        parts.position?.let { Text(it, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Label) }
     }
 }
 
@@ -571,7 +571,7 @@ private fun ViewerPager(
     val browser = state.photoBrowser
     if (captures.isEmpty()) {
         Box(modifier, contentAlignment = Alignment.Center) {
-            Text(stringResource(Res.string.wifi_remote_browser_empty), color = Color.White)
+            Text(stringResource(Res.string.wifi_remote_browser_empty), color = AlphaTheme.colors.onPhoto, style = AlphaType.Body)
         }
         return
     }
@@ -592,19 +592,21 @@ private fun ViewerPager(
                 ) {
                     when {
                         browser.failed -> {
-                            Text(stringResource(Res.string.wifi_remote_browser_failed), color = Color.White)
+                            Text(stringResource(Res.string.wifi_remote_browser_failed), color = AlphaTheme.colors.onPhoto, style = AlphaType.Body)
                             CapsuleButton(
                                 text = stringResource(Res.string.wifi_remote_viewer_retry),
                                 onClick = { onRetry(page) },
                                 role = CapsuleRole.Secondary,
                                 enabled = !browser.loading && !state.imageTransfer.busy,
+                                glass = true,
+                                glassLevel = GlassLevel.Viewer,
                             )
                         }
                         state.imageTransfer.busy ->
-                            Text(stringResource(Res.string.wifi_remote_viewer_transfer_wait), color = Color.White)
+                            Text(stringResource(Res.string.wifi_remote_viewer_transfer_wait), color = AlphaTheme.colors.onPhoto, style = AlphaType.Body)
                         else -> {
-                            CircularProgressIndicator(color = Color.White)
-                            Text(stringResource(Res.string.wifi_remote_browser_loading), color = Color.White)
+                            GlassProgressCircle(onPhoto = true, size = GlassProgressSize.Large)
+                            Text(stringResource(Res.string.wifi_remote_browser_loading), color = AlphaTheme.colors.onPhoto, style = AlphaType.Body)
                         }
                     }
                 }
@@ -613,8 +615,9 @@ private fun ViewerPager(
                     image, contentDescription = capture.name,
                     modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit,
                 )
-                browser.loading || previewLoading(capture) -> CircularProgressIndicator(color = Color.White)
-                else -> Text(stringResource(Res.string.wifi_remote_preview_unavailable), color = Color.White)
+                browser.loading || previewLoading(capture) ->
+                    GlassProgressCircle(onPhoto = true, size = GlassProgressSize.Large)
+                else -> Text(stringResource(Res.string.wifi_remote_preview_unavailable), color = AlphaTheme.colors.onPhoto, style = AlphaType.Body)
             }
         }
     }
@@ -647,21 +650,21 @@ private fun ViewerInfoStripBar(
             val format = info.formatText
             if (format != null) Text(
                 if (info.noJpeg) stringResource(Res.string.m7_viewer_only_format, format) else format,
-                color = if (info.noJpeg) AlphaTheme.colors.warning else Color.White,
-                style = MaterialTheme.typography.labelLarge, maxLines = 1,
+                color = if (info.noJpeg) AlphaTheme.colors.warningText else AlphaTheme.colors.onPhoto,
+                style = AlphaType.Label, maxLines = 1,
             )
             if (format != null && info.sizeBytes > 0) {
-                Text("·", color = WhiteSoft, style = MaterialTheme.typography.labelLarge)
+                Text("·", color = AlphaTheme.colors.onPhotoMuted, style = AlphaType.Label)
             }
             if (info.sizeBytes > 0) Text(
-                size, color = WhiteSoft, style = MaterialTheme.typography.labelLarge, maxLines = 1,
+                size, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Label, maxLines = 1,
                 modifier = Modifier.semantics { contentDescription = "$sizeLabel $size" },
             )
             Spacer(Modifier.weight(1f))
             if (onOpenDetails != null) Image(
                 painterResource(Res.drawable.chevron_right_24px), contentDescription = null,
                 modifier = Modifier.size(20.dp).rotate(-90f),
-                colorFilter = ColorFilter.tint(WhiteSoft),
+                colorFilter = ColorFilter.tint(AlphaTheme.colors.onPhotoSecondary),
             )
         }
     }
@@ -715,7 +718,7 @@ private fun ViewerDetailsDrawer(details: ViewerDetails, histogram: FloatArray?, 
         val maxSheetHeight = maxHeight * 0.75f
         Box(
             Modifier.fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.4f))
+                .background(AlphaTheme.colors.scrim)
                 .pointerInput(onClose) { detectTapGestures { onClose() } }
         )
         GlassSurface(
@@ -744,11 +747,11 @@ private fun ViewerDetailsDrawer(details: ViewerDetails, histogram: FloatArray?, 
                         Box(
                             Modifier.align(Alignment.CenterHorizontally).padding(start = 48.dp)
                                 .size(width = 36.dp, height = 4.dp)
-                                .background(Color.White.copy(alpha = 0.35f), AlphaShapes.capsule)
+                                .background(AlphaTheme.colors.onPhotoMuted, AlphaShapes.capsule)
                         )
                         Text(
-                            stringResource(Res.string.b1_details_title), color = Color.White,
-                            style = MaterialTheme.typography.titleMedium,
+                            stringResource(Res.string.b1_details_title), color = AlphaTheme.colors.onPhoto,
+                            style = AlphaType.Heading,
                             modifier = Modifier.padding(top = 8.dp),
                         )
                     }
@@ -798,19 +801,19 @@ private fun Modifier.detailsDragDownToClose(onClose: () -> Unit): Modifier = poi
 @Composable
 private fun ColumnScope.ViewerDetailsContent(details: ViewerDetails, histogram: FloatArray?) {
     details.filename?.let {
-        Text(it, color = Color.White, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(it, color = AlphaTheme.colors.onPhoto, style = AlphaType.Label, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
     details.capturedAt?.let { DetailRow(stringResource(Res.string.b1_detail_captured), it) }
     details.formatText?.let { DetailRow(stringResource(Res.string.b1_detail_format), it) }
     if (details.files.isNotEmpty()) PanelBlock(stringResource(Res.string.b1_detail_files)) {
         details.files.forEach { file ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(file.format, color = Color.White, style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(44.dp))
+                Text(file.format, color = AlphaTheme.colors.onPhoto, style = AlphaType.Label, modifier = Modifier.width(44.dp))
                 Text(
-                    file.filename, color = WhiteSoft, style = MaterialTheme.typography.bodySmall,
+                    file.filename, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                 )
-                if (file.bytes > 0) Text(formatByteSize(file.bytes), color = Color.White, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                if (file.bytes > 0) Text(formatByteSize(file.bytes), color = AlphaTheme.colors.onPhoto, style = AlphaType.Caption, maxLines = 1)
             }
         }
     }
@@ -856,27 +859,28 @@ private fun exifFieldLabel(field: ViewerExifField): String = stringResource(
 @Composable
 private fun DetailRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(label, color = WhiteSoft, style = AlphaTextStyles.statusLabel)
+        Text(label, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption)
         Spacer(Modifier.weight(1f))
-        Text(value, color = Color.White, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(value, color = AlphaTheme.colors.onPhoto, style = AlphaType.Body, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 
 @Composable
 private fun PlaceholderBar(modifier: Modifier) {
-    Box(modifier.height(10.dp).clip(RoundedCornerShape(5.dp)).background(Color.White.copy(alpha = 0.14f)))
+    Box(modifier.height(10.dp).clip(RoundedCornerShape(5.dp)).background(AlphaTheme.colors.onPhoto.copy(alpha = 0.14f)))
 }
 
 @Composable
 private fun HistogramGraph(bins: FloatArray, modifier: Modifier) {
     val label = stringResource(Res.string.m7_viewer_histogram)
+    val bar = AlphaTheme.colors.onPhotoMuted
     Canvas(modifier.semantics { contentDescription = label }) {
         if (bins.isEmpty()) return@Canvas
         val barWidth = size.width / bins.size
         bins.forEachIndexed { index, value ->
             val h = value.coerceIn(0f, 1f) * size.height
             if (h > 0f) drawRect(
-                color = Color.White.copy(alpha = 0.7f),
+                color = bar,
                 topLeft = Offset(index * barWidth, size.height - h),
                 size = Size(barWidth, h),
             )
@@ -909,7 +913,7 @@ private fun ViewerDetailsPanel(parts: ViewerParts, modifier: Modifier) {
 @Composable
 private fun PanelBlock(label: String, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, color = WhiteSoft, style = AlphaTextStyles.statusLabel)
+        Text(label, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption)
         content()
     }
 }
@@ -928,15 +932,19 @@ private fun ViewerDownloadArea(parts: ViewerParts) {
         }
         hint?.let {
             Text(
-                it, style = MaterialTheme.typography.bodySmall,
-                color = if (download.phase == ViewerDownloadPhase.Ready) AlphaTheme.colors.error else WhiteSoft,
+                it, style = AlphaType.Caption,
+                color = if (download.phase == ViewerDownloadPhase.Ready) AlphaTheme.colors.danger else AlphaTheme.colors.onPhotoSecondary,
             )
         }
         when (download.phase) {
             ViewerDownloadPhase.Downloading -> DownloadProgressCapsule(transfer, parts.onCancel)
+            // Every viewer button is the Viewer-glass variant (GV fill + edge light, label in the
+            // photo-overlay colour) so it reads as frosted glass even where it sits on the black
+            // letterbox below the photo, and never as an opaque light pill.
             ViewerDownloadPhase.Saved -> CapsuleButton(
                 text = stringResource(Res.string.wifi_remote_download_saved), onClick = {},
                 icon = painterResource(Res.drawable.check_24px), enabled = false,
+                glass = true, glassLevel = GlassLevel.Viewer,
             )
             ViewerDownloadPhase.NoJpeg -> CapsuleButton(
                 text = stringResource(Res.string.m7_viewer_download_format, download.manualFormat.orEmpty()),
@@ -944,14 +952,16 @@ private fun ViewerDownloadArea(parts: ViewerParts) {
                 role = CapsuleRole.Secondary,
                 icon = painterResource(Res.drawable.download_24px),
                 enabled = download.enabled,
+                glass = true, glassLevel = GlassLevel.Viewer,
             )
             else -> CapsuleButton(
                 text = stringResource(Res.string.wifi_remote_download),
                 onClick = { parts.onDownload(download.downloads) },
-                // Frosted glass tinted with primary (not an opaque light-blue fill) over the photo.
+                // Frosted Viewer glass tinted with the accent (not an opaque light-blue fill).
                 role = CapsuleRole.GlassPrimary,
                 icon = painterResource(Res.drawable.download_24px),
                 enabled = download.enabled,
+                glassLevel = GlassLevel.Viewer,
             )
         }
     }
@@ -984,15 +994,12 @@ private fun DownloadProgressCapsule(transfer: WifiImageTransferState, onCancel: 
         contentPadding = PaddingValues(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        val ring = AlphaTheme.colors.primary
-        if (fraction != null && transfer.status == WifiImageTransferStatus.Downloading) {
-            CircularProgressIndicator(
-                progress = { fraction }, modifier = Modifier.size(24.dp), strokeWidth = 3.dp,
-                color = ring, trackColor = Color.White.copy(alpha = 0.2f),
-            )
-        } else {
-            CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp, color = ring)
-        }
+        // Determinate while bytes arrive, indeterminate while converting / without a size.
+        GlassProgressCircle(
+            progress = fraction?.takeIf { transfer.status == WifiImageTransferStatus.Downloading },
+            onPhoto = true,
+            strokeWidth = 3.dp,
+        )
         Column {
             Text(
                 if (transfer.status == WifiImageTransferStatus.Converting) {
@@ -1000,7 +1007,7 @@ private fun DownloadProgressCapsule(transfer: WifiImageTransferState, onCancel: 
                 } else {
                     stringResource(Res.string.m7_viewer_downloading, "${((fraction ?: 0f) * 100).toInt()}%")
                 },
-                color = Color.White, style = MaterialTheme.typography.labelLarge, maxLines = 1,
+                color = AlphaTheme.colors.onPhoto, style = AlphaType.Label, maxLines = 1,
             )
             val bytes = if (transfer.totalBytes > 0) {
                 formatByteSize(transfer.bytesReceived) + " / " + formatByteSize(transfer.totalBytes)
@@ -1009,13 +1016,14 @@ private fun DownloadProgressCapsule(transfer: WifiImageTransferState, onCancel: 
                 stringResource(Res.string.wifi_remote_batch_progress, transfer.completedFiles, transfer.totalFiles)
             } else null
             listOfNotNull(bytes, files).takeIf { it.isNotEmpty() }?.let {
-                Text(it.joinToString(" · "), color = WhiteSoft, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                Text(it.joinToString(" · "), color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption, maxLines = 1)
             }
         }
         CapsuleButton(
             text = stringResource(Res.string.wifi_remote_transfer_cancel),
             onClick = onCancel,
             role = CapsuleRole.Secondary,
+            glass = true, glassLevel = GlassLevel.Viewer,
         )
     }
 }
@@ -1035,7 +1043,8 @@ private fun ViewerSelectionToggle(parts: ViewerParts) {
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        SelectionCheck(parts.selected, Modifier.alpha(if (parts.selectEnabled) 1f else 0.5f))
+        // Visual only: the 48 dp cell above owns the toggle and its semantics.
+        GlassCheckbox(parts.selected, onCheckedChange = null, enabled = parts.selectEnabled, onPhoto = true)
     }
 }
 
