@@ -15,11 +15,11 @@ def build():
  {phone("grid_sel", 0.66, "① 选择态 + 悬浮下载胶囊")}{phone("grid_drag", 0.66, "② 拖选中（胶囊收起为小号）")}{phone("grid_dl", 0.66, "③ 批量下载中")}
  <div class="col">
   <h2>选择态与悬浮下载</h2>
-  {ul(["<b>进入</b>：长按任一照片。顶栏变为 ✕ + “已选 n 张” + 右侧“全选”图标。",
+  {ul(["<b>进入</b>：长按任一照片。顶栏变为 ✕ + “已选 n 张”；<b>没有“全选”</b>（“全选本页”随分页一并删除）。",
        "<b>选中表现</b>：照片内缩 6dp，露出主色浅底 + 2.5dp 主色描边，左上选择圈变为实心 ✓。未选中的照片左上显示空心圈。",
-       "<b>下载胶囊</b>：屏幕底部居中，56dp 高的主色胶囊，写明<b>张数与合计大小</b>（“下载 3 张 · 67.8 MB”）。这是本屏唯一的主操作。",
-       "<b>全选 = 本日全部</b>（不再是“本页”，Q6）。再点一次取消全选。",
-       "<b>拖选</b>：长按后不抬手拖动，经过的照片连续选中；拖到上下边缘自动滚动。取消分页后拖选可贯穿整日。"])}
+       "<b>下载胶囊</b>：屏幕底部居中，56dp 高的主色胶囊，写明<b>张数与合计大小</b>（“下载 3 张 · 67.8 MB”）。这是本屏唯一的主操作；点击后<b>直接按设置里的“默认下载格式”下载</b>，不再弹格式选择。",
+       "<b>选择跨日期保留</b>：换一个日期继续选，回到列表后一次下载全部已选。",
+       "<b>拖选</b>：长按后不抬手拖动，经过的照片连续选中；拖到上下边缘自动滚动。拖选范围 = 整日。"])}
   <div class="box b"><h3>胶囊如何不挡缩略图</h3>
   {ul(["<b>底部内边距</b>：选择态下网格 <code>contentPadding.bottom</code> = 胶囊 56 + 上下间距 32 + 系统导航条高度，最后一行可以完整滚到胶囊上方。",
        "<b>滚动收起</b>：手指向上滑（看更下面的内容）或拖选进行中 → 胶囊收成右下角的<b>小号</b>（图标 + 张数，84dp 宽）；停止 600 ms 或向下滑 → 展开回完整文案。",
@@ -27,15 +27,16 @@ def build():
        "胶囊背后有一层自下而上的暗化渐变（非模糊），保证在任何照片上可读。"], "small")}</div>
   <div class="box"><h3>下载中（Q12）</h3>
   {ul(["胶囊变为 G2 玻璃进度条：环形进度 + “正在下载 2 / 3” + 当前文件名与百分比 + 右侧“取消”。",
-       "下载中<b>锁定选择与滚动之外的操作</b>：不能增减选择，顶栏 ✕ 与返回 = 取消下载（先弹“取消下载？”确认）。",
-       "完成后胶囊短暂显示“已保存 3 张”1.5 秒，随后自动退出选择态。已保存的照片在网格上不加 ✓。",
-       "超过大小上限或没有可下载格式的照片，在选择时即从合计中剔除，并在胶囊文案后注明“1 张不可下载”。"], "small")}</div>
+       "下载中<b>锁定选择与滚动之外的操作</b>：不能增减选择；进度条右侧“取消”随时可用。",
+       "完成后显示汇总“<b>已下载 N、跳过 M</b>”，<b>不自动退出选择态</b>（由用户点 ✕ 退出）。已保存的照片在网格上不加 ✓。",
+       "默认格式为“仅 JPG”时，没有 JPG 的拍摄组<b>跳过并计入汇总</b>，不中断整批。",
+       "退到后台时已接受的下载继续，结束后自动结束 Wi‑Fi（后台最长 30 分钟）；划卡 / 根页返回立即取消（见第 30 页）。"], "small")}</div>
  </div>
 </div>"""
     page("选择态与悬浮下载", "悬浮胶囊 · 避让 · 拖选 · 批量下载", body)
 
     # ------------------------------------------------------------------ 16 no paging / cache
-    rows = [["缩略图（网格）", "可见窗口 + 前 2 屏 / 后 3 屏（顺滚动方向）", "位图 LRU ≈ 300 张", "并发 ≤ 2；快速滑动时取消未开始的请求；停稳 150 ms 后才预取"],
+    rows = [["缩略图（网格）", "视口驱动：可见行 ± 两行余量", "缓存上限 300 张", "串行，每批 12 张；滑走的未开始请求丢弃"],
             ["预览图（单张）", "当前 ± 1", "LRU 5 张", "切换时取消更远的请求；ARW 走内嵌 JPEG"],
             ["EXIF / GPS", "仅当前张，停留 ≥ 250 ms 才请求", "结果 LRU 200 条", "失败不自动重试；再次进入该张时重试 1 次"],
             ["直方图", "预览图解码后本地计算", "随预览图缓存", "零通信；256 级亮度，后台线程"],
@@ -45,7 +46,7 @@ def build():
            ["<code>WifiCatalogSnapshot.kt:99</code> <code>page(dateKey, offset)</code>；<code>WifiCameraCapture.kt:26-28</code>；<code>SonyContentCatalog.kt:151-153</code>", "按日期返回整日列表，去掉 offset"],
            ["<code>WifiPhotoBrowser.kt:423</code>、<code>WifiPhotoPager.kt:48</code>、<code>WifiPhotoPaging.kt:7</code>", "删除翻页条与页数计算"],
            ["<code>WifiPhotoViewer.kt:203-206</code> Pager、<code>:111-136</code> 预取、<code>:261-291</code> ‹ › 按钮", "Pager 页数 = 当日总数；删除跨页切换逻辑与 ‹ › 按钮"],
-           ["<code>WifiRangeSelection.kt</code>、<code>WifiPhotoTopBar.kt</code> 全选（本页）", "拖选与全选范围 = 本日"],
+           ["<code>WifiRangeSelection.kt</code>、<code>WifiPhotoTopBar.kt</code> 全选（本页）", "拖选范围 = 整日；删除“全选本页”"],
            ["字符串 <code>wifi_remote_browser_*</code> 分页相关、<code>viewer_previous_photo/next_photo</code>", "删除"]]
     body = f"""
 <div class="row">
@@ -58,16 +59,16 @@ def build():
  </div>
  <div class="col">
   <h2>取消日期内分页（Q6 已确认）</h2>
-  {ul(["一个日期 = 一条连续的 <code>LazyVerticalGrid</code>；右侧显示快速滚动条，拖动时浮出时间气泡（“14:32”）。",
+  {ul(["一个日期 = <b>一个连续网格</b>（<code>LazyVerticalGrid</code>）：没有上一页 / 下一页 / 跳页。快速滚动条与时间气泡 0.2.0 未做。",
        "滚动位置按日期记忆；从预览返回时定位到最后查看的照片。",
-       "单日照片很多（例：2000 张）时，内存里只有 ≈ 300 张缩略图位图 + 全部元数据（每条约 200 字节）。",
+       "单日照片很多（例：2000 张）时，内存里最多 300 张缩略图位图 + 全部元数据（每条约 200 字节）。",
        "通道优先级：<b>下载 &gt; 当前预览图 &gt; EXIF &gt; 可见缩略图 &gt; 预取</b>。用户发起的永远插队。"])}
   <h3>受影响的现有实现</h3>
   {tbl(["位置", "调整"], aff, "xd", ["52%", "48%"])}
-  <div class="box"><h3>回退</h3>若实机发现某机型在连续缩略图请求下不稳定：把并发降为 1、预取范围减半；界面不变。这两个值做成内部常量，不提供设置项。</div>
+  <div class="box"><h3>回退</h3>若实机发现某机型在连续缩略图请求下不稳定：把每批张数与余量行数调小；界面不变。这两个值是内部常量，不提供设置项。</div>
  </div>
 </div>"""
-    page("取消分页：缓存与惰性加载", "整日连续列表 · 可见窗口 ± 余量 · LRU", body)
+    page("取消分页：缓存与惰性加载", "整日一个网格 · 可见行 ± 两行 · 上限 300", body)
 
     # ------------------------------------------------------------------ 20 viewer: status row + info strip
     body = f"""
@@ -162,14 +163,14 @@ def build():
     # ------------------------------------------------------------------ 20 settings
     body = f"""
 <div class="row">
- {phone("settings", 0.74, "① 设置")}{phone("settings_sub", 0.74, "② 子页：预览信息条")}{phone("logs", 0.74, "③ 日志")}
+ {phone("settings", 0.74, "① 设置")}{phone("logs", 0.74, "② 日志")}
  <div class="col">
   <h2>设置页</h2>
   {ul(["四组玻璃卡，组内各行之间<b>不画分隔线</b>，靠行高分隔。",
        "<b>位置同步</b>总开关单独成卡，置顶：关闭后不连接任何相机、后台服务停止（现有 <code>isAppEnabled</code> 语义不变）。",
        "<b>连接与定位</b>：位置来源、提示音、电池优化——右侧灰字显示当前值，点击进入子页。",
-       "<b>照片</b>（第二轮新增）：<b>预览信息条</b> → 子页三个开关：拍摄参数、镜头信息、直方图，<b>默认全关</b>。只决定常驻信息条里是否出现；上滑详情始终包含全部。子页顶部有实时示例。",
-       "<b>通用</b>：语言、日志级别、更新日志。<b>崩溃上报一项已删除</b>（第三轮：Sentry 完全移除，同意对话框一并删除，见第 33 页）。",
+       "<b>照片传输</b>：<b>默认下载格式</b>（网格下载胶囊与预览页下载都按它执行，不再弹格式选择）+ 三个<b>预览页信息</b>开关：直方图、拍摄参数、镜头信息，<b>默认全关</b>；开启任意一项后进入预览会多读一次照片头部数据。",
+       "<b>通用</b>：语言（仅 English / 简体中文）、日志级别、更新日志。<b>崩溃上报一项已删除</b>（第三轮：Sentry 完全移除，同意对话框一并删除，见第 33 页）。",
        "底部一行版本号与包名（信息，不可点；连点 5 次仍可打开调试面板，保持现状）。"])}
   <div class="box b"><h3>相对现状的变化</h3>
   {ul(["<b>删除“Debug: Donation Dialog”调试卡</b>（<code>DebugDonationDialogCard.kt</code>，<code>SettingsScreen.kt:177</code>）。",
@@ -177,14 +178,14 @@ def build():
        "子页统一结构：顶部状态卡（图标 + 一句结论 + 说明）+ 操作行；外部跳转用 ↗ 图标。",
        "<b>不新增</b>“玻璃效果/透明度”开关；网格的视图偏好（缩略图大小与标签）只在网格的视图选项里改，不在设置页重复。"], "small")}</div>
   <div class="box"><h3>日志页</h3>
-  {ul(["入口：设备清单顶栏、排障指南底部。", "顶部筛选胶囊（全部 / 警告 / 错误）是操作控件——选中为主色填充；每行左侧的 I / W / E 是信息 tag。",
-       "顶栏右侧三个图标：<b>复制</b>（第二轮新增）、导出、清空（清空需确认）。等宽时间戳 + 级别 + 消息，错误行整行红字。",
-       "<b>复制</b> = 把<b>当前筛选下的全部日志</b>以纯文本放入剪贴板，底部提示“已复制 n 条日志”（Android 13+ 系统自带剪贴板提示时不重复弹）。超过 2000 行只复制最近 2000 行并在提示里说明。首版不做“复制选中行”。"], "small")}</div>
+  {ul(["入口：设备清单顶栏、排障指南底部。", "每行左侧的 I / W / E 是信息 tag。<b>筛选胶囊与导出 0.2.0 未做</b>（见第 35 页）。",
+       "顶栏右侧两个图标：<b>复制</b>、<b>清空</b>（清空需二次确认）。等宽时间戳 + 级别 + 消息，错误行整行红字。",
+       "<b>复制</b> = 把日志以纯文本放入剪贴板，底部提示“已复制 n 条日志”。超过 2000 条只复制<b>最新 2000 条</b>并在提示里说明。不做“复制选中行”。"], "small")}</div>
   <div class="small">现有实现：<code>SettingsScreen.kt:147-178</code>（Overview 顺序）、<code>AppControlsCard.kt</code>、<code>LogLevelSettingsCard.kt</code>、
   <code>SharedLanguageSettingsCard.kt</code>、<code>BatteryOptimizationCard.kt</code>、<code>SharedLogViewerScreen.kt</code>。</div>
  </div>
 </div>"""
-    page("设置与日志", "分组玻璃卡 · 预览信息条开关 · 日志复制", body)
+    page("设置与日志", "分组玻璃卡 · 照片传输分组 · 日志复制与清空", body)
 
     # ------------------------------------------------------------------ 21 help
     keep = [["设备清单顶栏“帮助”图标", "<code>DevicesScreen.kt:95-121</code>", '<span class="ok">保留（唯一入口）</span>'],
@@ -206,7 +207,7 @@ def build():
   <div class="box b"><h3>赞助提醒：全面移除自动触发，仅保留手动链接</h3>
   {ul(["删除：安装 30 天后的自动弹窗、“下次启动强制弹出”的调试路径、设置页调试卡。",
        "保留唯一一处手动链接：关于页“支持上游作者”，标明受益人是 Saschl。帮助页原有的链接（<code>HelpScreen.kt:274-287</code>）移到关于页。",
-       "<b>Tip jar 核实结论</b>：只有 iOS 代码引用（<code>IosTipJarController.kt</code>、<code>IosSettingsScreen.kt:58-64,101-120,226-229</code>、<code>IosAppDialogHost.kt:70,289</code>），<b>Android 没有任何界面入口</b>；<code>tip_jar*</code> 文案对 Android 是死文案，随 W2 的文案整理删除。",
+       "<b>Tip jar</b>：Android 从未有界面入口；原先只被 iOS 代码引用，iOS 目标已整体删除，<code>tip_jar*</code> 文案随文案整理一并删除。",
        "涉及文件与行号见第 32 页。"], "small")}</div>
   <h3>帮助 / 引导入口清单（现状 → v3）</h3>
   {tbl(["现有入口", "位置", "v3"], keep, "xd", ["28%", "40%", "32%"])}
@@ -223,7 +224,7 @@ def build():
            ["应用内功能图标（Material Icons / Material Symbols）", "Apache‑2.0", "抽查 <code>ic_gps_fixed.xml</code>、<code>welcome_ready_24px.xml</code> 与官方图标同形（父会话盘点）", '<span class="ok">在许可页补来源声明</span>'],
            ["Haze（待引入）", "Apache‑2.0（按已知信息）", "引入时以其仓库 LICENSE 为准", '<span class="warn">引入时核对</span>'],
            ["Timber、com.diamondedge:logging", "各自许可", "未逐一核对许可文本", '<span class="warn">开发时核对</span>'],
-           ["Sentry SDK、Play review", "—", "第三轮定案：Sentry 完全移除；不做应用市场分发", '<span class="todo">随 W2 移除</span>'],
+           ["Sentry SDK、应用内评价组件", "—", "Sentry 完全移除；不做任何应用市场分发，单一构建", '<span class="ok">已移除</span>'],
            ["应用图标", "GPL‑3.0，自绘", "<code>docs/brand/alpha-gps-icon.svg</code>（提交 1c6c7be）", '<span class="ok">已替换上游图标</span>'],
            ["上游素材与第三方徽标", "见第 27 页", "逐项清单与处置建议", '<span class="warn">待用户确认</span>']]
     body = f"""
@@ -236,12 +237,12 @@ def build():
        f"{n(4)}<b>源码与反馈</b>只写 GitHub 一处：github.com/mfreceiver/alpha-gps，问题反馈为其 Issues（/issues）。<b>应用与代码里不出现任何私有部署仓库的地址</b>。",
        f"{n(5)}<b>隐私说明</b> → 第 26 页。{n(6)}<b>支持上游作者</b>：Buy Me a Coffee，标明受益人是 Saschl；<b>全应用仅此一处</b>（Q28）。",
        f"{n(7)}每个地址行右侧两个图标：<b>复制</b>（提示“已复制”）与<b>外部打开</b>；行本身不可点，避免误触跳出应用。",
-       "页脚一行商标声明：“本应用与 Sony 无关联；Sony、α 等为其各自所有者的商标。”",
-       "开源组件许可页（②）补一行 <b>Material Icons / Material Symbols（Apache‑2.0）</b>；去掉 Sentry。"], "small")}
+       "页脚：商标免责（与 Sony 无关联，Sony、Alpha（α）为其所有者的商标）+ <b>图标素材来源说明</b>。",
+       "开源组件许可页（②）：逐组件一行（含 Material Icons / Symbols、Haze），点开看<b>随包的 Apache‑2.0 / GPL‑3.0 / LGPL‑3.0 全文</b>；未逐库附 NOTICE（见第 35 页）。无 Sentry。"], "small")}
   <h3>许可核查结论</h3>
   {tbl(["对象", "许可", "依据", "结论"], lic, "xd", ["27%", "17%", "34%", "22%"])}
   <div class="box b small"><b>GPL‑3.0 下的义务与现状</b>
-  {ul(["保留上游 LICENSE 与版权声明：已保留。", "标明已修改及日期：<b>待做</b>（关于页 + README，W1 / M9）。",
+  {ul(["保留上游 LICENSE 与版权声明：已保留。", "标明已修改及日期：<b>已做</b>（关于页 + README：mfreceiver 自 2026‑11 起修改）。",
        "分发时提供对应源码：GitHub 公开仓库满足；发布 tag 须与 APK 对应。", "不附加额外限制条款。"], "xs")}</div>
  </div>
 </div>"""
@@ -254,7 +255,7 @@ def build():
           ["蓝牙与附近设备", "用于发现、配对并连接你的相机；不扫描或记录其它设备。"],
           ["相机 Wi‑Fi 与本地网络", "只用于连接相机自身的热点浏览和下载照片；照片保存到本机相册，不上传。"],
           ["通知", "显示连接与位置同步状态。"],
-          ["日志", "只保存在本机；复制或导出由你自行决定是否分享。<b>定稿前核对</b>现有日志是否记录坐标：若记录，改为不记录或在此如实写明。"],
+          ["日志", "只保存在本机；复制后是否分享由你自行决定。<b>定稿前核对</b>现有日志是否记录坐标：若记录，改为不记录或在此如实写明。"],
           ["权限一览", "定位（含后台）、蓝牙 / 附近设备、附近 Wi‑Fi 设备 / 本地网络、通知——逐项写明用途与“拒绝后的影响”。"],
           ["数据保留与删除", "应用数据都在本机；移除相机或卸载应用即清除。已下载的照片属于你的相册。"],
           ["联系", "GitHub Issues：github.com/mfreceiver/alpha-gps/issues；<b>不留个人邮箱</b>（Q27）。"],
@@ -263,7 +264,7 @@ def build():
           ["删除", "遥控拍摄、Sentry、商店徽章与链接（Google Play / F‑Droid / App Store / Obtainium）、外链截图、赞助图片、website 引用。"],
           ["保留并改名", "构建、签名与发版说明（包名 <code>cn.vectory.alphagps</code>、仓库名 <code>alphagps</code> 保持小写）。"],
           ["致谢与来源", "fork 自 Saschl/alpha-gps，GPL‑3.0；修改者 mfreceiver，自 2026‑11。保留原致谢：anoulis/sony_camera_bluetooth_external_gps、mlapaglia/AlphaSync。"],
-          ["新增", "商标声明；隐私说明链接；系统要求 Android 12（API 31）及以上、仅 arm64。"],
+          ["新增", "商标声明；隐私说明链接；系统要求 Android 12（API 31）及以上、仅 arm64；仅 English / 简体中文；单一构建。"],
           ["赞助", "README 不放赞助链接；“支持上游作者”只在应用的关于页。"]]
     body = f"""
 <div class="row">
@@ -294,9 +295,9 @@ def build():
               [C_, "<code>.github/FUNDING.yml</code>", "指向上游赞助账号", "避免分叉仓库显示上游赞助按钮"],
               [B_, "根目录 <code>icon.svg</code>", "上游图标", "用 <code>docs/brand/alpha-gps-icon.svg</code> 取代"],
               [B_, "启动图标前景 / 背景", "<code>drawable/ic_launcher_foreground.xml</code>、<code>ic_launcher_background.xml</code>（上游 2025‑08）", "由新图标三层（前景 / 背景 / 单色）转换取代，见 W2"],
-              [B_, "iOS AppIcon <code>icon.png</code>", "与上游 fastlane 图标同源；iOS 已禁用", "用新图标重新导出替换（不做 iOS 功能）"],
+              [C_, "iOS AppIcon <code>icon.png</code>", "与上游 fastlane 图标同源", "iOS 目标已整体删除，随之删除"],
               [A_, "应用内功能图标", "<code>app/res/drawable</code> 13 个 + <code>sharednew composeResources/drawable</code> 22 个", "与 Material Icons / Symbols 同形，Apache‑2.0；在许可页补来源声明，不重绘"],
-              [A_, "iOS <code>AccessoryCamera/camera.svg</code>", "上游自绘的通用相机图形", "iOS 已禁用，随仓库 GPL‑3.0 保留"],
+              [C_, "iOS <code>AccessoryCamera/camera.svg</code>", "上游自绘的通用相机图形", "iOS 目标已整体删除，随之删除"],
               [A_, "<code>docs/design</code> 全部、<code>docs/brand</code> 全部", "项目自绘", "保留"],
               [A_, "heif 子模块内 <code>libde265.png</code>、<code>shopify.svg</code>", "子模块自带的文档素材", "不打进 APK，原样不动"]]
     body = f"""
@@ -312,7 +313,7 @@ def build():
        "<b>上游自绘素材</b>文件内没有独立许可声明，默认随仓库 GPL‑3.0，法律上可保留；为避免混淆来源，品牌类仍重绘。",
        "<b>通用功能图标</b>属 Apache‑2.0 的 Material 图标，按“来源声明”处理即可。"], "small")}</div>
   <div class="note"><b>请逐项确认</b>
-  {ul(["C 类六项是否全部删除（尤其 <code>fastlane/</code> 与 <code>website/</code> 整目录）。", "B 类三项按新图标替换；iOS 图标是否值得处理（iOS 已禁用）。",
+  {ul(["C 类六项是否全部删除（尤其 <code>fastlane/</code> 与 <code>website/</code> 整目录）。", "B 类按新图标替换（iOS 目标已删除，其图标不再处理）。",
        "A 类功能图标是否接受“只补来源声明、不重绘”。若要求全部自绘，另开一项，约 35 个图标。"], "small")}
   确认后归入 <b>W1 文档与素材线</b>（第 34 页）执行；确认前不动任何文件。</div>
   <div class="box small"><b>上游原文案</b>不在此表：README、<code>privacy.md</code>、strings 里的长文案按第 26 页重写，不是素材处置问题。</div>
@@ -321,7 +322,7 @@ def build():
     page("素材来源清单与处置", "A 保留 · B 重绘 · C 删除 · 待用户确认", body)
 
     # ------------------------------------------------------------------ 22 notifications
-    rows = [["待命（静默）", "等待相机", "相机不在附近，回到范围后自动连接", "低 · 无声", "灰色图标；“相机离开后保持待命”开且无连接时"],
+    rows = [["待命（静默）", "等待相机", "相机不在附近，回到范围后自动连接", "低 · 无声", "灰色图标；“保持活跃”开且无连接时"],
             ["同步中 · 单台（静默）", "Alpha 7 IV · 位置同步中", "已连接，正在向相机写入位置", "低 · 无声", "标题带相机名，一眼可辨"],
             ["同步中 · 多台（静默）", "2 台相机 · 位置同步中", "Alpha 7 IV、ZV-E10 II", "低 · 无声", "正文列出名称"],
             ["已断开（提醒）", "相机已断开", "Alpha 7 IV · 14:02 断开，位置写入已停止", "默认 · 有声（可在提示音设置里关）", "<b>用户主动断开时不发</b>；可滑走"]]
@@ -348,7 +349,7 @@ def build():
   <div class="box b"><h3>与后台常驻语义的关系</h3>
   {ul(["离开应用后蓝牙与位置写入继续，<b>常驻通知是用户知道“它还在工作”的唯一途径</b>，所以标题必须带相机名与“位置同步中”。",
        "同步中的常驻通知由“传输”渠道（高重要性、有声）改到<b>静默</b>渠道：它是状态而非事件；声音提示继续由提示音设置负责。此项改变渠道行为（Q25 已确认），列入差异清单。",
-       "从最近任务划掉应用后通知仍在；用户在设备页确认“断开蓝牙”后，该相机从通知中消失，全部断开且未开“保持待命”时通知撤销。"], "small")}</div>
+       "从最近任务划掉应用后通知仍在；用户在设备页确认“断开蓝牙”后，该相机从通知中消失，全部断开且未开“保持活跃”时通知撤销。"], "small")}</div>
   <div class="small">现状：<code>NotificationsHelper.kt:31-66</code> 三个渠道（待命 低 / 传输 高+声 / 断开 默认+声）；构建函数 <code>:76-168</code>，均无操作按钮、未设置强调色。</div>
  </div>
 </div>"""
@@ -376,12 +377,12 @@ def build():
     page("暗色对照", "同一套布局 · 层级改用亮度与描边表达", body)
 
     # ------------------------------------------------------------------ 24 semantics
-    sem = [["Home / 切到其它应用", "保持", "保持（现状：一直保持）", "保持", "下载中保持到完成；否则离开前台 30 s 后结束（Q17 已确认）", '<span class="tag r">Wi‑Fi 需改</span>'],
-           ["根页（设备清单）返回", "<b>断开</b>并停止服务", "结束", "<b>保持</b>；只结束界面，不从最近任务移除（Q19）", "立即结束", '<span class="tag r">需改</span>'],
-           ["从最近任务划掉", "<b>断开</b>并停止服务", "结束", "<b>保持</b>（前台服务续跑）", "结束", '<span class="tag r">需改</span>'],
-           ["Activity 被销毁（isFinishing）", "<b>断开</b>并停止服务", "结束", "<b>保持</b>", "结束", '<span class="tag r">需改</span>'],
+    sem = [["Home / 锁屏 / 切到其它应用", "保持", "保持（旧：一直保持）", "保持", "<b>无下载→立即结束</b>；有已接受的下载→保留到下载结束后自动结束（后台最长 30 分钟）", '<span class="tag g">0.2.0 已实现</span>'],
+           ["根页（设备清单）返回", "<b>断开</b>并停止服务", "结束", "<b>保持</b>（服务续跑）", "<b>立即结束</b>（下载中也取消）", '<span class="tag g">0.2.0 已实现</span>'],
+           ["从最近任务划掉", "<b>断开</b>并停止服务", "结束", "<b>保持</b>（前台服务续跑）", "<b>立即结束</b>（下载中也取消）", '<span class="tag g">0.2.0 已实现</span>'],
+           ["Activity 被销毁（isFinishing）", "<b>断开</b>并停止服务", "结束", "<b>保持</b>", "结束", '<span class="tag g">0.2.0 已实现</span>'],
            ["设备页返回 → 设备清单", "保持", "—", "保持", "—", '<span class="tag z">无改动</span>'],
-           ["日期列表返回 → 设备页", "保持", "结束", "保持", "结束（叠层“正在断开…”）", '<span class="tag z">行为不变，界面改为叠层</span>'],
+           ["日期列表返回 → 设备页", "保持", "结束", "保持", "结束（保蓝牙）", '<span class="tag z">行为不变</span>'],
            ["设备页“断开蓝牙”并确认", "断开（原为页面上的按钮）", "结束", "断开，记为用户主动断开", "结束", '<span class="tag b">入口改为小图标 + 确认</span>'],
            ["Ⓘ “移除相机”并确认", "断开并解除配对", "结束", "同左", "同左", '<span class="tag z">无改动</span>'],
            ["设置“位置同步”总开关关闭", "全部断开、服务停止", "结束", "同左", "同左", '<span class="tag z">无改动</span>'],
@@ -394,42 +395,42 @@ def build():
 {wide("nav", E.nav_diagram(), 1.0)}
 <div class="row" style="margin-top:8px">
  <div class="col" style="flex:1.75">
-  <h2>后台常驻语义：逐项对照（现状经代码核实）</h2>
+  <h2>后台与退出语义：逐项对照（“现状”列 = v0.1.5 旧实现）</h2>
   {tbl(["用户动作", "现状 · 蓝牙+GPS", "现状 · Wi‑Fi", "v3 · 蓝牙+GPS", "v3 · Wi‑Fi", "改动"], sem, "xd", ["19%", "14%", "8%", "18%", "19%", "22%"])}
  </div>
  <div class="col">
-  <div class="box b"><h3>一句话定义</h3><b>离开应用界面（Home、切后台、根页返回、从最近任务划掉）都不断开蓝牙，后台服务继续写入位置；只有 Wi‑Fi 会话随界面离开而结束。
-  蓝牙只在用户于设备页点“断开蓝牙”并确认后才断开。</b></div>
+  <div class="box b"><h3>一句话定义</h3><b>蓝牙 + GPS 常驻：Home、锁屏、切应用、划卡、根页返回都不断开；只有用户在设备页主动“断开”并确认才断蓝牙。
+  Wi‑Fi 照片传输只在应用可见时保留：退后台无下载即结束，有已接受的下载（单张 / 批量）保留到下载结束（后台最长 30 分钟）；划卡与根页返回立即结束，即使下载中。</b>
+  <div class="xs">缩略图、预览、结果汇总不算下载；回前台只取消“待结束”，不会自动重开已结束的会话。</div></div>
   <h3>蓝牙自动连接（Q5）</h3>
   {tbl(["情形", "行为"], auto, "xd", ["46%", "54%"])}
-  <div class="small"><b>核实结论：</b>Home/后台本来就保持蓝牙（<code>LocationSenderService.kt:164-169</code> 注释）。会触发“退出即断开”的只有三个入口，
-  全部汇到 <code>AppServices.disconnectAllOnExit</code>（<code>AppServices.kt:89-91</code>）——真实改动面就是这三处，见第 32 页。</div>
+  <div class="small"><b>0.2.0 已按此实现</b>（用户最终决定，取代此前“离开前台延时结束”的方案）；生命周期与真机限制见 <code>docs/wifi-architecture.md</code>。</div>
  </div>
 </div>"""
     page("导航与断开语义", "蓝牙 / Wi‑Fi / 离开应用 · 后台常驻语义", body)
 
     # ------------------------------------------------------------------ 25 data sources
-    rows = [["相机时间（校时）", "设备页相机卡", "蓝牙：校时写入的应答（仅 applied=1 视为已校正）", "每次蓝牙连接后 1 次", "未校正=琥珀；未知=“—”", T],
-            ["信号强度", "设备页相机卡", "蓝牙 RSSI", "连接后首读 + 每 5 s（仅设备页可见时）", "“—”", T],
-            ["电量", "设备页相机卡", "Wi‑Fi 会话就绪后读 1 次，缓存", "每次照片传输会话", "≤30 分钟只显示数值；30 分钟–24 小时变灰并加一行缓存时间；更久“—”", T + " " + V],
-            ["GPS 定位状态、手机经纬度与误差", "设备页位置卡状态行", "手机定位服务（已有的位置来源）", "每次定位更新", "“正在定位…” / “定位不可用”", T],
+    rows = [["相机时间（校时）", "设备页连接卡状态行的副行", "蓝牙：校时写入的应答（仅 applied=1 视为已校正）", "每次蓝牙连接后 1 次", "未校正=琥珀；未知=“—”", T],
+            ["信号强度", "设备页位置卡三格", "蓝牙 RSSI", "连接后首读 + 每 5 s（仅设备页可见时）", "“—”", T],
+            ["电量", "设备页连接卡（信息 tag）", "Wi‑Fi 会话就绪后读 1 次，缓存", "每次照片传输会话", "≤30 分钟只显示数值；30 分钟–24 小时变灰并加一行缓存时间；更久“—”", T + " " + V],
+            ["GPS 定位状态、手机经纬度与误差", "<b>0.2.0 不显示</b>（见第 35 页）", "手机定位服务（已有的位置来源）", "—", "—", '<span class="tag z">未显示</span>'],
             ["最近写入时间", "设备页位置卡三格", "蓝牙写入结果", "每次写入（界面每秒刷新相对时间）", "未连接时显示上次写入时间", T],
-            ["已写入 / 失败次数", "设备页位置卡三格", "本机计数（会话内）", "每次写入", "未连接时保留上次计数、变灰", T],
-            ["型号、蓝牙地址", "Ⓘ", "配对记录", "打开 Ⓘ 时", "—", G],
-            ["固件、序列号", "仅 Ⓘ（显示上次读取值）", "Wi‑Fi：设备信息，读到后缓存", "每次会话就绪", "未读过=“连接照片传输后可见”", T],
-            ["卡容量 / 剩余（按卡分行）", "<b>仅</b>日期列表顶部", "Wi‑Fi：每张卡各一份存储信息", "每次会话就绪 + 刷新", "读不到=不显示；只有一张卡时只显示一行", T],
+            ["已写入次数（失败次数不显示）", "设备页位置卡三格", "本机计数（会话内）", "每次写入", "未连接时保留上次计数、变灰", T],
+            ["蓝牙地址（型号不显示）", "Ⓘ", "配对记录", "打开 Ⓘ 时", "—", G],
+            ["固件、序列号", "<b>0.2.0 不显示</b>（Ⓘ 与日期页均无）", "Wi‑Fi：设备信息", "—", "—", '<span class="tag z">未显示</span>'],
+            ["卡容量 / 剩余", "<b>0.2.0 不显示</b>（日期页无容量）", "Wi‑Fi：每张卡各一份存储信息", "—", "—", '<span class="tag z">未显示</span>'],
             ["照片所在存储卡（待实机验证后落地）", "网格、预览状态行的“卡 2”小标", "目录句柄卡槽号 / 旧路径存储 ID", "随目录", "读不到或只有一张卡有内容=不显示", T + " " + V],
             ["蓝牙配对状态", "Ⓘ", "系统配对记录", "打开 Ⓘ 时", "—", G],
             ["照片目录（名称/大小/格式/时间）", "日期列表、网格、预览", "Wi‑Fi：整卡目录", "连接时 + 手动刷新", "读取中断页", G],
             ["保护、评分", "网格 tag、预览状态行", "目录字段 / 旧路径对象属性", "随目录", "读不到=不显示，开关置灰", T + " " + V],
-            ["缩略图", "网格、胶片条、日期封面", "Wi‑Fi：缩略图请求", "可见窗口惰性", "占位色块", G + "（需解除页限定）"],
+            ["缩略图", "网格、胶片条（日期封面未做）", "Wi‑Fi：缩略图请求", "可见行 ± 两行，串行 12 张/批", "占位色块", G],
             ["预览图", "预览页", "Wi‑Fi：预览请求 / ARW 内嵌 JPEG", "当前 ± 1", "缩略图放大 + “预览不可用”", G],
             ["拍摄参数、定位、像素尺寸", "预览状态行 / 信息条 / 详情", "Wi‑Fi：文件前 64 KB 的 EXIF", "仅当前张，停留 250 ms 后", "“—” / “不可用”，区分“未含位置”", T + " " + V],
             ["直方图", "预览页", "本地由预览图计算", "预览图就绪后", "不显示", T + " " + Z],
             ["文件大小（按下载策略）", "预览信息条（唯一一处）", "目录元数据 + 下载格式偏好", "随目录", "—", G],
             ["已保存状态", "预览页", "本机下载记录", "下载完成时", "—", G],
             ["视图偏好（档位、三个标签开关）", "网格", "本机偏好存储", "修改即存，全局生效", "默认：小、全关", T],
-            ["预览信息条的三个可选项", "设置 → 预览信息条", "本机偏好存储", "修改即存", "默认全关", T]]
+            ["预览页信息的三个开关 + 默认下载格式", "设置 → 照片传输", "本机偏好存储", "修改即存", "默认全关", T]]
     body = f"""
 <div class="row">
  <div class="col">
@@ -447,29 +448,29 @@ def build():
     d1 = [["<b>离开应用不再断开蓝牙</b><br>（根页返回 / 划卡 / Activity 销毁）",
            "<code>MainActivity.kt:73-86</code> onDestroy(isFinishing) → disconnectAllOnExit + stopService<br><code>MainActivity.kt:124-138</code> 根页返回 finishAndRemoveTask()<br>"
            "<code>LocationSenderService.kt:170-181</code> onTaskRemoved → disconnectAllOnExit + stopSelf<br><code>AppServices.kt:76-80,89-91</code>；<code>AppExitCoordinator.kt:21-33</code>；<code>AppExitGate.kt:121-137</code>",
-           "三个入口都改为<b>只结束 Wi‑Fi</b>（保留 <code>wifiRemote.closeAndJoin()</code>），去掉“停会话 / 断蓝牙 / 停服务”。根页返回改为只结束界面、不从最近任务移除（Q19 已确认）。"
-           "AppExitGate 的属主/代际逻辑只为退出拆除而存在，可大幅简化；todo P3#8 的残余风险随之基本消失。"],
+           "三个入口都改为<b>只结束 Wi‑Fi</b>（下载中也立即取消），去掉“停会话 / 断蓝牙 / 停服务”；不加任何蓝牙或前台服务关闭回调。"
+           "<code>AppExitGate</code> 的属主 / 代际与退休快照反例保留。"],
           ["重新打开应用时的自动重连", "<code>MainActivity.kt:164-189</code>（注释：退出会断开，所以打开要重连）", "保留作为兜底，但只针对“已启用且非用户主动断开”的相机；注释与测试同步更新。"],
           ["<b>保持不变</b>的路径", "Home/后台（<code>LocationSenderService.kt:164-169</code>）；断开单台 <code>ServiceCommandRouter</code> / <code>DeviceDisconnectCoordinator</code>；移除 <code>DeviceRemovalCoordinator</code>；"
            "开机重连 <code>ServiceShutdownCoordinator.kt:28-48</code>；服务真正销毁 <code>LocationSenderService.kt:184-201</code>；总开关 <code>isAppEnabled</code>", "不改。"],
-          ["Home 时的 Wi‑Fi", "<code>AndroidWifiRemoteScreen.kt:87-96</code>（现状：后台保持 Wi‑Fi，离开该页才结束）", "增加“离开前台 30 s 后结束”；下载中保持到完成；根页返回与划卡立即结束（Q17 已确认）。"],
-          ["“保持活跃”语义", "<code>ServicePresenceCoordinator.kt:47-67</code>；<code>ConnectionDemandGate.kt:20-24</code>；<code>LocationSenderService.kt:77-109</code>", "逻辑不变；改名“相机离开后保持待命”、默认开（Q18 已确认）；删除说明文字 <code>device_info_keep_active_hint</code>。"]]
+          ["退后台时的 Wi‑Fi", "<code>AndroidWifiRemoteScreen.kt:87-96</code>（旧：后台保持 Wi‑Fi，离开该页才结束）", "退后台<b>无下载→立即结束</b>；有已接受的下载→保留到下载结束后自动结束（后台最长 30 分钟）；根页返回与划卡立即结束（Q17 最终决定）。"],
+          ["“保持活跃”语义", "<code>ServicePresenceCoordinator.kt:47-67</code>；<code>ConnectionDemandGate.kt:20-24</code>；<code>LocationSenderService.kt:77-109</code>", "逻辑不变。0.2.0 沿用名称“保持活跃”、默认关（未按 Q18 改名，见第 35 页）。"]]
     d2 = [["<b>移除自动赞助提醒</b>", "Android：<code>CameraDeviceManager.kt:45-48,82-83,143,178-214,252,424-449</code>；<code>MainActivity.kt:200-204,275-278</code>；"
            "<code>PreferencesManager.kt:23-26,148-195</code>；<code>DebugDonationDialogCard.kt</code>（整文件）；<code>SettingsScreen.kt:177</code><br>"
            "字符串 <code>donation_dialog_*</code>（en + zh-rCN）", "全部删除。<code>HelpScreen.kt:274-287</code> 的手动链接移到关于页“支持上游作者”，全应用仅此一处。"],
           ["<b>帮助入口收敛</b>", "见第 24 页清单（<code>DeviceInfoDialogs.kt:91,153-154</code>、<code>WifiConnectionHelp.kt</code>、<code>DeviceListLayout.kt:26,45</code>、<code>SharedDeviceList.kt:382-394</code> 等）", "只留设备清单顶栏入口。"],
-          ["<b>取消日期内分页</b>", "见第 19 页清单（<code>SonyImageTransfer.kt:456</code> 等）", "整日列表 + 惰性加载 + LRU。"],
+          ["<b>取消日期内分页</b>", "见第 19 页清单（<code>SonyImageTransfer.kt:456</code> 等）", "整日一个网格 + 视口驱动加载 + 缓存上限 300。"],
           ["<b>主题蓝色化 + 玻璃</b>", "<code>Theme.kt:36,43-46</code>；<code>Color.kt</code>；<code>DeviceDetailScreen.kt:245-246</code>；<code>TransmissionDot.kt:36,62</code>", "固定蓝色色板；新增 <code>Glass.kt</code> 与 <code>GlassSurface</code>；引入 Haze（<code>gradle/libs.versions.toml</code> 新依赖）；minSdk 31，无降级分支；不启用动态色。"],
-          ["设备页重排与断开入口", "<code>ui/device/DeviceDetailScreen.kt</code>（shared 306 行）；<code>DeviceDetailViewModel.disconnect</code>", "两卡同构 + 底部主入口；相机卡与位置卡各一行状态 + 三格“图标/数值/项目名”；连接/断开的描边大按钮 → 卡内“连接”与淡化小图标 + 确认框；增加“连接中可取消”。"],
-          ["Ⓘ 精简", "<code>DeviceInfoDialogs.kt</code>（222 行）", "✕ 关闭、✎ 重命名、去掉帮助与 OK、<b>去掉 MTU</b>、<b>不放卡容量</b>、固件与序列号显示上次读取值、底部红色描边“移除相机”。"],
+          ["设备页重排与断开入口", "<code>ui/device/DeviceDetailScreen.kt</code>（shared 306 行）；<code>DeviceDetailViewModel.disconnect</code>", "连接卡（状态行 + 右侧固定槽位：断开小图标 + 确认 / 取消 / 连接）+ 位置卡（一行三格）+ 底部主入口“照片传输”。"],
+          ["Ⓘ 精简", "<code>DeviceInfoDialogs.kt</code>（222 行）", "✕ 关闭、✎ 重命名、去掉帮助与 OK、<b>去掉 MTU</b>、<b>不放卡容量、固件、序列号</b>、底部红色描边“移除相机”。"],
           ["设备清单", "<code>SharedDeviceList.kt:251-310</code> 左滑删除；<code>:314-416</code> DeviceCard", "去掉左滑删除；玻璃行；“添加相机”悬浮主按钮。"],
           ["连接过程改叠层", "<code>WifiRemoteScreen.kt</code>（757 行，按 WifiRemotePhase 整页切换）", "设备页之上的固定槽位叠层；蓝牙未连时前置蓝牙阶段。"],
-          ["照片浏览顶栏", "<code>WifiPhotoTopBar.kt</code>（刷新 + 断开；选择态 全选本页 + 下载）", "去掉“断开”图标（返回即结束）；下载移到悬浮胶囊；全选=本日。"],
+          ["照片浏览顶栏", "<code>WifiPhotoTopBar.kt</code>（刷新 + 断开；选择态 全选本页 + 下载）", "去掉“断开”图标（返回即结束）；下载移到悬浮胶囊；删除“全选本页”。"],
           ["视图选项与标签", "<code>WifiPhotoBrowser.kt</code>（632 行）", "入口图标换为 <code>grid_view</code>；小/中/大、三个开关、合并标签、全局持久化。"],
           ["预览页", "<code>WifiPhotoViewer.kt</code>（314 行）", "顶栏去掉大小；状态行（定位 · 锁星）+ 信息条（格式 · 分辨率 · 大小）+ 胶片条 + 下载、上滑详情、三档窗口适配、EXIF/GPS；删 ‹ › 按钮。"],
           ["<b>对话框按钮</b>", "各处 <code>AlertDialog</code>（<code>DeviceInfoDialogs.kt</code>、<code>SharedDeviceList.kt:88-111,251-310</code>、<code>CameraDeviceManager.kt:381-422</code> 等）", "统一为自绘 G3 面板 + 底部并排胶囊（一个共用组件）。"],
           ["<b>多存储卡</b>", "<code>SonyContentCatalog.kt:230-241</code>（只取卡槽 1）；<code>SonyImageTransfer.kt:169-172</code>（合并但不记归属）", "读取两个卡槽并记录归属；容量按卡；见第 17 页。<b>待实机核实后</b>才开工。"],
-          ["设置、日志、关于", "<code>SettingsScreen.kt:147-178</code>；<code>SharedLogViewerScreen.kt</code>；<code>HelpScreen.kt</code>", "新增“预览信息条”子页；删“崩溃报告”项；日志加复制；新增关于页、许可页、隐私说明页。"],
+          ["设置、日志、关于", "<code>SettingsScreen.kt:147-178</code>；<code>SharedLogViewerScreen.kt</code>；<code>HelpScreen.kt</code>", "新增“照片传输”分组（默认下载格式 + 三个预览信息开关）；删“崩溃报告”项；日志加复制；新增关于页、许可页、隐私说明页。"],
           ["通知", "<code>NotificationsHelper.kt:31-168</code>", "强调色、文案带相机名、同步中改静默渠道、按状态换小图标。"]]
     body = f"""
 <div class="row">
@@ -477,7 +478,7 @@ def build():
   <h2>A. 后台常驻语义（行为变更，改动面已核实）</h2>
   {tbl(["差异", "现有实现（文件:行）", "需要的调整"], d1, "xd", ["18%", "45%", "37%"])}
   <div class="note"><b>关于“推翻 v0.1.3 的退出断开”：</b>准确地说只改三条路径——根页返回、从最近任务划掉、Activity 结束时的销毁。Home/切后台一直就保持蓝牙与位置写入，本版只是把这一状态确立为规范并推广到另外三条路径。
-  同时需更新 <code>docs/todo.md</code> P1#9 中“退出应用仍断开”的冒烟预期，以及相关单元测试（AppExitGate / AppExitCoordinator）。</div>
+  <b>本页是开工前（v0.1.5）的差异清单，保留以便追溯；0.2.0 的落地结果与偏差见第 35 页。</b></div>
   <div class="box"><h3>字符串</h3>
   新增（en + zh-rCN）：断开蓝牙确认两句、关于页与许可页、预览信息条设置、日志复制提示、“卡 2”小标、照片传输入口与说明、叠层各阶段、“轻触任意处返回”、视图选项与三个开关、下载胶囊文案、预览页各信息标签与状态、通知文案。
   删除：<code>donation_dialog_*</code>、<code>sentry_settings</code> / <code>enable_sentry*</code> / <code>sentry_consent_*</code>、<code>tip_jar*</code>、遥控拍摄引导文案、分页相关 <code>wifi_remote_browser_*</code>、<code>viewer_previous_photo/next_photo</code>、<code>device_info_keep_active_hint</code>、<code>wifi_connection_help_*</code>、<code>wifi_remote_close</code>。</div>
@@ -486,7 +487,7 @@ def build():
   <h2>B. 界面与功能</h2>
   {tbl(["差异", "现有实现（文件:行）", "需要的调整"], d2, "xd", ["17%", "50%", "33%"])}
   <div class="small">路径前缀：共享界面在 <code>sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/</code>，Android 壳在 <code>app/src/main/java/com/saschl/cameragps/</code>。
-  iOS 目标已禁用且不在设计范围。行号基于 HEAD 587f510；第 33 页的清理清单行号来自父会话的盘点，开工前复核。</div>
+  iOS 目标已整体删除（仅 Android）。行号基于 v0.1.5（HEAD 587f510）；第 33 页的清理清单行号来自父会话的盘点，开工前复核。</div>
  </div>
 </div>"""
     page("与现有实现的差异", "需开发调整的清单（文件:行）", body)
@@ -504,14 +505,14 @@ def build():
               "前台服务类型声明、通知渠道、MediaStore 写入。"]
     sentry = [["依赖与插件", "<code>gradle/libs.versions.toml</code> 的 sentry 条目；<code>app/build.gradle.kts:97-107,161-166,209-224</code>"],
               ["初始化与清单", "<code>CameraGpsApplication.kt:34-43</code>；<code>AndroidManifest.xml:111-134</code>（DSN / meta-data）"],
-              ["构建变体", "gplay / foss 两个变体里的 <code>CrashReporting</code>"],
+              ["构建变体", "两个构建变体里的 <code>CrashReporting</code>；变体本身一并取消，<b>只保留单一构建</b>（等价于原无商店组件的那个）"],
               ["界面", "设置页“崩溃报告”行与子页（<code>SentrySettingsCard.kt</code>、<code>SharedSentrySettings.kt</code>）；启动时的同意对话框（<code>SentryConsentDialog.kt</code>，<code>MainActivity.kt:191-199,295-301</code>）"],
               ["文案", "<code>sentry_settings</code>、<code>enable_sentry*</code>、<code>sentry_consent_*</code>（英文与简体中文）；README、privacy、FAQ 里的相关说明"],
-              ["iOS 源码", "其中的 Sentry 引用一并删除（iOS 不构建，仅保持源码一致）"]]
+              ["iOS 源码", "iOS 目标已整体删除，其中的 Sentry 引用随之消失"]]
     icon = [["启动图标", "<code>app/src/main/res/mipmap-anydpi/ic_launcher.xml</code> 指向新的前景 / 背景，并<b>新增单色层</b>（Android 13 主题图标）"],
             ["矢量资源", "由 <code>docs/brand/alpha-gps-icon-foreground / -background / -monochrome.svg</code> 转成 VectorDrawable，替换 <code>ic_launcher_foreground.xml</code>、<code>ic_launcher_background.xml</code>"],
             ["应用内", "欢迎页、关于页顶部使用同一图标"],
-            ["不做", "iOS 图标接入（iOS 已禁用）；仅按第 27 页 B 类替换源文件"]]
+            ["不做", "iOS 图标（iOS 目标已整体删除）"]]
     body = f"""
 <div class="row">
  <div class="col" style="flex:1.15">
@@ -538,14 +539,14 @@ def build():
     page("清理与接入清单", "minSdk 31 清理 · 移除 Sentry · 接入图标 · 文档与素材", body)
 
     # ------------------------------------------------------------------ final: question status + split
-    qs = [["Q17", "Home / 切后台时 Wi‑Fi 何时结束", "下载中保持到完成；否则离开前台 30 s 后结束；根页返回与划卡立即结束"],
-          ["Q18", "“保持活跃”改名与默认值", "改名“相机离开后保持待命”；默认开；无说明文字"],
-          ["Q19", "根页返回的实现", "只结束界面，不从最近任务移除；服务与蓝牙常驻"],
+    qs = [["Q17", "Home / 切后台时 Wi‑Fi 何时结束", "<b>最终决定</b>：无下载→立即结束；有已接受的下载→保留到下载结束（后台最长 30 分钟）；根页返回与划卡立即结束（下载中也结束）"],
+          ["Q18", "“保持活跃”改名与默认值", "原定改名“相机离开后保持待命”、默认开；<b>0.2.0 未改</b>（仍为“保持活跃”，默认关），见第 35 页"],
+          ["Q19", "根页返回的实现", "服务与蓝牙 + GPS 常驻；Wi‑Fi 立即结束"],
           ["Q20", "背景模糊的实现与平台", "<b>引入 Haze</b>；只做 Android；<b>minSdk 31，无降级</b>（第三轮）"],
           ["Q21", "EXIF/GPS 读取时机", "进入预览页或横向切换后自动读（250 ms 防抖 + 缓存）；缩略图列表不读"],
           ["Q22", "配对流程内的引导", "准备页保留；失败对话框去掉“打开指南”"],
-          ["Q23", "日期列表封面缩略图", "显示，惰性加载"],
-          ["Q24", "失败叠层自动消退", "5 秒；设备页保留一条原因"],
+          ["Q23", "日期列表封面缩略图", "显示，惰性加载——<b>0.2.0 未做</b>，已记入待办"],
+          ["Q24", "失败叠层自动消退", "5 秒或轻触即回设备页"],
           ["Q25", "同步常驻通知改静默渠道", "接受"],
           ["Q26", "上游图标与素材", "<b>优先自生成</b>：图标已重绘（<code>docs/brand</code>）；其余按第 27 页清单处置"],
           ["Q27", "隐私说明的联系方式", "GitHub Issues（github.com/mfreceiver/alpha-gps/issues），不留个人邮箱"],
@@ -560,12 +561,12 @@ def build():
           ["W2‑c", "接入新图标 + 显示名 AlphaGPS", "启动图标三层、欢迎页与关于页", "—"],
           ["W2‑d", "文案整理", "删 <code>sentry_*</code>、<code>tip_jar*</code>、遥控拍摄引导等；英中同步", "W2‑b"],
           ["M0", "主题与玻璃基础", "蓝色色板、背景光、<code>GlassSurface</code> + Haze、对比度测试、对话框胶囊按钮组件；清理旧主题代码", "W2‑a；先锁定 Haze 版本"],
-          ["M1", "后台常驻语义 + 移除赞助 + 帮助入口收敛", "三个退出入口只结束 Wi‑Fi；Home 时 30 s 结束；删赞助自动弹窗；更新测试与冒烟预期", "—"],
-          ["M2", "设备清单、配对、设备页、Ⓘ", "两张同构卡（状态行 + 三格）；断开蓝牙小图标 + 确认；连接中可取消；Ⓘ 精简", "M0"],
+          ["M1", "后台常驻语义 + 移除赞助 + 帮助入口收敛", "三个退出入口只结束 Wi‑Fi；退后台无下载即结束、有下载保留到结束；删赞助自动弹窗；更新测试与冒烟预期", "—"],
+          ["M2", "设备清单、配对、设备页、Ⓘ", "连接卡（状态行 + 固定槽位）+ 位置卡（三格）；断开小图标 + 确认；连接中可取消；Ⓘ 精简", "M0"],
           ["M3", "状态数据层", "校时、RSSI、GPS 统计、定位状态与误差、电量缓存、固件 / 序列号缓存、卡容量", "部分待实机核实"],
           ["M4", "连接叠层", "固定槽位卡、分段环、蓝牙前置阶段、失败 / 断开态、自动消退", "M2"],
           ["M5", "取消分页 + 网格", "整日列表、惰性加载与 LRU、小 / 中 / 大、视图选项浮层、合并标签、偏好持久化", "M0"],
-          ["M6", "选择态与悬浮下载", "下载胶囊、拖选贯穿整日、全选 = 本日、批量进度", "M5"],
+          ["M6", "选择态与悬浮下载", "下载胶囊（按默认格式直接下载）、拖选整日、批量进度与汇总；无全选", "M5"],
           ["M7", "预览页（零通信部分）", "状态行、信息条、胶片条、详情面板、三档窗口适配、三个可选项、下载中 / 已保存", "M5"],
           ["M8", "EXIF / GPS 读取", "① 真机样张核实偏移 ② 解析器 ③ 接入预览页与缓存", "M7 · 待实机核实"],
           ["M9", "设置、帮助、关于、隐私、日志、通知 + 走查", "重绘；日志复制；三个新页面；通知强调色与文案；Android 12 / 14 / 最新版真机冒烟", "M0 · W1‑d"],
@@ -598,7 +599,45 @@ def build():
   <div class="xs"><b>顺序</b>：W2‑a / W2‑b / W2‑c 与 M1 互不依赖，可先行并单独发版；M0 在 W2‑a 之后。M2–M4 设备侧、M5–M8 照片侧可并行；M9 收尾；M5b 等实机核实；M10 随时可做。</div>
  </div>
 </div>"""
-    page("问题状态与开发拆分", "Q17–Q28 已确认 · Q29 待确认 · W1 文档素材线 · W2 代码线", body)
+    page("问题状态与开发拆分", "Q17–Q28 已确认 · Q29 待确认 · W1 文档素材线 · W2 代码线 · 落地结果见第 35 页", body)
+
+    # ------------------------------------------------------------------ 35 deviations in 0.2.0
+    OKT = '<span class="tag g">已改正文</span>'; DEV = '<span class="tag y">偏差</span>'; LATER = '<span class="tag b">待办 / 后续</span>'
+    dv1 = [["后台与退出", "<b>蓝牙 + GPS 常驻</b>：Home / 锁屏 / 切应用 / 划卡 / 根页返回都不断；仅设备页主动“断开”才断蓝牙。<b>Wi‑Fi</b>：退后台无下载→立即结束；有已接受的下载（单张 / 批量）→保留到下载结束后自动结束（后台最长 30 分钟）；划卡与根页返回→立即结束（即使下载中）。取代此前“离开前台延时结束”“根页返回只结束界面”的写法。", "30 · 32 · 34", OKT],
+           ["设备页", "标题 = 设备名；连接卡（状态行 + 副行时间校正文案 + 右侧固定槽位：断开小图标 / 取消 / 连接）；<b>一张</b>位置卡三格（信号 / 已写入 / 最近写入）；Hero“照片传输”。未连蓝牙点击先连蓝牙（30 秒超时）；失败红图标无底色。<b>无</b>型号、上次连接时间、坐标 / 已定位行、失败次数、警告横幅。主动断开后不自动重连。", "10", OKT + " 重绘"],
+           ["Ⓘ", "✕、✎、蓝牙绿 ✓、MAC、保持活跃开关、移除相机；另有位置写入、自动校时 / 区域调整的只读状态行。<b>无 MTU / 型号 / 固件 / 序列号 / 帮助</b>。", "11", OKT + " 重绘"],
+           ["“保持活跃”", "未按 Q18 改名“相机离开后保持待命”，沿用原名；默认关；保留一句说明。", "11 · 28 · 34", DEV],
+           ["连接叠层", "卡片固定 310×320、三固定槽位；失败红图标无底色，无“帮助 / 重试”，5 秒或轻触回设备页；网络权限被拒显示“去授权”且不自动关闭；日期列表返回 = 结束 Wi‑Fi、保蓝牙。设备页不保留失败提示条。", "12 · 13", OKT],
+           ["日期列表", "行内为日期 · 星期 · 今天 / 昨天 · 张数，未知日期置末；<b>不显示固件 / 序列号 / 容量</b>。<b>封面缩略图未做</b>（已记待办）。", "14 · 17 · 31", OKT + " 重绘 " + LATER],
+           ["日期网格", "<b>取消日期内分页</b>：整日一个网格，无上一页 / 下一页 / 跳页。缩略图视口驱动：可见行 ± 两行余量，串行 12 张 / 批，缓存上限 300。视图选项持久化：小 / 中 / 大 = 4 / 3 / 2 列（默认小）；格式、大小、保护三个 tag 开关默认关。快速滚动条与时间气泡未做。", "15 · 16 · 19", OKT]]
+    dv2 = [["选择与下载", "删除“全选本页”与 Original 格式底部弹窗；悬浮按钮“下载 N 张 · x MB”<b>直接按设置的默认格式下载</b>；“仅 JPG”时无 JPG 的拍摄组跳过并计入汇总（“已下载 N、跳过 M”）；拖选范围 = 整日；<b>下载完成后不自动退出选择</b>。", "18", OKT],
+           ["帮助 / 赞助", "帮助唯一入口在设备清单；赞助链接<b>仅在关于页</b>，标明受益人为上游作者 Saschl。", "8 · 24", OKT],
+           ["关于页", "fork 自 Saschl/alpha-gps、GPL‑3.0、修改声明（mfreceiver 自 2026‑11 起）、源码与 Issues 仅 GitHub、商标免责、图标素材来源说明。", "25", OKT],
+           ["设置页", "“照片传输”分组 = 默认下载格式 + 三个预览信息开关（直方图 / 拍摄参数 / 镜头，默认关），直接在分组内，无“预览信息条”子页。顶栏、开关等细节以实现为准。", "23", OKT + " 重绘"],
+           ["日志页", "只有“复制（最新 2000 条）”与“清空（二次确认）”；<b>筛选胶囊、导出未做</b>。", "23", OKT + " 重绘 " + LATER],
+           ["许可页", "统一随包 Apache‑2.0 / GPL‑3.0 / LGPL‑3.0 全文；<b>未逐库附 NOTICE</b>。", "25", DEV],
+           ["预览页", "<b>设计保持不变</b>（第 20–22 页）。预览页以 M7 实现为准，完成后再对齐本文档。", "20–22", LATER],
+           ["平台与构建", "<b>仅 Android</b>（iOS 目标已删除）；<b>单一构建</b>（等价于原先不含商店组件的那个，无应用市场分发）；<b>仅 arm64</b>；<b>仅 English + 简体中文</b>。", "1 · 24 · 26 · 27 · 33", OKT]]
+    body = f"""
+<div class="row">
+ <div class="col">
+  <h2>与 0.2.0 实现的对照（一）</h2>
+  {tbl(["主题", "0.2.0 的实现 / 最终决定", "涉及页", "处理"], dv1, "xd", ["12%", "60%", "12%", "16%"])}
+  <div class="note small"><b>怎么读本页</b>：{OKT} = 该页正文（及标注“重绘”的 mockup）已改为实现的样子；{DEV} = 设计曾另有决定，实现未采纳，以实现为准；{LATER} = 尚未实现或仍在开发，设计保留。
+  本页与其它页冲突时<b>以本页为准</b>；后台与退出语义的权威描述同时见 <code>docs/wifi-architecture.md</code>。</div>
+ </div>
+ <div class="col">
+  <h2>与 0.2.0 实现的对照（二）</h2>
+  {tbl(["主题", "0.2.0 的实现 / 最终决定", "涉及页", "处理"], dv2, "xd", ["12%", "58%", "13%", "17%"])}
+  <div class="box small"><b>mockup 与历史页说明</b>
+  {ul(["第 2、3 页（第二、三轮修订对照）保留当时的意见与落实记录，其中“位置传输卡与相机卡同构”“容量按卡分行放日期列表顶部”“复制当前筛选下的日志”已被本页取代。",
+       "第 12、13 页叠层背后的设备页，以及第 29 页暗色稿，随设备页一并重绘；选择态 mockup 仅去掉“全选”图标。",
+       "第 17 页多存储卡仍待实机核实；其中的“容量分行”不再适用。",
+       "第 32–34 页是开工前（v0.1.5）的差异与拆分清单，行号不再对应当前代码，仅作追溯。"], "xs")}</div>
+  <div class="box b small"><b>公开地址</b>：源码与问题反馈只写 https://github.com/mfreceiver/alpha-gps （Issues：/issues）；上游为 Saschl/alpha-gps。</div>
+ </div>
+</div>"""
+    page("0.2.0 实现偏差与决定", "设计稿与 0.2.0 实现逐项对照 · 冲突时以本页为准", body)
 
 
 def E_notif(dark):

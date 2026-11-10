@@ -12,7 +12,7 @@ import screens3 as A
 import screens3b as B
 from doc3 import shot
 
-TOTAL = 34
+TOTAL = 35
 
 
 def mockups():
@@ -28,8 +28,8 @@ def mockups():
     shot("dev_ok", lambda: A.device_screen("ok"))
     shot("dev_ok_c", lambda: A.device_screen("ok", callouts=True))
     shot("dev_off", lambda: A.device_screen("off"))
-    shot("dev_warn", lambda: A.device_screen("warn"))
-    shot("dev_nogps", lambda: A.device_screen("nogps"))
+    shot("dev_connecting", lambda: A.device_screen("connecting"))
+    shot("dev_manual", lambda: A.device_screen("manual"))
     shot("dlg_bt", A.bt_disconnect_dialog)
     shot("info_c", lambda: A.info_dialog(callouts=True))
     shot("dlg_rename", A.rename_dialog)
@@ -71,7 +71,6 @@ def mockups():
     shot("view_saved", lambda: B.viewer_screen("port", state="saved"))
     # ---- settings / help / logs
     shot("settings", B.settings_screen)
-    shot("settings_sub", B.settings_sub_screen)
     shot("logs", B.logs_screen)
     shot("help_c", lambda: B.help_screen(callouts=True))
     shot("trouble", B.troubleshoot_screen)
