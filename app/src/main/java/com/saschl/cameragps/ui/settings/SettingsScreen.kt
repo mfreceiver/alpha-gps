@@ -29,8 +29,6 @@ import cameragps.sharednew.generated.resources.battery_optimization_settings_tit
 import cameragps.sharednew.generated.resources.event_sounds_open_section_description
 import cameragps.sharednew.generated.resources.event_sounds_title
 import cameragps.sharednew.generated.resources.keyboard_arrow_right_24px
-import cameragps.sharednew.generated.resources.location_provider_hint
-import cameragps.sharednew.generated.resources.location_provider_title
 import cameragps.sharednew.generated.resources.settings
 import com.sasch.cameragps.sharednew.ui.settings.SharedLanguageSettingsCard
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsColumn
@@ -38,7 +36,6 @@ import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsScreen
 import com.sasch.cameragps.sharednew.whatsnew.WhatsNewSettingsCard
 import com.sasch.cameragps.sharednew.whatsnew.WhatsNewState
 import com.saschl.cameragps.R
-import com.saschl.cameragps.service.location.LOCATION_PROVIDER_SELECTABLE
 import com.saschl.cameragps.utils.PreferencesManager
 import kotlinx.serialization.Serializable
 import org.jetbrains.compose.resources.painterResource
@@ -74,12 +71,6 @@ fun SettingsScreen(
                             settingsBackStack.add(nextDestination)
                         }
                     )
-                }
-            }
-
-            SettingsDestination.LocationProvider -> {
-                NavEntry(SettingsDestination.LocationProvider) {
-                    LocationProviderSettingsScreen(onBackClick = { navigateBack() })
                 }
             }
 
@@ -133,13 +124,6 @@ private fun SettingsOverviewScreen(
         ) {
             AppControlsInlineSection()
             LogLevelSettingsCard()
-            if (LOCATION_PROVIDER_SELECTABLE) {
-                SettingsSectionNavigation(
-                    title = stringResource(Res.string.location_provider_title),
-                    description = stringResource(Res.string.location_provider_hint),
-                    onClick = { onOpenDestination(SettingsDestination.LocationProvider) }
-                )
-            }
             SettingsSectionNavigation(
                 title = stringResource(Res.string.event_sounds_title),
                 description = stringResource(Res.string.event_sounds_open_section_description),
@@ -202,27 +186,6 @@ private fun SettingsSectionNavigation(
 }
 
 @Composable
-private fun LocationProviderSettingsScreen(onBackClick: () -> Unit) {
-    val context = LocalContext.current
-    var locationProvider by remember {
-        mutableStateOf(PreferencesManager.getLocationProvider(context))
-    }
-
-    SettingsSectionScreen(
-        title = stringResource(Res.string.location_provider_title),
-        onBackClick = onBackClick
-    ) {
-        LocationProviderCard(
-            locationProvider = locationProvider,
-            onProviderChange = { provider ->
-                locationProvider = provider
-                PreferencesManager.setLocationProvider(context, provider)
-            }
-        )
-    }
-}
-
-@Composable
 private fun BatteryOptimizationSettingsScreen(onBackClick: () -> Unit) {
     SettingsSectionScreen(
         title = stringResource(Res.string.battery_optimization_settings_title),
@@ -236,9 +199,6 @@ private fun BatteryOptimizationSettingsScreen(onBackClick: () -> Unit) {
 private sealed interface SettingsDestination : NavKey {
     @Serializable
     data object Overview : SettingsDestination
-
-    @Serializable
-    data object LocationProvider : SettingsDestination
 
     @Serializable
     data object EventSounds : SettingsDestination

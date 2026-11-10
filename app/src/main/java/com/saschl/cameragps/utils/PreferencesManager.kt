@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import androidx.core.content.edit
-import com.sasch.cameragps.sharednew.ui.settings.LocationProvider
 import com.saschl.cameragps.service.TransmissionSoundEvent
 import com.saschl.cameragps.service.TransmissionSoundMode
 
@@ -16,7 +15,6 @@ object PreferencesManager {
     private const val KEY_BATTERY_OPTIMIZATION_DIALOG_DISMISSED = "battery_optimization_dialog_dismissed"
     private const val KEY_LOG_LEVEL = "log_level"
     private const val KEY_IGNORE_PERMISSIONS = "ignore_permissions"
-    private const val KEY_LOCATION_PROVIDER = "location_provider"
     private const val KEY_HAPTICS_ENABLED = "haptics_enabled"
     private const val KEY_WIFI_DEFAULT_DOWNLOAD_FORMAT = "wifi_default_download_format"
     private const val KEY_TRANSMISSION_EVENT_SOUNDS_ENABLED = "transmission_event_sounds_enabled"
@@ -32,13 +30,9 @@ object PreferencesManager {
     private const val KEY_SOUND_URI_LOCATION_INVALID = "sound_uri_location_invalid"
     private const val KEY_SOUND_URI_CAMERA_CONNECTED = "sound_uri_camera_connected"
     private const val KEY_SOUND_URI_CAMERA_DISCONNECTED = "sound_uri_camera_disconnected"
-    private const val LOCATION_PROVIDER_PLAY_SERVICES = "play_services"
-    private const val LOCATION_PROVIDER_PLATFORM = "platform"
     private const val SOUND_MODE_DEFAULT = "default"
     private const val SOUND_MODE_SILENT = "silent"
     private const val SOUND_MODE_CUSTOM = "custom"
-
-    // LocationProvider enum lives in shared module (com.saschl.cameragps.shared.ui.settings)
 
     private fun getPreferences(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -132,29 +126,6 @@ object PreferencesManager {
     fun setPermissionsIgnored(context: Context, ignored: Boolean) {
         getPreferences(context).edit {
             putBoolean(KEY_IGNORE_PERMISSIONS, ignored)
-        }
-    }
-
-    fun getLocationProvider(context: Context): LocationProvider {
-        val stored = getPreferences(context).getString(
-            KEY_LOCATION_PROVIDER,
-            LOCATION_PROVIDER_PLAY_SERVICES
-        )
-        return if (stored == LOCATION_PROVIDER_PLATFORM) {
-            LocationProvider.PLATFORM
-        } else {
-            LocationProvider.PLAY_SERVICES
-        }
-    }
-
-    fun setLocationProvider(context: Context, provider: LocationProvider) {
-        val stored = if (provider == LocationProvider.PLATFORM) {
-            LOCATION_PROVIDER_PLATFORM
-        } else {
-            LOCATION_PROVIDER_PLAY_SERVICES
-        }
-        getPreferences(context).edit {
-            putString(KEY_LOCATION_PROVIDER, stored)
         }
     }
 
