@@ -83,6 +83,14 @@ data class AlphaColors(
     val onPhotoSecondary: Color,
     /** De-emphasised marks over a photo, ≥ 3:1 only (white 72 %). */
     val onPhotoMuted: Color,
+    /**
+     * Warning text / icons on Viewer glass or over a photo (e.g. "no JPG"). The Viewer is dark in
+     * both themes, so this is a light amber in both — the light theme's [warningText] (dark brown)
+     * falls to ~1:1 on Viewer glass over a white photo. ≥ 4.5:1 on every Viewer background.
+     */
+    val onPhotoWarning: Color,
+    /** Error text / destructive icons on Viewer glass or over a photo; light red in both themes (see [onPhotoWarning]). */
+    val onPhotoDanger: Color,
     // Backdrop G0
     /** Scrim behind G3 surfaces, alpha included (light 32 % / dark 52 %). */
     val scrim: Color,
@@ -168,6 +176,8 @@ val LightAlphaColors = AlphaColors(
     onPhoto = Color.White,
     onPhotoSecondary = Color.White.copy(alpha = 0.85f),
     onPhotoMuted = Color.White.copy(alpha = 0.72f),
+    onPhotoWarning = Color(0xFFFFE08A),
+    onPhotoDanger = Color(0xFFFFDAD6),
     scrim = Color.Black.copy(alpha = 0.32f),
     orbs = listOf(
         BackdropOrb(0.10f, 0.08f, 0.80f, Color(0xFFA8C7FA), 0.55f), // blue, top-left (main light)
@@ -228,6 +238,8 @@ val DarkAlphaColors = AlphaColors(
     onPhoto = Color.White,
     onPhotoSecondary = Color.White.copy(alpha = 0.85f),
     onPhotoMuted = Color.White.copy(alpha = 0.72f),
+    onPhotoWarning = Color(0xFFFFE08A),
+    onPhotoDanger = Color(0xFFFFDAD6),
     scrim = Color.Black.copy(alpha = 0.52f),
     orbs = listOf(
         BackdropOrb(0.10f, 0.08f, 0.80f, Color(0xFF0B57D0), 0.40f), // blue, top-left (main light)

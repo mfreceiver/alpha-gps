@@ -1,5 +1,6 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
+import androidx.compose.ui.graphics.Color
 import com.sasch.cameragps.sharednew.remote.wifi.PhotoExif
 import com.sasch.cameragps.sharednew.remote.wifi.PhotoFormat
 import com.sasch.cameragps.sharednew.remote.wifi.PhotoMetadata
@@ -13,6 +14,7 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiSkipReason
 import com.sasch.cameragps.sharednew.remote.wifi.captureDownloadSize
 import com.sasch.cameragps.sharednew.remote.wifi.planDownloads
+import com.sasch.cameragps.sharednew.ui.theme.AlphaColors
 
 /** The handle the viewer reads metadata for: the capture's preview file (its JPEG when it has one). */
 internal val WifiCameraCapture.metadataHandle: Long get() = preview.handle
@@ -164,6 +166,20 @@ internal fun viewerDetails(capture: WifiCameraCapture, metadataState: PhotoMetad
 }
 
 /** States of the viewer's single download button. */
+/**
+ * Colour of the info strip's format text: "Only RAW" (no JPEG) is a warning. The Viewer is dark in
+ * both themes, so it uses the photo role [AlphaColors.onPhotoWarning], never the theme's warningText.
+ */
+internal fun viewerFormatColor(noJpeg: Boolean, colors: AlphaColors): Color =
+    if (noJpeg) colors.onPhotoWarning else colors.onPhoto
+
+/**
+ * Colour of the hint above the download button: in [ViewerDownloadPhase.Ready] the hint is the last
+ * transfer's failure / cancel notice (error, [AlphaColors.onPhotoDanger]); otherwise an explanation.
+ */
+internal fun viewerDownloadHintColor(phase: ViewerDownloadPhase, colors: AlphaColors): Color =
+    if (phase == ViewerDownloadPhase.Ready) colors.onPhotoDanger else colors.onPhotoSecondary
+
 internal enum class ViewerDownloadPhase {
     /** "Download": fetches [ViewerDownloadState.downloads] (the default-format plan). */
     Ready,

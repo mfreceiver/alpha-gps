@@ -125,6 +125,8 @@
 | 暗 Modal | 8.46 | 6.45 | 4.58 | 6.37 | 6.48 | 7.12 | 6.45 |
 | Viewer | onPhoto 5.95 | onPhotoSecondary 4.84 | onPhotoMuted 4.01 | | | | |
 
+Viewer 的警示/错误另用照片专用 token（亮暗同值，`PaletteContrastTest.viewerForegroundsReadableOnEveryViewerSurface`）：背景 = Viewer 70% 叠白/黑/灰照片（含 sheen）+ 纯黑 + Viewer 94% solid 叠黑，最差都在"70% 叠白照片 + sheen"。`onPhotoWarning #FFE08A` 4.60、`onPhotoDanger #FFDAD6` 4.59（≥4.5）；对照：亮色 `warningText #7A5200` 1.00、`danger #BA1A1A` 1.07，暗色 `#FFC857` 3.86、`#FFB4AB` 3.50，均不达标。
+
 为达标调整的 token（而非放宽阈值）：
 - `textMuted` 新增为**不透明色**：亮 `#696E75`、暗 `#A3A8B0`。audit 建议的 onSurfaceVariant @ .6 在暗色 Card 只有 2.59:1。
 - `warningIcon` 新增：亮 `#A15C00`（原 `warning #F9A825` 作为图标只有 1.71:1），暗 `#FFC857`。`warning` 保留为纯装饰色。

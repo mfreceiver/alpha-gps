@@ -44,7 +44,7 @@ fun iconButtonTint(emphasis: IconEmphasis, colors: AlphaColors, enabled: Boolean
         IconEmphasis.Standard -> if (onViewer) colors.onPhoto else colors.textSecondary
         IconEmphasis.Primary -> if (onViewer) colors.onPhoto else colors.accent
         IconEmphasis.Subtle -> if (onViewer) colors.onPhotoMuted else colors.textMuted
-        IconEmphasis.Danger -> colors.danger
+        IconEmphasis.Danger -> if (onViewer) colors.onPhotoDanger else colors.danger
     }
     return if (enabled) base else base.copy(alpha = base.alpha * 0.38f)
 }
