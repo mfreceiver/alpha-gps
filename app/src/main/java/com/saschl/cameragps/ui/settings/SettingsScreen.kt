@@ -12,7 +12,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -40,7 +39,6 @@ import com.sasch.cameragps.sharednew.whatsnew.WhatsNewSettingsCard
 import com.sasch.cameragps.sharednew.whatsnew.WhatsNewState
 import com.saschl.cameragps.R
 import com.saschl.cameragps.service.location.LOCATION_PROVIDER_SELECTABLE
-import com.saschl.cameragps.ui.ReviewHintDebugPanel
 import com.saschl.cameragps.utils.PreferencesManager
 import kotlinx.serialization.Serializable
 import org.jetbrains.compose.resources.painterResource
@@ -117,12 +115,10 @@ private fun SettingsOverviewScreen(
     onBackClick: () -> Unit,
     onOpenDestination: (SettingsDestination) -> Unit,
 ) {
-    var debugPanelCounter by remember { mutableIntStateOf(0) }
-
     SharedSettingsScreen(
         title = stringResource(Res.string.settings),
         onBackClick = onBackClick,
-        onTitleClick = { debugPanelCounter++ },
+        onTitleClick = {},
         navigationIcon = {
             Icon(
                 painterResource(R.drawable.arrow_back_24px),
@@ -155,10 +151,6 @@ private fun SettingsOverviewScreen(
             )
             SharedLanguageSettingsCard()
             WhatsNewSettingsCard(whatsNew)
-            if (debugPanelCounter >= 5) {
-                ReviewHintDebugPanel()
-                DebugDonationDialogCard()
-            }
         }
     }
 }

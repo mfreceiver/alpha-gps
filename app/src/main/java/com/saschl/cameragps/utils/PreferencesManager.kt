@@ -7,9 +7,6 @@ import androidx.core.content.edit
 import com.sasch.cameragps.sharednew.ui.settings.LocationProvider
 import com.saschl.cameragps.service.TransmissionSoundEvent
 import com.saschl.cameragps.service.TransmissionSoundMode
-import java.time.Duration
-import java.time.Instant
-import java.time.temporal.ChronoUnit
 
 object PreferencesManager {
     private const val PREFS_NAME = "camera_gps_prefs"
@@ -18,12 +15,6 @@ object PreferencesManager {
     private const val KEY_APP_ENABLED = "app_enabled"
     private const val KEY_BATTERY_OPTIMIZATION_DIALOG_DISMISSED = "battery_optimization_dialog_dismissed"
     private const val KEY_LOG_LEVEL = "log_level"
-    private const val KEY_REVIEW_HINT_LAST_SHOWN = "review_hint_last_shown"
-    private const val KEY_REVIEW_HINT_SHOWN_TIMES = "review_hint_shown_times"
-    private const val KEY_DONATION_HINT_LAST_SHOWN = "donation_hint_last_shown"
-    private const val KEY_DONATION_HINT_SHOWN_TIMES = "donation_hint_shown_times"
-    private const val KEY_FORCE_DONATION_DIALOG_ON_NEXT_START =
-        "force_donation_dialog_on_next_start"
     private const val KEY_IGNORE_PERMISSIONS = "ignore_permissions"
     private const val KEY_LOCATION_PROVIDER = "location_provider"
     private const val KEY_HAPTICS_ENABLED = "haptics_enabled"
@@ -92,116 +83,6 @@ object PreferencesManager {
         }
     }
 
-
-    fun reviewHintLastShownDaysAgo(context: Context, initialize: Boolean = false): Long {
-        val lastShown = getPreferences(context).getLong(KEY_REVIEW_HINT_LAST_SHOWN, 0L)
-
-        var lastShownInstant: Instant
-        if (lastShown == 0L && initialize) {
-            // give the user one day breathing room before showing the hint after setting up the first device
-            lastShownInstant = Instant.now().minus(29, ChronoUnit.DAYS)
-            getPreferences(context).edit {
-                putLong(KEY_REVIEW_HINT_LAST_SHOWN, lastShownInstant.epochSecond)
-            }
-        } else {
-            lastShownInstant = Instant.ofEpochSecond(lastShown)
-
-        }
-        val daysAgo = Duration.between(lastShownInstant, Instant.now()).toDays()
-        return daysAgo
-    }
-
-    fun setReviewHintShownNow(context: Context) {
-        getPreferences(context).edit {
-            putLong(KEY_REVIEW_HINT_LAST_SHOWN, Instant.now().epochSecond)
-        }
-    }
-
-    fun resetReviewHintShown(context: Context) {
-        getPreferences(context).edit {
-            putLong(KEY_REVIEW_HINT_LAST_SHOWN, 0L)
-        }
-    }
-
-    fun reviewHintShownTimes(applicationContext: Context): Int {
-        return getPreferences(applicationContext).getInt(KEY_REVIEW_HINT_SHOWN_TIMES, 0)
-    }
-
-    fun increaseReviewHintShownTimes(applicationContext: Context) {
-        val currentTimes = reviewHintShownTimes(applicationContext)
-        getPreferences(applicationContext).edit {
-            putInt(KEY_REVIEW_HINT_SHOWN_TIMES, currentTimes + 1)
-        }
-    }
-
-    fun decreaseReviewHintShownTimes(applicationContext: Context) {
-        val currentTimes = reviewHintShownTimes(applicationContext)
-        getPreferences(applicationContext).edit {
-            putInt(KEY_REVIEW_HINT_SHOWN_TIMES, currentTimes - 1)
-        }
-    }
-
-    fun reviewHintLastShownInstant(context: Context): Instant {
-        return Instant.ofEpochSecond(getPreferences(context).getLong(KEY_REVIEW_HINT_LAST_SHOWN, 0))
-    }
-
-    fun donationHintLastShownDaysAgo(context: Context, initialize: Boolean = false): Long {
-        val lastShown = getPreferences(context).getLong(KEY_DONATION_HINT_LAST_SHOWN, 0L)
-
-        val lastShownInstant = if (lastShown == 0L && initialize) {
-            // Initialize so the donation prompt appears on a later app open, not immediately.
-            Instant.now().minus(29, ChronoUnit.DAYS).also {
-                getPreferences(context).edit {
-                    putLong(KEY_DONATION_HINT_LAST_SHOWN, it.epochSecond)
-                }
-            }
-        } else {
-            Instant.ofEpochSecond(lastShown)
-        }
-
-        return Duration.between(lastShownInstant, Instant.now()).toDays()
-    }
-
-    fun setDonationHintShownNow(context: Context) {
-        getPreferences(context).edit {
-            putLong(KEY_DONATION_HINT_LAST_SHOWN, Instant.now().epochSecond)
-        }
-    }
-
-    fun donationHintShownTimes(applicationContext: Context): Int {
-        return getPreferences(applicationContext).getInt(KEY_DONATION_HINT_SHOWN_TIMES, 0)
-    }
-
-    fun increaseDonationHintShownTimes(applicationContext: Context) {
-        val currentTimes = donationHintShownTimes(applicationContext)
-        getPreferences(applicationContext).edit {
-            putInt(KEY_DONATION_HINT_SHOWN_TIMES, currentTimes + 1)
-        }
-    }
-
-    fun setForceDonationDialogOnNextAppStart(context: Context, enabled: Boolean) {
-        getPreferences(context).edit {
-            putBoolean(KEY_FORCE_DONATION_DIALOG_ON_NEXT_START, enabled)
-        }
-    }
-
-    fun consumeForceDonationDialogOnNextAppStart(context: Context): Boolean {
-        val shouldForce =
-            getPreferences(context).getBoolean(KEY_FORCE_DONATION_DIALOG_ON_NEXT_START, false)
-        if (shouldForce) {
-            getPreferences(context).edit {
-                remove(KEY_FORCE_DONATION_DIALOG_ON_NEXT_START)
-            }
-        }
-        return shouldForce
-    }
-
-    fun resetReviewHintData(context: Context) {
-        getPreferences(context).edit {
-            putLong(KEY_REVIEW_HINT_LAST_SHOWN, 0L)
-            putInt(KEY_REVIEW_HINT_SHOWN_TIMES, 0)
-        }
-    }
 
     fun logLevel(context: Context): Int {
         return getPreferences(context).getInt(KEY_LOG_LEVEL, Log.INFO)
