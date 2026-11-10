@@ -602,4 +602,5 @@
     <string name="m7_viewer_histogram">Histogram</string>
     <string name="m7_viewer_metadata_loading">Reading photo info…</string>
     <string name="m7_viewer_file_size">File size</string>
+    <string name="c1_open_wifi_settings">Open Wi-Fi settings</string>
 </resources>

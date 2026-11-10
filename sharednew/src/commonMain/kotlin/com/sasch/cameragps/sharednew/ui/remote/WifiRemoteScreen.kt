@@ -695,6 +695,7 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
                 },
                 onDismiss = onClose,
                 onAppSettings = onAppSettings,
+                onWifiSettings = onWifiSettings,
                 modifier = Modifier.systemBarsPadding(),
             )
 

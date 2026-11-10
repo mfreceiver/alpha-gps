@@ -573,4 +573,5 @@
     <string name="m7_viewer_histogram">直方图</string>
     <string name="m7_viewer_metadata_loading">正在读取照片信息…</string>
     <string name="m7_viewer_file_size">文件大小</string>
+    <string name="c1_open_wifi_settings">打开 Wi-Fi 设置</string>
 </resources>

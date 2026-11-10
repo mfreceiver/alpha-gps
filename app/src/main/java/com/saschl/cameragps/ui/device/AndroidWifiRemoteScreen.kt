@@ -118,7 +118,17 @@ fun AndroidWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
             )
         },
         onDownloadPhotos = { downloads -> controller.downloadPhotos(identifier, downloads) },
-        onWifiSettings = { context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) },
+        onWifiSettings = {
+            // Android 10+: the inline Wi-Fi panel keeps the user in flow; older devices (or a
+            // missing panel activity) fall back to the full Wi-Fi settings screen.
+            if (Build.VERSION.SDK_INT >= 29) {
+                try {
+                    context.startActivity(Intent(Settings.Panel.ACTION_WIFI))
+                } catch (_: Exception) {
+                    context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+                }
+            } else context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+        },
         defaultDownloadFormatJpeg = PreferencesManager.isWifiDefaultDownloadFormatJpeg(context),
         gridOptions = gridOptions,
         onGridOptionsChange = {
