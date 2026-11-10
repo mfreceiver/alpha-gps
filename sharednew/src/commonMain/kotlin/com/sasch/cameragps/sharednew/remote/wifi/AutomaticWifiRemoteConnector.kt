@@ -15,15 +15,36 @@ internal interface CameraNetworkRequest<N> {
     fun close()
 }
 
+/**
+ * Platform radio state, injected so the common logic stays testable: checked at the very start of
+ * an automatic attempt, before any BLE traffic wakes the camera's Wi-Fi. Defaults keep every
+ * precondition satisfied, so a null or default implementation never blocks the flow.
+ */
+internal interface WifiPreconditions {
+    suspend fun isWifiEnabled(): Boolean = true
+
+    /** Android <= 32 refuses Wi-Fi joins while location services are off (see AndroidCameraNetworkRequest). */
+    suspend fun isLocationEnabled(): Boolean = true
+}
+
 /** Owns the OS network request until the camera session has finished releasing its controls. */
 internal class AutomaticWifiRemoteConnector<N>(
     private val prepare: suspend (String) -> CameraWifiCredentials?,
     private val request: (CameraWifiCredentials) -> CameraNetworkRequest<N>,
     private val openCamera: suspend (N, String, CoroutineScope) -> WifiRemoteConnection,
     private val joinTimeoutMs: Long = 60_000,
+    private val preconditions: WifiPreconditions? = null,
 ) : WifiAutomaticConnector {
     override suspend fun open(identifier: String, scope: CoroutineScope,
                               onPhase: (WifiRemotePhase) -> Unit): WifiRemoteConnection {
+        // Fail before any BLE wake-up or phase is published: a disabled phone Wi-Fi makes the
+        // whole attempt pointless, so the camera must not be needlessly woken first.
+        if (preconditions?.isWifiEnabled() == false) {
+            throw WifiRemoteConnectException(WifiRemoteFailure.WifiDisabled)
+        }
+        if (preconditions?.isLocationEnabled() == false) {
+            throw WifiRemoteConnectException(WifiRemoteFailure.LocationServicesRequired)
+        }
         onPhase(WifiRemotePhase.PreparingCamera)
         val requested = request(prepare(identifier)
             ?: throw WifiRemoteConnectException(WifiRemoteFailure.CameraSetupFailed))

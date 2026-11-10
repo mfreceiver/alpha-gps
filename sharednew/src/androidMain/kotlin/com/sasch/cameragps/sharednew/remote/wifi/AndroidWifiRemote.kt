@@ -1,10 +1,13 @@
 package com.sasch.cameragps.sharednew.remote.wifi
 
 import android.content.Context
+import android.location.LocationManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.net.wifi.WifiManager
+import android.os.Build
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionOrchestrator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
@@ -21,6 +24,7 @@ fun createAndroidWifiRemoteController(
         orchestrator::prepareCameraWifi,
         { credentials -> AndroidCameraNetworkRequest(context.applicationContext, credentials) },
         connector::openOnNetwork,
+        preconditions = AndroidWifiPreconditions(context),
     )
     return WifiRemoteController(scope, orchestrator.registry, connector,
         orchestrator::claimWifiControls, orchestrator::releaseWifiControls,
@@ -30,6 +34,20 @@ fun createAndroidWifiRemoteController(
         },
         onBatteryRead = orchestrator.liveStatus::onBattery,
     )
+}
+
+/**
+ * Phone-side radio state for the pre-BLE preflight. Mirrors the guards of
+ * [AndroidCameraNetworkRequest] (which stay in place as the late fallback) but runs before the
+ * camera is woken over BLE, so a disabled Wi-Fi fails in milliseconds instead of after the wake-up.
+ */
+private class AndroidWifiPreconditions(context: Context) : WifiPreconditions {
+    private val appContext = context.applicationContext
+    override suspend fun isWifiEnabled(): Boolean =
+        appContext.getSystemService(WifiManager::class.java).isWifiEnabled
+    override suspend fun isLocationEnabled(): Boolean =
+        Build.VERSION.SDK_INT > 32 ||
+            appContext.getSystemService(LocationManager::class.java).isLocationEnabled
 }
 
 private class AndroidWifiRemoteConnector(
