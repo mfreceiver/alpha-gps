@@ -101,6 +101,13 @@ internal fun interface WifiRemoteConnector {
 
 internal fun interface WifiAutomaticConnector {
     suspend fun open(identifier: String, scope: CoroutineScope, onPhase: (WifiRemotePhase) -> Unit): WifiRemoteConnection
+
+    /**
+     * Phone-side preconditions the controller checks before anything else; null (default) when the
+     * connector has no radio to ask. [AutomaticWifiRemoteConnector] forwards its [WifiPreconditions]
+     * so the controller can fail fast without touching the camera's BLE control takeover.
+     */
+    val phonePreconditions: WifiPreconditions? get() = null
 }
 
 internal interface WifiManualSetupConnector {
@@ -247,6 +254,34 @@ class WifiRemoteController internal constructor(
 
     fun connectAutomatically(identifier: String) {
         val automatic = automaticConnector ?: return
+        // Phone-side preconditions run before anything is published or claimed: a disabled phone
+        // Wi-Fi (or location services on API <= 32) must not wake the camera via BLE control
+        // takeover and must not flash "preparing camera" first. The connector re-checks as a
+        // belt-and-braces guard for any caller that reaches it directly.
+        val preconditions = automatic.phonePreconditions
+        if (preconditions == null) {
+            startAutomatic(automatic, identifier)
+            return
+        }
+        scope.launch {
+            val failure = when {
+                !preconditions.isWifiEnabled() -> WifiRemoteFailure.WifiDisabled
+                !preconditions.isLocationEnabled() -> WifiRemoteFailure.LocationServicesRequired
+                else -> null
+            }
+            if (failure == null) {
+                startAutomatic(automatic, identifier)
+            } else {
+                if (registry.get(identifier) == null) {
+                    registry.upsert(identifier) { it.copy(phase = BleSessionPhase.Disconnected) }
+                }
+                registry.updateWifiRemote(identifier, WifiRemoteState(WifiRemotePhase.Failed, failure))
+                log.i { "Wi-Fi remote attempt skipped: $failure" }
+            }
+        }
+    }
+
+    private fun startAutomatic(automatic: WifiAutomaticConnector, identifier: String) {
         start(identifier, WifiRemotePhase.PreparingCamera) { id, sessionScope ->
             automatic.open(id, sessionScope) { phase ->
                 log.i { "Wi-Fi remote attempt=$attempt phase=$phase" }
@@ -612,17 +647,6 @@ class WifiRemoteController internal constructor(
     }
 
     /**
-     * The grid reports which captures (stable keys) are on screen and which neighbours deserve a
-     * margin. Latest report wins (conflated); a report for another page revision is ignored by the
-     * loader, so a late layout of an earlier page can never steer the current one.
-     */
-    fun requestThumbnails(identifier: String, pageRevision: Long, visible: List<String>, margin: List<String>) {
-        if (_owner.value.equals(identifier, true)) {
-            thumbDemand.value = ThumbnailDemand(pageRevision, visible, margin)
-        }
-    }
-
-    /**
      * "AlphaThumb" diagnostics for the first three thumbnails of a page: decoded size plus the
      * near-black edge lines measured off the composition thread ([Dispatchers.Default]); the scan
      * only produces a log line, never touches what is displayed.
@@ -636,6 +660,17 @@ class WifiRemoteController internal constructor(
         thumbLog.i {
             "page=$pageOffset #$index handle=$handle decoded=${bitmap.width}x${bitmap.height} " +
                     "nearBlackBars=${bars ?: "unavailable"}"
+        }
+    }
+
+    /**
+     * The grid reports which captures (stable keys) are on screen and which neighbours deserve a
+     * margin. Latest report wins (conflated); a report for another page revision is ignored by the
+     * loader, so a late layout of an earlier page can never steer the current one.
+     */
+    fun requestThumbnails(identifier: String, pageRevision: Long, visible: List<String>, margin: List<String>) {
+        if (_owner.value.equals(identifier, true)) {
+            thumbDemand.value = ThumbnailDemand(pageRevision, visible, margin)
         }
     }
 

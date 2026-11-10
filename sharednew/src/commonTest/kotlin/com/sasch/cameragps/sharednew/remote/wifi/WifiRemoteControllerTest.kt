@@ -17,7 +17,9 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -202,6 +204,105 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         runCurrent()
         assertTrue(registry.get("camera")!!.wifiRemote.photoBrowser.open)
         return BackgroundFixture(controller, registry, connection)
+    }
+
+    /** Network-request double for the automatic connector: a channel the test feeds by hand. */
+    private class NetworkRequest : CameraNetworkRequest<String> {
+        val channel = Channel<CameraNetworkEvent<String>>(Channel.UNLIMITED)
+        override val events = channel.receiveAsFlow()
+        override fun close() {}
+    }
+
+    @Test
+    fun aDisabledPhoneWifiFailsTheAutomaticConnectBeforeAnyPhaseClaimOrBleWakeUp() = runTest {
+        val registry = CameraSessionRegistry()
+        val phases = mutableListOf<WifiRemotePhase>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            registry.sessions.collect { sessions ->
+                sessions.forEach { (_, session) -> phases += session.wifiRemote.phase }
+            }
+        }
+        var claims = 0
+        var releases = 0
+        var prepared = 0
+        val radio = object : WifiPreconditions {
+            override suspend fun isWifiEnabled() = false
+        }
+        val automatic = AutomaticWifiRemoteConnector<String>(
+            { prepared++; CameraWifiCredentials("DIRECT-x", "y", null) },
+            { error("no network request may be built") },
+            { _, _, _ -> error("no camera session may open") },
+            preconditions = radio,
+        )
+        val controller = WifiRemoteController(
+            backgroundScope, registry, { _, _ -> error("manual connector unused") },
+            { claims++ }, { releases++ },
+            automaticConnector = automatic,
+        )
+        controller.connectAutomatically("camera")
+        runCurrent()
+        assertEquals(WifiRemotePhase.Failed, registry.get("camera")!!.wifiRemote.phase)
+        assertEquals(WifiRemoteFailure.WifiDisabled, registry.get("camera")!!.wifiRemote.failure)
+        assertFalse(WifiRemotePhase.PreparingCamera in phases, "phases seen: $phases")
+        assertEquals(0, claims)
+        assertEquals(0, releases)
+        assertEquals(0, prepared, "the camera's Wi-Fi is never woken")
+        assertNull(controller.owner.value)
+    }
+
+    @Test
+    fun aDisabledLocationServiceFailsTheAutomaticConnectWithoutBleSideEffects() = runTest {
+        val registry = CameraSessionRegistry()
+        var claims = 0
+        val automatic = AutomaticWifiRemoteConnector<String>(
+            { CameraWifiCredentials("DIRECT-x", "y", null) },
+            { error("no network request may be built") },
+            { _, _, _ -> error("no camera session may open") },
+            preconditions = object : WifiPreconditions {
+                override suspend fun isLocationEnabled() = false
+            },
+        )
+        val controller = WifiRemoteController(
+            backgroundScope, registry, { _, _ -> error("manual connector unused") },
+            { claims++ }, {},
+            automaticConnector = automatic,
+        )
+        controller.connectAutomatically("camera")
+        runCurrent()
+        assertEquals(WifiRemotePhase.Failed, registry.get("camera")!!.wifiRemote.phase)
+        assertEquals(WifiRemoteFailure.LocationServicesRequired, registry.get("camera")!!.wifiRemote.failure)
+        assertEquals(0, claims)
+        assertNull(controller.owner.value)
+    }
+
+    @Test
+    fun aSatisfiedPreconditionSetLeavesTheAutomaticConnectUnchanged() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = Connection()
+        val request = NetworkRequest()
+        val automatic = AutomaticWifiRemoteConnector<String>(
+            { CameraWifiCredentials("DIRECT-x", "y", null) },
+            { request },
+            { _, _, _ -> connection },
+            preconditions = object : WifiPreconditions {},
+        )
+        val controller = WifiRemoteController(
+            backgroundScope, registry, { _, _ -> connection }, {}, {},
+            automaticConnector = automatic,
+        )
+        controller.connectAutomatically("camera")
+        runCurrent()
+        // Regression: a satisfied radio set behaves exactly as before — the session starts and
+        // walks the automatic path (open() may already have advanced past PreparingCamera).
+        val phase = registry.get("camera")!!.wifiRemote.phase
+        assertTrue(
+            phase == WifiRemotePhase.PreparingCamera || phase == WifiRemotePhase.AwaitingNetworkApproval,
+            "regression: unchanged flow, saw $phase",
+        )
+        request.channel.send(CameraNetworkEvent.Available("network"))
+        runCurrent()
+        assertEquals(WifiRemotePhase.JoiningNetwork, registry.get("camera")!!.wifiRemote.phase)
+        assertEquals("CAMERA", controller.owner.value)
     }
 
     @Test
@@ -420,7 +521,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             }
             override fun close() { releases++ }
         }
-        val automatic = AutomaticWifiRemoteConnector(
+        val automatic = AutomaticWifiRemoteConnector<String>(
             { CameraWifiCredentials("DIRECT-camera", "secret-pass", null) }, { request },
             { _, _, _ -> connection },
         )

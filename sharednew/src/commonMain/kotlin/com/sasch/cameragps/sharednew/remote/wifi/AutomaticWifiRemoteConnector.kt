@@ -35,6 +35,9 @@ internal class AutomaticWifiRemoteConnector<N>(
     private val joinTimeoutMs: Long = 60_000,
     private val preconditions: WifiPreconditions? = null,
 ) : WifiAutomaticConnector {
+    /** The controller checks these before publishing a phase or claiming BLE controls. */
+    override val phonePreconditions: WifiPreconditions? get() = preconditions
+
     override suspend fun open(identifier: String, scope: CoroutineScope,
                               onPhase: (WifiRemotePhase) -> Unit): WifiRemoteConnection {
         // Fail before any BLE wake-up or phase is published: a disabled phone Wi-Fi makes the
