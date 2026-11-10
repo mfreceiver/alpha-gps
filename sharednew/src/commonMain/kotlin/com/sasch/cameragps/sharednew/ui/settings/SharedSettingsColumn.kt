@@ -23,7 +23,7 @@ fun SharedSettingsColumn(
         modifier = modifier
             .verticalScrollbar(state.scrollIndicatorState)
             .verticalScroll(state)
-            .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 32.dp),
+            .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         content = content,
     )
