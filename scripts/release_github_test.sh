@@ -43,6 +43,11 @@ source "$LIB"
 
 TMP=$(mktemp -d)
 trap 'rm -rf -- "$TMP"' EXIT
+# 兜底：镜像本脚本自身的 stderr（仍原样透传，不吞）。shell 展开错误（bad substitution 等）
+# 发生在 check 的参数展开阶段，不进 PASS/FAILED 计数，脚本会假绿（2026-11 曾出现
+# ${#"$(...)"} 写法导致断言静默丢失）。退出前核对镜像文件，发现此类错误一律判失败。
+SELF_STDERR=$TMP/self_stderr.log
+exec 2> >(tee "$SELF_STDERR" >&2)
 
 PASS=0; FAILED=0
 check() { # check <desc> <expr...>
@@ -780,7 +785,9 @@ check "净化: user:token + query + fragment 全去掉" test "$(disp "https://x-
 check "净化: query 里的 token 被去掉" test "$(disp "$CANON?token=$FAKE_TOK")" == "$CANON"
 check "净化: scp 形式 user@host:path 去掉 user" test "$(disp "git@github.com:a/b.git")" == "github.com:a/b.git"
 check "净化: 控制字符 → '?'" test "$(disp $'https://github.com/a\x01b')" == "https://github.com/a?b"
-check "净化: 超长截断（≤63 字符）" test "${#"$(disp "https://github.com/$(printf 'a%.0s' $(seq 1 200))")"}" -le 63
+OUT783=$(disp "https://github.com/$(printf 'a%.0s' $(seq 1 200))")
+check "净化: 超长截断（≤63 字符）" test "${#OUT783}" -le 63
+check "净化: 超长截断后非空（防空输出碰巧通过）" test "${#OUT783}" -gt 0
 check "净化: 路径里的 '@' 之前内容也丢弃（保守）" bash -c '! grep -q "$2" <<<"$1"' _ "$(disp "https://github.com/x/$FAKE_TOK@y")" "$FAKE_TOK"
 
 VR_DIR=$TMP/vr; VR_LIB=$LIB
@@ -1013,4 +1020,10 @@ echo
 SCENARIOS=$(grep -c '^echo "== 场景' -- "$0")
 TOTAL=$((PASS+FAILED))
 echo "结果: ${SCENARIOS} 场景 / ${TOTAL} 断言: PASS=$PASS FAIL=$FAILED"
+# 兜底核对（见文件头注释）：等 tee 刷盘后检查自身 stderr 镜像。
+SHELL_ERR=$(sleep 0.2; grep -Ec 'bad substitution|unbound variable|syntax error' "$SELF_STDERR" || true)
+if [[ "${SHELL_ERR:-0}" -ne 0 ]]; then
+  echo "FATAL: 自身 stderr 出现 $SHELL_ERR 处 shell 展开错误（bad substitution/unbound/syntax），断言计数不可信" >&2
+  exit 1
+fi
 [[ "$FAILED" -eq 0 ]]
