@@ -2,11 +2,10 @@ package com.saschl.cameragps.ui.about
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.m9_about_privacy_entry
@@ -28,10 +27,14 @@ import cameragps.sharednew.generated.resources.m9_privacy_use_wifi
 import cameragps.sharednew.generated.resources.m9_privacy_use_wifi_desc
 import cameragps.sharednew.generated.resources.m9_privacy_uses_title
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSnackbarHost
+import com.sasch.cameragps.sharednew.ui.components.glass.isScrolledUnderTopBar
+import com.sasch.cameragps.sharednew.ui.components.glass.rememberGlassSnackbarHostState
 import com.sasch.cameragps.sharednew.ui.components.page.GlassPageScaffold
 import com.sasch.cameragps.sharednew.ui.help.AlphaGpsLinks
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsColumn
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -40,17 +43,20 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 fun PrivacyScreen(onBackClick: () -> Unit) {
+    val scrollState = rememberScrollState()
+    val snackbar = rememberGlassSnackbarHostState()
     GlassPageScaffold(
         title = stringResource(Res.string.m9_about_privacy_entry),
         onBackClick = onBackClick,
+        scrolled = scrollState.isScrolledUnderTopBar,
     ) { padding ->
-        SharedSettingsColumn(Modifier.fillMaxSize().padding(padding)) {
+        GlassSnackbarHost(snackbar)
+        SharedSettingsColumn(Modifier.fillMaxSize().padding(padding), state = scrollState) {
             GlassCard {
                 Text(
                     text = stringResource(Res.string.m9_privacy_conclusion),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = AlphaTheme.colors.onSurface,
+                    style = AlphaType.Title,
+                    color = AlphaTheme.colors.textPrimary,
                 )
                 BodyText(stringResource(Res.string.m9_privacy_conclusion_desc))
                 BodyText(stringResource(Res.string.m9_privacy_position_note))
@@ -67,8 +73,8 @@ fun PrivacyScreen(onBackClick: () -> Unit) {
 
             GlassCard {
                 BodyText(stringResource(Res.string.m9_privacy_publisher))
-                LinkRow(stringResource(Res.string.m9_privacy_contact), AlphaGpsLinks.ISSUES)
-                LinkRow(stringResource(Res.string.m9_privacy_full), AlphaGpsLinks.PRIVACY)
+                LinkRow(stringResource(Res.string.m9_privacy_contact), AlphaGpsLinks.ISSUES, snackbar)
+                LinkRow(stringResource(Res.string.m9_privacy_full), AlphaGpsLinks.PRIVACY, snackbar)
             }
         }
     }
@@ -82,9 +88,8 @@ private fun UsageItem(
     androidx.compose.foundation.layout.Column(Modifier.padding(vertical = 4.dp)) {
         Text(
             text = stringResource(title),
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium,
-            color = AlphaTheme.colors.onSurface,
+            style = AlphaType.Label,
+            color = AlphaTheme.colors.textPrimary,
         )
         BodyText(stringResource(description))
     }
