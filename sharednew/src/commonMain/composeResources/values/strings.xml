@@ -471,7 +471,7 @@
     <string name="m9_about_support_title">Support the upstream author</string>
     <string name="m9_about_support_body">If you like this app, you can support Saschl, the author of the upstream project. The support goes to Saschl, not to the maintainer of this version.</string>
     <string name="m9_about_support_button">Buy Saschl a coffee</string>
-    <string name="m9_about_icon_credit">The app icon artwork comes from the upstream project (Saschl/alpha-gps).</string>
+    <string name="m9_about_icon_credit">The app icon is original artwork redrawn for this version (sources in the project\'s docs/brand), released under GPL-3.0.</string>
     <string name="m9_about_trademark">AlphaGPS is not affiliated with, endorsed by, or sponsored by Sony. Sony and Alpha are trademarks of Sony Group Corporation.</string>
     <string name="m9_link_copy">Copy link</string>
     <string name="m9_link_copied">Link copied</string>

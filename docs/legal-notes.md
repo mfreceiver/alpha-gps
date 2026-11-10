@@ -111,13 +111,12 @@
 
 **EN**
 
-> The app icon artwork comes from the upstream project (Saschl/alpha-gps) and is used under the
-> same GPL-3.0 license. The About page states this credit. `docs/brand/` holds this project's own
-> brand SVG sources.
+> The app icon is original artwork redrawn for this version (sources in the project's
+> `docs/brand/`), released under GPL-3.0. The About page states this credit.
 
 **zh-CN**
 
-> 应用图标素材来自上游项目（Saschl/alpha-gps），与上游同为 GPL-3.0 协议。应用内“关于”页注明该来源。
+> 应用图标为本定制版原创重绘（源文件见项目 `docs/brand/`），采用 GPL-3.0。应用内“关于”页注明该来源。
 > `docs/brand/` 为本项目自有品牌图标的 SVG 源。
 
 ## 9. 应用内展示位置

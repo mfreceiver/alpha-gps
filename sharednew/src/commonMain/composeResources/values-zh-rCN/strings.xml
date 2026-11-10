@@ -442,7 +442,7 @@
     <string name="m9_about_support_title">支持上游作者</string>
     <string name="m9_about_support_body">如果你喜欢这个应用，可以支持上游项目的作者 Saschl。赞助归 Saschl 所有，而不是本版本的维护者。</string>
     <string name="m9_about_support_button">请 Saschl 喝杯咖啡</string>
-    <string name="m9_about_icon_credit">应用图标素材来自上游项目（Saschl/alpha-gps）。</string>
+    <string name="m9_about_icon_credit">应用图标为本定制版原创重绘（源文件见项目 docs/brand），采用 GPL-3.0。</string>
     <string name="m9_about_trademark">本应用与 Sony 无关联，也未获 Sony 认可或赞助。Sony、Alpha（α）为 Sony Group Corporation 的商标。</string>
     <string name="m9_link_copy">复制链接</string>
     <string name="m9_link_copied">链接已复制</string>
