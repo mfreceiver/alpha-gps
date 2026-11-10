@@ -5,7 +5,7 @@
 - 核对日期：2026-11
 - 范围：应用内全部功能图标（`app/src/main/res/drawable` 与 `sharednew/src/commonMain/composeResources/drawable`），含通知小图标 `ic_gps_fixed`；不含应用启动图标（`ic_launcher_*`，`docs/brand` 原创）与 `heif/` 子模块。
 - 方法：逐个把现有 VectorDrawable 的 `pathData` 与官方同名/语义对应文件比较——一致的只登记来源（IDENTICAL，文件不改）；官方有但路径不同的换为官方文件（REPLACED）；项目自绘或名称与官方不同的，换为语义对应的官方图标（MAPPED）；无法替代的标 NEEDS_DECISION（当前 **0 项**）。
-- 官方 `sha256` 是下表 URL 所指官方文件（该 commit）的 SHA-256。`app` 模块被替换的文件与官方文件逐字节一致；`sharednew`（Compose Multiplatform 资源）的文件因 CMP 只接受 `#RRGGBBAA` 颜色字面量，不识别 `@android:color/white`，其 `fillColor` 沿用项目既有写法，`pathData` 为官方原文（所有文件的 `pathData` 均已脚本核对与官方一致）。
+- 官方 `sha256` 是下表 URL 所指官方文件（该 commit）的 SHA-256。`app` 模块被替换的文件与官方文件逐字节一致；`sharednew`（Compose Multiplatform 资源）的文件因 CMP 只接受 `#` 开头的颜色字面量（如 `#AARRGGBB`），不识别 `@android:color/white` 这类资源引用，其 `fillColor` 沿用项目既有写法，`pathData` 为官方原文（所有文件的 `pathData` 均已脚本核对与官方一致）。
 - 官方 Material Icons（`android/<类别>/<名>/materialicons/…/baseline_<名>_24.xml`）与 Material Symbols（`symbols/android/<名>/materialsymbolsoutlined/<名>_24px.xml`）两个目录同属该仓库、同为 Apache-2.0。
 
 统计：IDENTICAL 22，REPLACED 19，MAPPED 7，NEEDS_DECISION 0（共 48 个资源）。
