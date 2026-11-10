@@ -20,8 +20,8 @@ import com.sasch.cameragps.sharednew.ui.components.AdaptiveAction
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
-import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -51,7 +51,7 @@ fun DeviceListLayout(
             TextButton(onClick = onNeedHelp, modifier = Modifier.heightIn(min = AlphaDimens.minTouchTarget)) {
                 Text(
                     stringResource(Res.string.device_list_need_help),
-                    style = AlphaTextStyles.button,
+                    style = AlphaType.Label,
                     color = AlphaTheme.colors.primary,
                 )
             }

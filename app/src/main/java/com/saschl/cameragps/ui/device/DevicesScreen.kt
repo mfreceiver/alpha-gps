@@ -41,8 +41,8 @@ import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
 import com.sasch.cameragps.sharednew.ui.device.SharedDevicesScreen
 import com.sasch.cameragps.sharednew.ui.devicelist.DeviceListLayout
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
-import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import com.saschl.cameragps.service.AssociatedDeviceCompat
 import com.saschl.cameragps.ui.AssociatedDevicesList
 import com.saschl.cameragps.ui.getPermissionDescription
@@ -181,14 +181,14 @@ private fun MissingPermissionsCard(description: String, onOpenSettings: () -> Un
             )
             Text(
                 text = stringResource(Res.string.permissions_missing_title),
-                style = AlphaTextStyles.buttonLarge,
+                style = AlphaType.Label,
                 color = AlphaTheme.colors.onSurface,
                 modifier = Modifier.weight(1f),
             )
         }
         Text(
             text = description,
-            style = AlphaTextStyles.dialogBody,
+            style = AlphaType.Body,
             color = AlphaTheme.colors.onSurfaceVariant,
         )
         CapsuleButton(

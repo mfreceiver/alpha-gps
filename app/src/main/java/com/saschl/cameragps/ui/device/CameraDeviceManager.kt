@@ -45,8 +45,8 @@ import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
 import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
 import com.sasch.cameragps.sharednew.ui.device.autoOpenDeviceAddress
-import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import com.sasch.cameragps.sharednew.whatsnew.WhatsNewDialog
 import com.sasch.cameragps.sharednew.whatsnew.WhatsNewState
 import com.saschl.cameragps.AppServices
@@ -335,7 +335,7 @@ fun CameraDeviceManager(
                         ).forEach { line ->
                             Text(
                                 text = line,
-                                style = AlphaTextStyles.dialogBody,
+                                style = AlphaType.Body,
                                 color = AlphaTheme.colors.onSurfaceVariant,
                             )
                         }
