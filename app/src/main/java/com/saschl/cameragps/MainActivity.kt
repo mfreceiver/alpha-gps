@@ -209,6 +209,14 @@ class MainActivity : AppCompatActivity() {
                             whatsNew = whatsNew,
                             onBackClick = {
                                 popBackStackIfPossible()
+                            },
+                            // Help and the activity log are top-level destinations: Back from
+                            // them returns to Settings.
+                            onHelpClick = {
+                                backStack.add(AppDestination.Help)
+                            },
+                            onLogsClick = {
+                                backStack.add(AppDestination.Logs)
                             }
                         )
                     }
@@ -245,14 +253,8 @@ class MainActivity : AppCompatActivity() {
                                 onSettingsClick = {
                                     backStack.add(AppDestination.Settings)
                                 },
-                                onHelpClick = {
-                                    backStack.add(AppDestination.Help)
-                                },
                                 onTroubleshootingClick = {
                                     backStack.add(AppDestination.Troubleshooting)
-                                },
-                                onLogsClick = {
-                                    backStack.add(AppDestination.Logs)
                                 }
                             )
                         }                    }
