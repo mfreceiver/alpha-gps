@@ -6,16 +6,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassRadio
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 
 /** One single-choice row (≥ 48 dp, the whole row selects) for settings cards and dialogs. */
 @Composable
@@ -34,18 +34,18 @@ fun SharedRadioOption(
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RadioButton(selected = selected, onClick = null)
+        GlassRadio(selected = selected, onClick = null)
         Column(Modifier.padding(start = 12.dp)) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.bodyLarge,
-                color = AlphaTheme.colors.onSurface,
+                style = AlphaType.Body,
+                color = AlphaTheme.colors.textPrimary,
             )
             if (description != null) {
                 Text(
                     text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AlphaTheme.colors.onSurfaceVariant,
+                    style = AlphaType.Caption,
+                    color = AlphaTheme.colors.textSecondary,
                 )
             }
         }

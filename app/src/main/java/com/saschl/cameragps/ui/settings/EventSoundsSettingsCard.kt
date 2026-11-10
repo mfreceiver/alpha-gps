@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -57,6 +56,7 @@ import com.sasch.cameragps.sharednew.ui.settings.SharedRadioOption
 import com.sasch.cameragps.sharednew.ui.settings.SharedToggleRow
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import com.saschl.cameragps.notification.NotificationsHelper
 import com.saschl.cameragps.service.TransmissionSoundEvent
 import com.saschl.cameragps.service.TransmissionSoundMode
@@ -129,8 +129,8 @@ internal fun EventSoundsSettingsCard() {
     Column {
         Text(
             text = stringResource(Res.string.event_sounds_description),
-            style = MaterialTheme.typography.bodyMedium,
-            color = AlphaTheme.colors.onSurfaceVariant,
+            style = AlphaType.Body,
+            color = AlphaTheme.colors.textSecondary,
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
@@ -147,8 +147,8 @@ internal fun EventSoundsSettingsCard() {
 
         Text(
             text = stringResource(Res.string.event_sounds_title),
-            style = MaterialTheme.typography.labelLarge,
-            color = AlphaTheme.colors.onSurfaceVariant,
+            style = AlphaType.Label,
+            color = AlphaTheme.colors.textSecondary,
             modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
         )
 
@@ -173,8 +173,8 @@ internal fun EventSoundsSettingsCard() {
 
         Text(
             text = stringResource(Res.string.event_sounds_notification_channels_title),
-            style = MaterialTheme.typography.labelLarge,
-            color = AlphaTheme.colors.onSurfaceVariant,
+            style = AlphaType.Label,
+            color = AlphaTheme.colors.textSecondary,
             modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
         )
 
@@ -285,14 +285,14 @@ private fun SettingsActionRow(
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.bodyLarge,
-            color = AlphaTheme.colors.onSurface,
+            style = AlphaType.Label,
+            color = AlphaTheme.colors.textPrimary,
             modifier = Modifier.weight(1f),
         )
         Icon(
             painter = painterResource(Res.drawable.keyboard_arrow_right_24px),
             contentDescription = null,
-            tint = AlphaTheme.colors.onSurfaceVariant
+            tint = AlphaTheme.colors.textSecondary,
         )
     }
 }

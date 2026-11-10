@@ -1,7 +1,6 @@
 package com.saschl.cameragps.ui.settings
 
 import android.content.Intent
-import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -22,6 +21,8 @@ import cameragps.sharednew.generated.resources.reset_welcome
 import cameragps.sharednew.generated.resources.will_show_welcome
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSnackbarHost
+import com.sasch.cameragps.sharednew.ui.components.glass.rememberGlassSnackbarHostState
 import com.sasch.cameragps.sharednew.ui.settings.SharedToggleRow
 import com.saschl.cameragps.service.LocationSenderService
 import com.saschl.cameragps.utils.PreferencesManager
@@ -34,6 +35,9 @@ internal fun AppControlsCard(
 ) {
     val context = LocalContext.current
     val willShowWelcomeText = stringResource(Res.string.will_show_welcome)
+    // In-page confirmation (no system Toast window); the host draws into the page's GlassBackground.
+    val snackbar = rememberGlassSnackbarHostState()
+    GlassSnackbarHost(snackbar)
 
     SettingsCard(title = stringResource(Res.string.app_controls)) {
         SharedToggleRow(
@@ -80,7 +84,7 @@ internal fun AppControlsCard(
         CapsuleButton(
             text = stringResource(Res.string.reset_welcome),
             onClick = {
-                Toast.makeText(context, willShowWelcomeText, Toast.LENGTH_SHORT).show()
+                snackbar.show(willShowWelcomeText)
                 PreferencesManager.showFirstLaunch(context)
                 PreferencesManager.setPermissionsIgnored(context, false)
             },
