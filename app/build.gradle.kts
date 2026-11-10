@@ -92,7 +92,7 @@ android {
 
     flavorDimensions += "distribution"
     productFlavors {
-        // Play Store build: GMS fused location, Play in-app review.
+        // Play Store build: GMS fused location.
         create("gplay") {
             dimension = "distribution"
             isDefault = true
@@ -156,8 +156,6 @@ dependencies {
 
     // Proprietary bits stay out of the foss (F-Droid) flavor.
     "gplayImplementation"(libs.google.play.services.location)
-    "gplayImplementation"(libs.review)
-    "gplayImplementation"(libs.review.ktx)
 
     implementation(libs.material)
 

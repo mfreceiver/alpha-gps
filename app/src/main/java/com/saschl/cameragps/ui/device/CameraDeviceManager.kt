@@ -9,13 +9,9 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.location.LocationManager
 import android.os.Build
-import androidx.activity.compose.LocalActivity
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -32,20 +28,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
-import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.dismiss_button
-import cameragps.sharednew.generated.resources.donation_dialog_confirm
-import cameragps.sharednew.generated.resources.donation_dialog_dismiss
-import cameragps.sharednew.generated.resources.donation_dialog_message
-import cameragps.sharednew.generated.resources.donation_dialog_title
 import cameragps.sharednew.generated.resources.guide_open_button
 import cameragps.sharednew.generated.resources.pairing_failed_device_message
 import cameragps.sharednew.generated.resources.pairing_failed_hint_camera_pairing
@@ -67,8 +57,6 @@ import com.saschl.cameragps.service.coordinator.DeviceRemovalCoordinator
 import com.saschl.cameragps.service.getAssociatedDevices
 import com.saschl.cameragps.ui.EnhancedLocationPermissionBox
 import com.saschl.cameragps.ui.pairing.startDevicePresenceObservation
-import com.saschl.cameragps.ui.review.launchInAppReviewIfDue
-import com.saschl.cameragps.utils.PreferencesManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -79,8 +67,6 @@ import timber.log.Timber
 fun CameraDeviceManager(
     whatsNew: WhatsNewState? = null,
     startupPromptActive: Boolean = false,
-    forceShowDonationDialogOnEnter: Boolean = false,
-    onForceDonationDialogConsumed: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onHelpClick: () -> Unit = {},
     onTroubleshootingClick: () -> Unit = {},
@@ -94,8 +80,6 @@ fun CameraDeviceManager(
     ).cameraDeviceDao()
     val adapter = context.getSystemService<BluetoothManager>()?.adapter
     val locationManager = context.getSystemService<LocationManager>()
-
-    val activity = LocalActivity.current
 
     val lifecycleOwner = LocalLifecycleOwner.current
     val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
@@ -139,8 +123,6 @@ fun CameraDeviceManager(
         )
     }
 
-    var isReviewFlowActive by remember { mutableStateOf(false) }
-    var showDonationDialog by remember { mutableStateOf(false) }
     val pairingFailedAddress by AppServices.from(context).pairingFailedDevice.collectAsState()
     // Suppresses re-showing the pairing-failure dialog for the same device: the failed
     // camera keeps auto-reconnecting and may exhaust its pairing retries repeatedly.
@@ -164,52 +146,6 @@ fun CameraDeviceManager(
                     deviceEnabled = true,
                 )
             )
-        }
-    }
-
-    LaunchedEffect(lifecycleState, startupPromptActive, whatsNew?.pending) {
-        if (SCREENSHOT_MODE || startupPromptActive || whatsNew?.pending == true) return@LaunchedEffect
-        if (associatedDevices.isNotEmpty() && lifecycleState == Lifecycle.State.RESUMED) {
-            // Due-date/count checks live in the flavor hook; no-op in foss.
-            launchInAppReviewIfDue(context, activity) { isReviewFlowActive = it }
-        }
-    }
-
-    LaunchedEffect(
-        lifecycleState,
-        associatedDevices,
-        isReviewFlowActive,
-        startupPromptActive,
-        whatsNew?.pending
-    ) {
-        if (SCREENSHOT_MODE || startupPromptActive || whatsNew?.pending == true) return@LaunchedEffect
-        if (!isReviewFlowActive &&
-            associatedDevices.isNotEmpty() &&
-            PreferencesManager.donationHintLastShownDaysAgo(
-                context.applicationContext,
-                true
-            ) >= 30 &&
-            lifecycleState == Lifecycle.State.RESUMED &&
-            PreferencesManager.donationHintShownTimes(context.applicationContext) < 1
-        ) {
-            PreferencesManager.setDonationHintShownNow(context.applicationContext)
-            PreferencesManager.increaseDonationHintShownTimes(context.applicationContext)
-            showDonationDialog = true
-        }
-    }
-
-    LaunchedEffect(
-        forceShowDonationDialogOnEnter,
-        lifecycleState,
-        showDonationDialog,
-        startupPromptActive,
-        whatsNew?.pending
-    ) {
-        if (SCREENSHOT_MODE || startupPromptActive || whatsNew?.pending == true) return@LaunchedEffect
-        if (!forceShowDonationDialogOnEnter || showDonationDialog) return@LaunchedEffect
-        if (lifecycleState == Lifecycle.State.RESUMED) {
-            showDonationDialog = true
-            onForceDonationDialogConsumed()
         }
     }
 
@@ -248,8 +184,7 @@ fun CameraDeviceManager(
     }
 
     if (!SCREENSHOT_MODE && whatsNew?.pending == true && !startupPromptActive &&
-        lifecycleState == Lifecycle.State.RESUMED && !isReviewFlowActive &&
-        !showDonationDialog && selectedDevice == null &&
+        lifecycleState == Lifecycle.State.RESUMED && selectedDevice == null &&
         (pairingFailedAddress == null || pairingFailedAddress == dismissedPairingFailedAddress)
     ) {
         whatsNew.release?.let { WhatsNewDialog(it, onDismiss = whatsNew::dismiss) }
@@ -369,14 +304,6 @@ fun CameraDeviceManager(
                     }
             }
         }
-        if (isReviewFlowActive) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .clickable(enabled = false) { }
-            )
-        }
 
         pairingFailedAddress
             ?.takeIf { !SCREENSHOT_MODE && it != dismissedPairingFailedAddress }
@@ -420,30 +347,5 @@ fun CameraDeviceManager(
                     }
                 )
             }
-
-        if (showDonationDialog) {
-            AlertDialog(
-                onDismissRequest = { showDonationDialog = false },
-                title = { Text(text = stringResource(Res.string.donation_dialog_title)) },
-                text = { Text(text = stringResource(Res.string.donation_dialog_message)) },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            showDonationDialog = false
-                            val intent = Intent(Intent.ACTION_VIEW, BUY_ME_A_COFFEE_URL.toUri())
-                            runCatching { context.startActivity(intent) }
-                                .onFailure { Timber.w(it, "Failed to open donation link") }
-                        }
-                    ) { Text(text = stringResource(Res.string.donation_dialog_confirm)) }
-                },
-                dismissButton = {
-                    TextButton(onClick = {
-                        showDonationDialog = false
-                    }) { Text(text = stringResource(Res.string.donation_dialog_dismiss)) }
-                }
-            )
-        }
     }
 }
-
-private const val BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/wj8tism4dq"

@@ -184,12 +184,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        var forceDonationDialogThisLaunch by remember {
-            mutableStateOf(
-                PreferencesManager.consumeForceDonationDialogOnNextAppStart(context)
-            )
-        }
-
         NavDisplay(
             backStack = backStack,
             onBack = {
@@ -248,10 +242,6 @@ class MainActivity : AppCompatActivity() {
                         EnhancedLocationPermissionBox {
                             CameraDeviceManager(
                                 whatsNew = whatsNew,
-                                forceShowDonationDialogOnEnter = forceDonationDialogThisLaunch,
-                                onForceDonationDialogConsumed = {
-                                    forceDonationDialogThisLaunch = false
-                                },
                                 onSettingsClick = {
                                     backStack.add(AppDestination.Settings)
                                 },
