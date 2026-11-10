@@ -2,16 +2,12 @@ package com.saschl.cameragps.service
 
 import android.content.Intent
 import com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants
-import com.sasch.cameragps.sharednew.bluetooth.coordinator.RemoteCommand
 import java.util.Locale
 
 class ServiceCommandRouter {
     companion object {
         const val ACTION_DEVICE_DISAPPEARED = "com.saschl.cameragps.ACTION_DEVICE_DISAPPEARED"
         const val ACTION_DISCONNECT_DEVICE = "com.saschl.cameragps.ACTION_DISCONNECT_DEVICE"
-
-        /** Extra holding a [RemoteCommand] enum name for [SonyBluetoothConstants.ACTION_SEND_REMOTE_COMMAND]. */
-        const val EXTRA_REMOTE_COMMAND = "remoteCommand"
     }
 
     fun route(intent: Intent?): ServiceCommand {
@@ -31,19 +27,6 @@ class ServiceCommandRouter {
                 ServiceCommand.Ignore("Disconnect ignored because address is missing")
             } else {
                 ServiceCommand.Disconnect(address)
-            }
-        }
-
-        if (action == SonyBluetoothConstants.ACTION_SEND_REMOTE_COMMAND) {
-            val command = RemoteCommand.fromName(intent.getStringExtra(EXTRA_REMOTE_COMMAND))
-            return when {
-                address == null ->
-                    ServiceCommand.Ignore("Remote command ignored because address is missing")
-
-                command == null ->
-                    ServiceCommand.Ignore("Remote command ignored because command is missing or unknown")
-
-                else -> ServiceCommand.SendRemoteCommand(address, command)
             }
         }
 

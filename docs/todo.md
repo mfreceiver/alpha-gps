@@ -40,6 +40,11 @@
 - 验收：断言在 `closeAndJoin` 之前；删掉 `downloadOriginalBatch` 里的 `recordBatchSummary(null)` 时该测试必须失败（mutation 自验）。
 - 依据：sol 对 910aa05 的复核（测试覆盖真实性缺口，非生产 bug）。
 
+### 4. 清理第 2 步：iOS 目录删除 + donation/review 残留字符串
+- 做什么：整体删除 `sharednew/src/iosMain`、`iosTest`、`iosApp`（iOS 目标已禁用）；随之删除仅 iOS 使用的 sharednew 资源与代码：`composeResources` 中 `donation_dialog_*` 4 个、`tip_jar_*` 7 个字符串（values 与 values-zh-rCN 同步）、`sharednew/src/commonMain/.../review/ReviewPromptController.kt`（Android 生产零引用）、`IosReview*` 相关；随后评估合并 gplay/foss flavor。另：`app/.../ui/device/ScreenshotMockData.kt` 此前被误判为死物，实际 `SCREENSHOT_MODE`/`mockDevices` 被 CameraDeviceManager.kt 与 AssociatedDevicesList.kt 引用，不可删。
+- 验收：`git grep -nI -e donation -e tip_jar -e InAppReview -e ReviewHint -- app sharednew/src` 零命中（帮助页手动 Buy Me a Coffee 链接除外）；EN/zh-rCN key 集合一致；删后清理 sharednew/build 的 compose 资源生成目录再验证。
+- 依据：清理第 1 步（6b50114/5970a86 及快门广播死链提交）实测 grep：上述字符串与 ReviewPromptController 仅 iosMain/iosTest 引用。
+
 ## P3
 
 ### 6. 补测：队列 Closed → download 报 Protocol

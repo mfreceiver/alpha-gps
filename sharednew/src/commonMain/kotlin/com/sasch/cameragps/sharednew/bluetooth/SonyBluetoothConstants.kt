@@ -40,7 +40,6 @@ object SonyBluetoothConstants {
     val CCCD_UUID = "00002902-0000-1000-8000-00805f9b34fb"
 
     const val ACTION_REQUEST_SHUTDOWN = "com.saschl.cameragps.ACTION_REQUEST_SHUTDOWN"
-    const val ACTION_SEND_REMOTE_COMMAND = "com.saschl.cameragps.ACTION_SEND_REMOTE_COMMAND"
 
     // ATT error codes indicating a pairing/encryption problem (same values on Android GATT)
     const val ATT_ERROR_INSUFFICIENT_AUTHENTICATION = 5
