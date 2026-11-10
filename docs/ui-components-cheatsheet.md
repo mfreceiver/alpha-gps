@@ -23,7 +23,7 @@
 | `AlphaType.Mono` | 12/16 Monospace | 日志、许可证全文 |
 
 - letterSpacing 全部 0。`MaterialTheme.typography` 的槽已映射到同 6 档（display*/headline*/titleLarge→Title，titleMedium→Heading，titleSmall/labelLarge→Label，bodyLarge/bodyMedium→Body，bodySmall/labelMedium→Caption，labelSmall→Tag），所以未迁移/第三方组件不会"长回"M3 默认大小——但**新代码不要再写 `MaterialTheme.typography`**。
-- `AlphaTextStyles.*` 是过渡别名（topBarTitle=Title、dialogTitle=Heading、dialogBody=Body、button*=Label、statusValue=Label、statusLabel=Caption、tag=Tag），最后一批迁移完删除；迁移时直接换成 `AlphaType.*`。
+- 过渡别名 `AlphaTextStyles` 已删除（0.3.0）；旧调用对应关系：topBarTitle→Title、dialogTitle→Heading、dialogBody→Body、button*→Label、statusValue→Label、statusLabel→Caption、tag→Tag。
 - 旧 → 新对照：`headlineSmall/titleLarge` → Title；`titleMedium` → Heading；`bodyLarge/bodyMedium` → Body；`labelLarge` → Label；`bodySmall/labelMedium` → Caption；`labelSmall` → Tag；`fontSize = 12.sp, fontFamily = Monospace` → Mono。
 
 ## 2. 颜色角色：`AlphaTheme.colors`

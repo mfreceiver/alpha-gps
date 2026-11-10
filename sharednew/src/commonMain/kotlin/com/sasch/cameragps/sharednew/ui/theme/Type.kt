@@ -64,21 +64,3 @@ val AlphaMaterialTypography = Typography(
     labelMedium = AlphaType.Caption,
     labelSmall = AlphaType.Tag,
 )
-
-/**
- * **Transitional aliases** of the pre-0.3.0 component styles, each now pointing at its [AlphaType]
- * tier (audit §3.5 mapping). Pages still using them keep compiling and already render in the new
- * tiers; migrate call sites to [AlphaType] directly — this object is deleted once no page uses it.
- */
-object AlphaTextStyles {
-    val topBarTitle: TextStyle get() = AlphaType.Title
-    val dialogTitle: TextStyle get() = AlphaType.Heading
-    val dialogBody: TextStyle get() = AlphaType.Body
-    val button: TextStyle get() = AlphaType.Label
-    val buttonSmall: TextStyle get() = AlphaType.Label
-    val buttonLarge: TextStyle get() = AlphaType.Label
-    val buttonHero: TextStyle get() = AlphaType.Label
-    val statusValue: TextStyle get() = AlphaType.Label
-    val statusLabel: TextStyle get() = AlphaType.Caption
-    val tag: TextStyle get() = AlphaType.Tag
-}
