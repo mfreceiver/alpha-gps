@@ -28,7 +28,7 @@ AlphaGPS 的原创项目图标：**取景框四角**（相机取景）+ **定位
 
 ## 原创声明
 
-本项目以 GPL-3.0 授权。这些图标由 mfreceiver 为 AlphaGPS 原创绘制（手写 SVG 路径），不取自仓库现有的 `icon.svg` 或任何第三方素材，随本项目以 GPL-3.0 发布。
+本项目以 GPL-3.0 授权。这些图标由 mfreceiver 为 AlphaGPS 原创绘制（手写 SVG 路径），不取自上游旧 `icon.svg`（已随 W1 清理删除）或任何第三方素材，随本项目以 GPL-3.0 发布。
 
 ## 导出 PNG
 
@@ -56,7 +56,7 @@ inkscape docs/brand/alpha-gps-icon.svg --export-type=png --export-width=512 --ex
 
 1. 用 Android Studio「Vector Asset」或 `svg2vectordrawable` 把三个 108×108 SVG 转成 VectorDrawable XML，替换 `drawable/ic_launcher_background.xml`、`drawable/ic_launcher_foreground.xml`，另外新增 `drawable/ic_launcher_monochrome.xml`。转换后检查渐变是否保留（VectorDrawable 支持 `<gradient>`，需 `aapt:attr` 内联写法）。
 2. 把 `mipmap-anydpi/ic_launcher.xml` 的 `<monochrome>` 改为引用 `@drawable/ic_launcher_monochrome`。minSdk 是 26，因此 `mipmap-anydpi` 与 `mipmap-anydpi-v26` 效果相同。
-3. 视需要同步更新 `fastlane/metadata/android/en-US/images/icon.png`（用 `alpha-gps-icon.svg` 导出 512px）。
+3. iOS AppIcon（`iosApp/alphagps/Assets.xcassets/AppIcon.appiconset/icon.png`）已由 W1 直接替换为新图标，无需再处理；上游 `fastlane/` 目录已删除。
 4. 跑 `AGENTS.md` 中的验证命令，并在真机上检查圆形、圆角方形和主题图标三种形态。
 
 开始做这项工作时，按 `AGENTS.md` 的待办纪律写进 `docs/todo.md`。
