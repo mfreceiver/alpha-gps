@@ -14,9 +14,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -43,9 +41,12 @@ import com.sasch.cameragps.sharednew.remote.wifi.UNKNOWN_DATE_KEY
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoBrowserState
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressCircle
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressSize
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassSurface
 import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import com.sasch.cameragps.sharednew.ui.theme.GlassLevel
 import com.sasch.cameragps.sharednew.ui.theme.WindowClass
 import com.sasch.cameragps.sharednew.ui.theme.currentWindowClass
@@ -100,7 +101,7 @@ internal fun WifiPhotoDateList(
         browser.failed -> CenteredMessage(modifier) {
             Text(
                 stringResource(Res.string.wifi_remote_browser_failed), textAlign = TextAlign.Center,
-                color = AlphaTheme.colors.onSurfaceVariant
+                style = AlphaType.Body, color = AlphaTheme.colors.textSecondary
             )
             CapsuleButton(
                 text = stringResource(Res.string.mw_dates_reload), onClick = onRetry,
@@ -109,18 +110,21 @@ internal fun WifiPhotoDateList(
         }
 
         browser.loading && browser.dates.isEmpty() -> CenteredMessage(modifier) {
-            CircularProgressIndicator(Modifier.size(32.dp))
-            Text(stringResource(Res.string.wifi_remote_dates_loading), color = AlphaTheme.colors.onSurfaceVariant)
+            GlassProgressCircle(size = GlassProgressSize.Large)
+            Text(
+                stringResource(Res.string.wifi_remote_dates_loading),
+                style = AlphaType.Body, color = AlphaTheme.colors.textSecondary,
+            )
         }
 
         browser.dates.isEmpty() -> CenteredMessage(modifier) {
             Icon(
                 painterResource(Res.drawable.mw_photo_library_24px), null,
-                tint = AlphaTheme.colors.onSurfaceVariant, modifier = Modifier.size(48.dp)
+                tint = AlphaTheme.colors.textSecondary, modifier = Modifier.size(48.dp)
             )
             Text(
                 stringResource(Res.string.wifi_remote_dates_empty), textAlign = TextAlign.Center,
-                color = AlphaTheme.colors.onSurfaceVariant
+                style = AlphaType.Body, color = AlphaTheme.colors.textSecondary
             )
         }
 
@@ -158,16 +162,16 @@ private fun DateRow(group: DateGroup, enabled: Boolean, onOpen: (String) -> Unit
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(dateGroupLabel(group), style = MaterialTheme.typography.titleMedium)
+                Text(dateGroupLabel(group), style = AlphaType.Heading, color = AlphaTheme.colors.textPrimary)
                 val subtitle = daySubtitle(group.key)
                 if (subtitle.isNotEmpty()) Text(
-                    subtitle, style = MaterialTheme.typography.bodySmall,
-                    color = AlphaTheme.colors.onSurfaceVariant
+                    subtitle, style = AlphaType.Caption,
+                    color = AlphaTheme.colors.textSecondary
                 )
             }
             Text(
                 stringResource(Res.string.wifi_remote_dates_count, group.count),
-                style = MaterialTheme.typography.bodyMedium, color = AlphaTheme.colors.onSurfaceVariant
+                style = AlphaType.Body, color = AlphaTheme.colors.textSecondary
             )
         }
     }
