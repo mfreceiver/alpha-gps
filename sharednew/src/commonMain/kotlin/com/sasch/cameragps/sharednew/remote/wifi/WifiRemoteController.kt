@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
@@ -158,6 +159,18 @@ class WifiRemoteController internal constructor(
 
     /** Wi-Fi photo-browser thumbnail diagnostics (see ThumbnailDiagnostics.kt). */
     private val thumbLog = logging("AlphaThumb")
+
+    /**
+     * Letterbox scans run here, detached from every loader (a SupervisorJob: a scan can never fail a
+     * loader) and tracked in [diagnosticJobs] (main-thread only) so [cancelDiagnostics] can stop them.
+     */
+    private val diagnosticsScope = CoroutineScope(SupervisorJob() + diagnosticsDispatcher)
+    private val diagnosticJobs = ArrayList<Job>()
+
+    private fun cancelDiagnostics() {
+        diagnosticJobs.forEach { it.cancel() }
+        diagnosticJobs.clear()
+    }
     private var attempt = 0
     val supportsAutomaticConnection get() = automaticConnector != null
     val supportsManualSetup get() = manualSetupConnector != null
@@ -640,6 +653,7 @@ class WifiRemoteController internal constructor(
             }
             pageStats.takeSummary()?.let { line -> thumbLog.i { line } }
         } catch (cancelled: CancellationException) {
+            cancelDiagnostics()
             pageStats.takeCancelled()?.let { line -> thumbLog.i { line } }
             throw cancelled
         } finally {
@@ -684,11 +698,15 @@ class WifiRemoteController internal constructor(
         }
         _thumbnails.value += photo.handle to bitmap
         // Fire-and-forget: the pixel scan runs away from this loader so it can never delay the
-        // next thumbnail; the log line is the only side effect. It is a child of the loader (hence of the browsing session and its generation): a day
-        // switch, refresh or disconnect cancels the loader and with it the scan, so it can never
-        // outlive the screen it describes.
-        if (index < 3) CoroutineScope(currentCoroutineContext() + diagnosticsDispatcher).launch {
-            logLetterboxDiagnostics(pageOffset, index, photo.handle, bitmap)
+        // next thumbnail, and nothing ever waits for it (it runs on a worker thread, so a loader that
+        // had to join it would be held up by real time). It is not orphaned either: every cancel of a
+        // loader (day switch, refresh, disconnect) and the end of the session cancel the scans still
+        // pending via [cancelDiagnostics]; the log line is the only side effect.
+        if (index < 3) {
+            diagnosticJobs.removeAll { it.isCompleted }
+            diagnosticJobs += diagnosticsScope.launch {
+                logLetterboxDiagnostics(pageOffset, index, photo.handle, bitmap)
+            }
         }
         return ThumbnailFetch(fetchedBytes, itemMs)
     }
@@ -796,6 +814,7 @@ class WifiRemoteController internal constructor(
                 }
             }
         } catch (cancelled: CancellationException) {
+            cancelDiagnostics()
             pageStats.takeCancelled()?.let { line -> thumbLog.i { line } }
             throw cancelled
         } finally {
@@ -1184,6 +1203,7 @@ class WifiRemoteController internal constructor(
             log.w { "Wi-Fi remote attempt=$attempt failed: ${failed.message}" }
         }
         finally {
+            cancelDiagnostics()
             sessionScope = null
             activeConnection = null
             previewJob = null
