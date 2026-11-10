@@ -544,8 +544,6 @@
     <string name="mw_connect_tap_to_return">轻触任意处返回</string>
     <string name="mw_connect_grant">去授权</string>
     <string name="mw_dates_reload">重新读取</string>
-    <string name="mw_dates_today">今天</string>
-    <string name="mw_dates_yesterday">昨天</string>
     <string name="mw_weekday_1">周一</string>
     <string name="mw_weekday_2">周二</string>
     <string name="mw_weekday_3">周三</string>

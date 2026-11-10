@@ -19,15 +19,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.mw_dates_reload
-import cameragps.sharednew.generated.resources.mw_dates_today
-import cameragps.sharednew.generated.resources.mw_dates_yesterday
 import cameragps.sharednew.generated.resources.mw_photo_library_24px
 import cameragps.sharednew.generated.resources.mw_weekday_1
 import cameragps.sharednew.generated.resources.mw_weekday_2
@@ -52,12 +49,8 @@ import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.sasch.cameragps.sharednew.ui.theme.GlassLevel
 import com.sasch.cameragps.sharednew.ui.theme.WindowClass
 import com.sasch.cameragps.sharednew.ui.theme.currentWindowClass
-import kotlinx.datetime.LocalDate
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.todayIn
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
-import kotlin.time.Clock
 
 /** The label of a day: the camera-local date as recorded, or "Unknown date" for the leftover group. */
 @Composable
@@ -80,16 +73,11 @@ private fun weekdayLabel(weekday: Int): String = stringResource(
     }
 )
 
-/** "Mon · Today", "Tue", or empty for the unknown group. */
+/** Only the weekday ("Mon"), or empty for the unknown group — no relative words like "today". */
 @Composable
-private fun daySubtitle(key: String, today: LocalDate): String {
+private fun daySubtitle(key: String): String {
     val weekday = dateKeyWeekday(key) ?: return ""
-    val relation = when (dayRelation(key, today)) {
-        DayRelation.Today -> stringResource(Res.string.mw_dates_today)
-        DayRelation.Yesterday -> stringResource(Res.string.mw_dates_yesterday)
-        DayRelation.Other -> null
-    }
-    return listOfNotNull(weekdayLabel(weekday), relation).joinToString(" · ")
+    return weekdayLabel(weekday)
 }
 
 /**
@@ -137,7 +125,6 @@ internal fun WifiPhotoDateList(
         }
 
         else -> {
-            val today = remember { Clock.System.todayIn(TimeZone.currentSystemDefault()) }
             val columns = if (windowClass == WindowClass.Landscape) 2 else 1
             Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                 LazyVerticalGrid(
@@ -150,7 +137,7 @@ internal fun WifiPhotoDateList(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(browser.dates, key = { it.key }) { group ->
-                        DateRow(group, today, enabled, onOpen)
+                        DateRow(group, enabled, onOpen)
                     }
                 }
             }
@@ -159,7 +146,7 @@ internal fun WifiPhotoDateList(
 }
 
 @Composable
-private fun DateRow(group: DateGroup, today: LocalDate, enabled: Boolean, onOpen: (String) -> Unit) {
+private fun DateRow(group: DateGroup, enabled: Boolean, onOpen: (String) -> Unit) {
     GlassSurface(
         modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
         level = GlassLevel.Card,
@@ -172,7 +159,7 @@ private fun DateRow(group: DateGroup, today: LocalDate, enabled: Boolean, onOpen
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(dateGroupLabel(group), style = MaterialTheme.typography.titleMedium)
-                val subtitle = daySubtitle(group.key, today)
+                val subtitle = daySubtitle(group.key)
                 if (subtitle.isNotEmpty()) Text(
                     subtitle, style = MaterialTheme.typography.bodySmall,
                     color = AlphaTheme.colors.onSurfaceVariant

@@ -573,8 +573,6 @@
     <string name="mw_connect_tap_to_return">Tap anywhere to return</string>
     <string name="mw_connect_grant">Grant permission</string>
     <string name="mw_dates_reload">Read again</string>
-    <string name="mw_dates_today">Today</string>
-    <string name="mw_dates_yesterday">Yesterday</string>
     <string name="mw_weekday_1">Mon</string>
     <string name="mw_weekday_2">Tue</string>
     <string name="mw_weekday_3">Wed</string>
