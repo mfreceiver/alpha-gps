@@ -43,6 +43,8 @@ class LocationTransmissionManager(
     private val scope: CoroutineScope,
     /** iOS: app-level transmission toggle. Android: always allowed. */
     private val isTransmissionAllowed: () -> Boolean = { true },
+    /** Called with the device identifier each time a location packet was accepted into the BLE queue (never the packet). */
+    private val onPacketQueued: (String) -> Unit = {},
 ) {
     private val log = logging()
 
@@ -184,6 +186,7 @@ class LocationTransmissionManager(
         )
         val queued =
             port.writeCharacteristic(identifier, SonyBluetoothConstants.CHARACTERISTIC_UUID, packet)
+        if (queued) onPacketQueued(identifier)
         if (queued && _isActive.value) _isTransmitting.value = true
     }
 

@@ -53,8 +53,24 @@ class BleOperationQueue(
     private val discoveryTimeoutMs: Long = DEFAULT_DISCOVERY_TIMEOUT_MS,
     /** Recheck eligibility at execution time: queued location packets may have become obsolete. */
     private val shouldExecute: (String, BleOperation) -> Boolean = { _, _ -> true },
+    /**
+     * Observer for every operation that was actually started: called once with its final result
+     * (including [BleOperationResult.Cancelled] when the link dropped mid-flight). Operations
+     * skipped by [shouldExecute] are not reported. Must not throw or block; exceptions are swallowed.
+     */
+    private val onOperationFinished: (String, BleOperation, BleOperationResult) -> Unit = { _, _, _ -> },
 ) {
     private val log = logging()
+
+    private fun notifyFinished(identifier: String, operation: BleOperation, result: BleOperationResult) {
+        try {
+            onOperationFinished(identifier, operation, result)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Observers are diagnostics only and must never break the operation lane.
+        }
+    }
 
     private class QueuedOperation(
         val operation: BleOperation,
@@ -77,6 +93,7 @@ class BleOperationQueue(
                 if (!initiate(identifier, queued.operation)) {
                     log.w { "Could not initiate ${queued.operation.describe()} on $identifier" }
                     queued.result.complete(BleOperationResult.NotInitiated)
+                    notifyFinished(identifier, queued.operation, BleOperationResult.NotInitiated)
                     continue
                 }
 
@@ -84,9 +101,11 @@ class BleOperationQueue(
                 try {
                     val result = withTimeout(timeoutFor(queued.operation)) { queued.result.await() }
                     log.d { "${queued.operation.describe()} on $identifier: ${result.describe()}" }
+                    notifyFinished(identifier, queued.operation, result)
                 } catch (_: TimeoutCancellationException) {
                     log.w { "${queued.operation.describe()} on $identifier timed out" }
                     queued.result.complete(BleOperationResult.Timeout)
+                    notifyFinished(identifier, queued.operation, BleOperationResult.Timeout)
                 } finally {
                     val operation = queued.operation
                     if (operation is BleOperation.Read) {

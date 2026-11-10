@@ -244,6 +244,12 @@ class AndroidBleTransport(
         return connection.isActive && connection.gatt.requestMtu(mtu)
     }
 
+    @SuppressLint("MissingPermission")
+    override fun initiateReadRssi(identifier: String): Boolean {
+        val connection = registry.entry(identifier.uppercase()) ?: return false
+        return connection.isActive && connection.gatt.readRemoteRssi()
+    }
+
     override fun hasCharacteristic(identifier: String, characteristicUuid: String): Boolean {
         val connection = registry.entry(identifier.uppercase()) ?: return false
         return findCharacteristic(connection.gatt, characteristicUuid) != null
@@ -365,6 +371,13 @@ class AndroidBleTransport(
             registry.update(gatt, address) {
                 if (status == BluetoothGatt.GATT_SUCCESS) it.mtu = mtu
                 eventChannel.trySend(BleTransportEvent.MtuChanged(address, mtu, statusOf(status)))
+            }
+        }
+
+        override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
+            val address = gatt.device.address.uppercase()
+            registry.update(gatt, address) {
+                eventChannel.trySend(BleTransportEvent.RssiRead(address, rssi, statusOf(status)))
             }
         }
 

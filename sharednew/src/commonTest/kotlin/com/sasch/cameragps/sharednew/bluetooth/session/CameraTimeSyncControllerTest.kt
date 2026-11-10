@@ -6,6 +6,7 @@ import com.diamondedge.logging.Logger
 import com.diamondedge.logging.PlatformLogger
 import com.sasch.cameragps.sharednew.bluetooth.BleSessionPhase
 import com.sasch.cameragps.sharednew.bluetooth.coordinator.LocationPacketBuilder
+import com.sasch.cameragps.sharednew.bluetooth.status.TimeSyncOutcome
 import com.sasch.cameragps.sharednew.bluetooth.transport.BleOperation
 import com.sasch.cameragps.sharednew.bluetooth.transport.BleOperationQueue
 import com.sasch.cameragps.sharednew.bluetooth.transport.BleOperationStatus
@@ -433,13 +434,72 @@ class CameraTimeSyncControllerTest {
         assertFalse(logger.messages.any { "camera applied" in it })
     }
 
+    @Test
+    fun statusReportsInProgressThenAppliedOrRejectedWithReason() = runTest {
+        val applied = Fixture(backgroundScope)
+        applied.start("A")
+        runCurrent()
+        assertEquals(listOf<Pair<TimeSyncOutcome, Long?>>(TimeSyncOutcome.InProgress to null), applied.outcomes)
+        applied.notify("A", result())
+        runCurrent()
+        assertEquals(TimeSyncOutcome.Applied to null, applied.outcomes.last())
+
+        val rejected = Fixture(backgroundScope)
+        rejected.start("B")
+        runCurrent()
+        rejected.notify("B", result(false, 2))
+        runCurrent()
+        assertEquals(
+            listOf<Pair<TimeSyncOutcome, Long?>>(
+                TimeSyncOutcome.InProgress to null,
+                TimeSyncOutcome.Rejected to 2L,
+            ),
+            rejected.outcomes,
+        )
+    }
+
+    @Test
+    fun statusReportsUnconfirmedWhenCameraNeverAnswersOrCannotNotify() = runTest {
+        val silent = Fixture(backgroundScope)
+        silent.start("A")
+        runCurrent()
+        advanceTimeBy(30_001)
+        runCurrent()
+        assertEquals(TimeSyncOutcome.Unconfirmed, silent.outcomes.last().first)
+
+        val noSubscription = Fixture(backgroundScope)
+        noSubscription.transport.subscribeStatus = BleOperationStatus.AuthError
+        noSubscription.start("B")
+        runCurrent()
+        assertEquals(TimeSyncOutcome.Unconfirmed, noSubscription.outcomes.last().first)
+    }
+
+    @Test
+    fun statusReportsUnsupportedAndFailedWrite() = runTest {
+        val unsupported = Fixture(backgroundScope)
+        unsupported.transport.support = byteArrayOf(3, 0, 4, 0)
+        unsupported.start("A")
+        runCurrent()
+        assertEquals(listOf<Pair<TimeSyncOutcome, Long?>>(TimeSyncOutcome.Unsupported to null), unsupported.outcomes)
+
+        val failed = Fixture(backgroundScope)
+        failed.transport.writeStatus = BleOperationStatus.Failure
+        failed.start("B")
+        runCurrent()
+        assertEquals(TimeSyncOutcome.Failed, failed.outcomes.last().first)
+    }
+
     private class Fixture(scope: CoroutineScope) {
         val registry = CameraSessionRegistry()
         val transport = Transport()
         val queue = BleOperationQueue(transport, scope)
         val port = QueuedBleGattPort(queue, transport, registry)
         var time = CameraTime(Instant.parse("2026-10-25T00:59:59Z"), 60, 60)
-        val controller = CameraTimeSyncController(port, registry, scope) { time }
+        val outcomes = mutableListOf<Pair<TimeSyncOutcome, Long?>>()
+        val controller = CameraTimeSyncController(
+            port, registry, scope,
+            onStatus = { _, outcome, reason -> outcomes += outcome to reason },
+        ) { time }
         val completed = mutableListOf<String>()
 
         init {
