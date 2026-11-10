@@ -1,33 +1,29 @@
 package com.sasch.cameragps.sharednew.ui.help
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
@@ -66,6 +62,13 @@ import cameragps.sharednew.generated.resources.guide_startup_step_disable
 import cameragps.sharednew.generated.resources.guide_startup_title
 import com.sasch.cameragps.sharednew.ui.components.ScreenContent
 import com.sasch.cameragps.sharednew.ui.components.ScrollbarLazyColumn
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassInsetBlock
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSurface
+import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
+import com.sasch.cameragps.sharednew.ui.theme.GlassLevel
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -84,10 +87,13 @@ private data class GuideSection(
 /**
  * Visual step-by-step guide for the most common issues, shared by both platforms.
  * Each platform wraps it in its own scaffold (see the Android `TroubleshootingScreen`
- * and `IosTroubleshootingScreen`).
+ * and `IosTroubleshootingScreen`); hoist [listState] to drive the top bar's `scrolled`.
  */
 @Composable
-fun TroubleshootingGuideContent(innerPadding: PaddingValues) {
+fun TroubleshootingGuideContent(
+    innerPadding: PaddingValues,
+    listState: LazyListState = rememberLazyListState(),
+) {
     val sections = listOf(
         GuideSection(
             title = Res.string.guide_location_link_title,
@@ -165,15 +171,16 @@ fun TroubleshootingGuideContent(innerPadding: PaddingValues) {
         ScrollbarLazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(vertical = 16.dp),
+                .padding(start = AlphaDimens.screenMargin),
+            state = listState,
+            verticalArrangement = Arrangement.spacedBy(AlphaDimens.cardGap),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp),
         ) {
             item {
                 Text(
                     text = stringResource(Res.string.guide_intro),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = AlphaType.Body,
+                    color = AlphaTheme.colors.textSecondary,
                 )
             }
             itemsIndexed(sections) { index, section ->
@@ -183,104 +190,87 @@ fun TroubleshootingGuideContent(innerPadding: PaddingValues) {
     }
 }
 
+/** One problem: a G1 card with a numbered heading, its explanation, the steps and doc links. */
 @Composable
 private fun GuideSectionCard(number: Int, section: GuideSection) {
     val uriHandler = LocalUriHandler.current
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = number.toString(),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = stringResource(section.title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
+    val colors = AlphaTheme.colors
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // Section number on a small floating glass disc (decorative: the order is the list order).
+            GlassSurface(
+                modifier = Modifier.size(32.dp).clearAndSetSemantics { },
+                level = GlassLevel.Float,
+                shape = CircleShape,
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = number.toString(), style = AlphaType.Label, color = colors.accent)
             }
-            Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = stringResource(section.description),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = stringResource(section.title),
+                style = AlphaType.Heading,
+                color = colors.textPrimary,
+                modifier = Modifier.weight(1f).semantics { heading() },
             )
-            section.steps.forEachIndexed { index, step ->
-                Spacer(modifier = Modifier.height(12.dp))
-                GuideStepRow(number = index + 1, step = step)
-            }
-            if (section.links.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                section.links.forEach { (labelRes, url) ->
-                    Text(
-                        text = stringResource(labelRes),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        textDecoration = TextDecoration.Underline,
-                        modifier = Modifier
-                            .clickable { uriHandler.openUri(url) }
-                            .padding(vertical = 4.dp),
-                    )
-                }
+        }
+        Text(
+            text = stringResource(section.description),
+            style = AlphaType.Body,
+            color = colors.textSecondary,
+        )
+        section.steps.forEachIndexed { index, step ->
+            GuideStepRow(number = index + 1, step = step)
+        }
+        section.links.forEach { (labelRes, url) ->
+            val label = stringResource(labelRes)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = AlphaDimens.minTouchTarget)
+                    .clickable(role = Role.Button) { uriHandler.openUri(url) },
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text(
+                    text = label,
+                    style = AlphaType.Label,
+                    color = colors.accent,
+                    textDecoration = TextDecoration.Underline,
+                )
             }
         }
     }
 }
 
+/** A numbered step; a camera / phone menu path is shown below it on an inset block. */
 @Composable
 private fun GuideStepRow(number: Int, step: GuideStep) {
-    Row {
-        Box(
-            modifier = Modifier
-                .padding(top = 2.dp)
-                .size(20.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.secondaryContainer),
+    val colors = AlphaTheme.colors
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        GlassInsetBlock(
+            modifier = Modifier.size(24.dp),
+            contentPadding = PaddingValues(0.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = number.toString(),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
+            Text(text = number.toString(), style = AlphaType.Tag, color = colors.textSecondary)
         }
-        Spacer(modifier = Modifier.width(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             Text(
                 text = stringResource(step.text),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = AlphaType.Body,
+                color = colors.textPrimary,
             )
             step.menuPath?.let { pathRes ->
-                Spacer(modifier = Modifier.height(6.dp))
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                ) {
+                GlassInsetBlock(contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
                     Text(
                         text = stringResource(pathRes),
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        style = AlphaType.Caption,
+                        color = colors.textPrimary,
                     )
                 }
             }
