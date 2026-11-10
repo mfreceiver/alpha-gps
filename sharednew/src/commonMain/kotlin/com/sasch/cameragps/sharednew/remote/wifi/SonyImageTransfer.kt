@@ -110,6 +110,7 @@ internal class SonyImageTransfer(
     private val store: CameraImageStore,
 ) {
     private val log = logging()
+    private val catalogLog = logging("AlphaCatalog")
     private val catalog = if (events != null && SonyContentCatalog.supported(capabilities))
         SonyContentCatalog(commands, capabilities, events) else null
     val supported: Boolean = catalog != null || listOf(
@@ -155,10 +156,12 @@ internal class SonyImageTransfer(
 
     private suspend fun enumerate() {
         check(supported)
+        val started = TimeSource.Monotonic.markNow()
         catalog?.let {
             snapshot = CatalogSnapshot.EMPTY
             pagePhotos = emptyList()
             snapshot = CatalogSnapshot.of(it.enumerate())
+            logCatalog(started)
             return
         }
         if (!modeRequested) {
@@ -194,6 +197,15 @@ internal class SonyImageTransfer(
         }
         snapshot = CatalogSnapshot.of(groupCameraPhotos(photos.sortedByDescending { it.capturedAt }))
         pagePhotos = emptyList()
+        logCatalog(started)
+    }
+
+    /** "AlphaCatalog" diagnostics: counts and wall time only, never file names or handles. */
+    private fun logCatalog(started: TimeSource.Monotonic.ValueTimeMark) {
+        catalogLog.i {
+            "loaded entries=${snapshot.dates.sumOf { it.count }} dates=${snapshot.dates.size} " +
+                "ms=${started.elapsedNow().inWholeMilliseconds}"
+        }
     }
 
     suspend fun page(offset: Int): CameraPhotoPage {

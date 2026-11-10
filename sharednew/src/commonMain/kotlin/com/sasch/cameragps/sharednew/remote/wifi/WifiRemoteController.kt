@@ -1120,7 +1120,7 @@ class WifiRemoteController internal constructor(
 
     private fun startPreview(id: String, connection: WifiRemoteConnection, parent: CoroutineScope) {
         if (!connection.hasLiveViewStream) {
-            log.i { "Wi-Fi live view unavailable for this connection (browse-only?)" }
+            log.i { "Wi-Fi live view not used for this connection (photo transfer only)" }
             updateReady(id) { it.copy(hasLiveView = false, preview = WifiPreviewStatus.Unavailable) }
             return
         }
