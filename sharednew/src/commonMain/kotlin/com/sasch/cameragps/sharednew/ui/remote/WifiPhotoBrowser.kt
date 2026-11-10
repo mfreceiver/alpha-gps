@@ -505,7 +505,7 @@ private fun PhotoGridTile(
             if (options.showSize) {
                 // The same saved-aware plan as the floating button: the tag shows what a download
                 // will fetch; a capture whose files are all saved shows its saved state instead of a
-                // size (nothing more will be downloaded), so a selection's tags add up to the button.
+                // size (nothing more will be downloaded); the tags' byte counts match the button's plan.
                 val size = captureDownloadSize(capture, policy, saved)
                 when (size.reason) {
                     WifiSkipReason.AlreadySaved -> InfoTag(
