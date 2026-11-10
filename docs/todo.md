@@ -48,10 +48,15 @@
 - 验收：若处置，需与 AppExitGateTest 全部既有反例测试兼容；若评估后决定接受风险，把依据迁到 docs/ 风险文档并在决策提交里删除本条。
 - 依据：sol 对 9b436d9 的复核（P2-2 设计处置结论）。
 
-### 10. Info 里的电池电量
-- 做什么：设计要求"仅 Wi-Fi 会话查 1 次电池并标注获取时间"，但 sharednew 内没有任何电池查询协议（grep battery 仅帮助文案），本轮已砍掉。需先确认 Sony PTP/Camera Remote 是否提供电池属性，再接入 Info（缓存 {value,obtainedAt,cameraId}，失败显示未知）。
-- 验收：有协议依据；Info 不建 Wi-Fi 会话；无会话时显示未知。
-- 依据：本轮 E 提交实施时核实源码无电池协议。
+### 10. Info 里的电池电量：实机核实 + UI 接入
+- 做什么：数据层已实现（best-effort）：Wi-Fi/PTP 会话就绪后读 1 次，标准 `0x5001`（DeviceInfo 的 DevicePropertiesSupported 列出时走 GetDevicePropValue 0x1015）否则 Sony 扩展 `0xD218`（ExtDeviceInfo 列出时走 0x9209），结果经 `CameraLiveStatus.battery`（{percent, obtainedAtMillis, cameraId}，`freshness`：≤30min 新鲜 / ≤24h 灰显带时间 / 更久显示"—"）暴露。依据仅来自 libgphoto2 的 USB Sony PTP 属性表（0x5001 UINT8 0..100；0xD218 INT8 −1=未知），**Wi-Fi 传输模式下相机是否列出/允许读取尚未验证**。待办：①实机（至少 ILCE-7M4）抓 `Wi-Fi PTP` 日志确认 DeviceInfo 的 DevicePropertiesSupported 与 ExtDeviceInfo 是否含 0x5001/0xD218、读数是否与相机屏幕一致；②若两者都不可读，删除 `SonyBatteryReader` 并在本条记录结论；③设备页接入（UI 批次）。
+- 验收：实机读数与相机一致或确认不可得；设备页不建 Wi-Fi 会话；无缓存时显示未知。
+- 依据：`sharednew/.../remote/wifi/SonyBatteryReader.kt`；libgphoto2 `camlibs/ptp2/ptp.h`（`PTP_DPC_BatteryLevel`、`PTP_DPC_SONY_BatteryLevel`）；ui-v3 设计"待实机核实"。
+
+### 15. 实机核实：M3 状态数据层与 M8 照片元数据（UI 接入前）
+- 做什么：①RSSI：`readRemoteRssi` 每 10s 一次在 Transmitting 时是否影响 GPS 写入/耗电，Android 回调 status 是否恒为 0；②EXIF：`GetPartialObject(0x101b)`/`0x9211`/catalog `0x923d` 读原片前 64KB 在 ILCE-7M4/其它机型是否稳定，EXIF 是否在首个 APP1 且 ≤64KB（否则退化为 Unavailable，需评估读 preview 字节）；③v4 目录记录 `take(8)`（评分/保护标志）布局未知，v4 路径目前不暴露分辨率与保护状态（`PhotoMetadata.width/height/isProtected` 为 null），待抓包确定字节布局后再解析；v3 路径取自 PTP ObjectInfo（ProtectionStatus@6、ImagePixWidth@26、ImagePixHeight@30）；④GPS 统计：「已写入」= GATT 写确认（相机 ATT 应答）次数，「入队」= 已入队发送次数，两者在断连/超时时可能不等。
+- 验收：逐项在 ≥1 台实机上确认或记录例外；不稳定项在数据层降级而非报错。
+- 依据：本批 M3/M8 实现自报风险；`docs/wifi-architecture.md` 新增"Live status and photo metadata"一节。
 
 ### 11. "连接中…" 无取消
 - 做什么：设备页连接按钮 Connecting 态目前双禁用（不可重复点也不可取消）；评估加"取消连接"（enabled=false→close GATT 的反向路径）并处理超时（CONNECT_SETTLE 8s 仅解除 UI pending，不中止系统 autoConnect）。
