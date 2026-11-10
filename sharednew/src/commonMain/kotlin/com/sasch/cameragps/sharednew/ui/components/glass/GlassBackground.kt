@@ -15,9 +15,11 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.sasch.cameragps.sharednew.ui.theme.AlphaColors
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.BackdropOrb
+import com.sasch.cameragps.sharednew.ui.theme.tintOver
 
 /**
- * Screen root for the v3 look: draws the G0 backdrop (base colour + three soft glows), makes it —
+ * Screen root for the v3 look: draws the G0 backdrop (base colour + coloured light orbs), makes it —
  * and, unless [contentIsBackdropSource] is false, the page content — the blur source of every glass
  * surface below, and hosts in-tree overlays ([CapsuleDialog] and other G3 layers) above the content
  * so they can blur it.
@@ -58,22 +60,60 @@ fun GlassBackground(
     }
 }
 
-/** Draws the G0 backdrop (design `lib3.backdrop`): base colour plus three radial glows. */
+/**
+ * Draws the G0 backdrop: base colour plus the theme's low-contrast coloured light orbs
+ * ([AlphaColors.orbs], D1). The orbs give the backdrop blur something to blur — without them a
+ * glass card over a flat colour reads as a plain translucent fill.
+ */
 fun DrawScope.drawGlassBackdrop(colors: AlphaColors) {
     drawRect(colors.background)
-    val w = size.width
-    val h = size.height
-    glow(colors.glowBlue, Offset(w * 0.12f, h * 0.10f), w * 0.78f, colors.glowAlphas[0])
-    glow(colors.glowViolet, Offset(w * 1.02f, h * 0.46f), w * 0.70f, colors.glowAlphas[1])
-    glow(colors.glowTeal, Offset(w * 0.20f, h * 0.95f), w * 0.75f, colors.glowAlphas[2])
+    colors.orbs.forEach { drawOrb(it) }
 }
 
-private fun DrawScope.glow(color: Color, center: Offset, radius: Float, alpha: Float) {
-    if (radius <= 0f) return
-    drawCircle(
-        brush = Brush.radialGradient(listOf(color, color.copy(alpha = 0f)), center = center, radius = radius),
-        radius = radius,
+/** Centre and radius in px of [orb] on a canvas of [width] × [height] (pure, unit-tested). */
+fun orbGeometry(orb: BackdropOrb, width: Float, height: Float): Pair<Offset, Float> =
+    Offset(width * orb.x, height * orb.y) to orb.radius * minOf(width, height)
+
+/** Radial stop of an orb's soft body … */
+private const val ORB_BODY_STOP = 0.45f
+
+/** … and its relative opacity there: a lit orb rather than a linear smear. */
+private const val ORB_BODY_ALPHA = 0.55f
+
+/**
+ * Pure radial profile of an orb: relative opacity at [distance] (fraction of the radius) — 1 at the
+ * centre, [ORB_BODY_ALPHA] at [ORB_BODY_STOP], 0 at and beyond the edge. Mirrors the gradient stops
+ * drawn by [drawGlassBackdrop].
+ */
+fun orbIntensity(distance: Float): Float = when {
+    distance.isNaN() || distance >= 1f -> 0f
+    distance <= 0f -> 1f
+    distance < ORB_BODY_STOP -> 1f + (ORB_BODY_ALPHA - 1f) * distance / ORB_BODY_STOP
+    else -> ORB_BODY_ALPHA * (1f - (distance - ORB_BODY_STOP) / (1f - ORB_BODY_STOP))
+}
+
+/**
+ * Pure colour of the G0 backdrop at ([x], [y]) px on a [width] × [height] canvas — the background
+ * with every orb composited in drawing order. Used by the contrast tests to sample the real
+ * backdrop instead of a guessed worst case.
+ */
+fun backdropColorAt(colors: AlphaColors, x: Float, y: Float, width: Float, height: Float): Color =
+    colors.orbs.fold(colors.background) { acc, orb ->
+        val (center, radius) = orbGeometry(orb, width, height)
+        if (radius <= 0f) return@fold acc
+        val d = (Offset(x, y) - center).getDistance() / radius
+        tintOver(orb.color.copy(alpha = orb.alpha * orbIntensity(d)), acc)
+    }
+
+private fun DrawScope.drawOrb(orb: BackdropOrb) {
+    val (center, radius) = orbGeometry(orb, size.width, size.height)
+    if (radius <= 0f || orb.alpha <= 0f) return
+    val brush = Brush.radialGradient(
+        0f to orb.color,
+        ORB_BODY_STOP to orb.color.copy(alpha = ORB_BODY_ALPHA),
+        1f to orb.color.copy(alpha = 0f),
         center = center,
-        alpha = alpha,
+        radius = radius,
     )
+    drawCircle(brush = brush, radius = radius, center = center, alpha = orb.alpha)
 }

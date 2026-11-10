@@ -39,7 +39,7 @@ fun CameraGpsTheme(
     ) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme,
-            typography = Typography,
+            typography = AlphaMaterialTypography,
             content = content,
         )
     }

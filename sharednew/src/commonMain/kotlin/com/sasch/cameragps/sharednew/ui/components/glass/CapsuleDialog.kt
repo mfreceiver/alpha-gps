@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
@@ -53,8 +54,8 @@ import cameragps.sharednew.generated.resources.close_24px
 import cameragps.sharednew.generated.resources.m0_dialog_close
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
-import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import com.sasch.cameragps.sharednew.ui.theme.GlassLevel
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
@@ -146,8 +147,8 @@ fun CapsuleDialog(
         if (message != null) {
             Text(
                 message,
-                style = AlphaTextStyles.dialogBody,
-                color = AlphaTheme.colors.onSurfaceVariant,
+                style = AlphaType.Body,
+                color = AlphaTheme.colors.textSecondary,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -330,9 +331,9 @@ private fun CapsuleDialogPanel(
 private fun DialogTitle(title: String, centered: Boolean, modifier: Modifier) {
     Text(
         title,
-        style = AlphaTextStyles.dialogTitle,
-        color = AlphaTheme.colors.onSurface,
+        style = AlphaType.Heading,
+        color = AlphaTheme.colors.textPrimary,
         textAlign = if (centered) TextAlign.Center else TextAlign.Start,
-        modifier = modifier,
+        modifier = modifier.semantics { heading() },
     )
 }
