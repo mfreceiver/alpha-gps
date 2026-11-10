@@ -3,6 +3,7 @@ package com.sasch.cameragps.sharednew.bluetooth.session
 import com.diamondedge.logging.logging
 import com.sasch.cameragps.sharednew.bluetooth.coordinator.LocationPacketBuilder
 import com.sasch.cameragps.sharednew.bluetooth.coordinator.PlatformTimeZoneInfo
+import com.sasch.cameragps.sharednew.bluetooth.status.TimeSyncOutcome
 import com.sasch.cameragps.sharednew.bluetooth.transport.BleOperation
 import com.sasch.cameragps.sharednew.bluetooth.transport.BleOperationResult
 import kotlinx.coroutines.CancellationException
@@ -25,6 +26,8 @@ internal class CameraTimeSyncController(
     private val port: QueuedBleGattPort,
     private val registry: CameraSessionRegistry,
     private val scope: CoroutineScope,
+    /** Observer of the latest correction result per device: (identifier, outcome, camera reject reason). */
+    private val onStatus: (String, TimeSyncOutcome, Long?) -> Unit = { _, _, _ -> },
     private val currentTime: () -> CameraTime = CameraTime::current,
 ) {
     private val log = logging()
@@ -144,6 +147,7 @@ internal class CameraTimeSyncController(
                 throw cancelled
             } catch (failure: Exception) {
                 log.e(failure) { "Time sync[$id]: failed" }
+                onStatus(id, TimeSyncOutcome.Failed, null)
             } finally {
                 session.pendingResult = null
                 if (isActive) completeWrite()
@@ -169,6 +173,7 @@ internal class CameraTimeSyncController(
             !port.hasCharacteristic(id, Sony.TIME_SYNC_CHARACTERISTIC_UUID)
         ) {
             log.i { "Time sync[$id]: direct time setting unsupported; location time data remains independent" }
+            onStatus(id, TimeSyncOutcome.Unsupported, null)
             return
         }
 
@@ -183,6 +188,7 @@ internal class CameraTimeSyncController(
 
         val time = currentTime()
         session.lastOffsets = time.offsets
+        onStatus(id, TimeSyncOutcome.InProgress, null)
         // Arm before writing: cameras can notify before the GATT write callback arrives.
         val pending =
             if (session.subscribed) CompletableDeferred<CameraTimeSettingResult>() else null
@@ -199,18 +205,29 @@ internal class CameraTimeSyncController(
         onWriteComplete()
         if (write !is BleOperationResult.Success) {
             log.w { "Time sync[$id]: write failed ($write); camera time was not confirmed" }
+            onStatus(id, TimeSyncOutcome.Failed, null)
             return
         }
         if (pending == null) {
             log.w { "Time sync[$id]: write delivered; camera result unavailable" }
+            onStatus(id, TimeSyncOutcome.Unconfirmed, null)
             return
         }
         // Creators' App allows 30 seconds for the camera's application-level result.
         val result = withTimeoutOrNull(30.seconds) { pending.await() }
         when {
-            result == null -> log.w { "Time sync[$id]: write delivered; camera result timed out" }
-            result.applied -> log.i { "Time sync[$id]: camera applied time/area" }
-            else -> log.w { "Time sync[$id]: camera rejected time/area (reason=${result.reason})" }
+            result == null -> {
+                log.w { "Time sync[$id]: write delivered; camera result timed out" }
+                onStatus(id, TimeSyncOutcome.Unconfirmed, null)
+            }
+            result.applied -> {
+                log.i { "Time sync[$id]: camera applied time/area" }
+                onStatus(id, TimeSyncOutcome.Applied, null)
+            }
+            else -> {
+                log.w { "Time sync[$id]: camera rejected time/area (reason=${result.reason})" }
+                onStatus(id, TimeSyncOutcome.Rejected, result.reason.toLong())
+            }
         }
     }
 }

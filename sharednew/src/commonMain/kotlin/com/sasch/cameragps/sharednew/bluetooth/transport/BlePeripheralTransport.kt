@@ -85,6 +85,17 @@ sealed interface BleTransportEvent {
         val characteristicUuid: String,
         val value: ByteArray,
     ) : BleTransportEvent
+
+    /**
+     * Result of a remote RSSI read ([BlePeripheralTransport.initiateReadRssi]). [rssi] is dBm and only
+     * meaningful when [status] is [BleOperationStatus.Success]. This is an HCI-level read: it never
+     * touches the ATT bearer and is not part of the [BleOperationQueue] lane.
+     */
+    data class RssiRead(
+        override val identifier: String,
+        val rssi: Int,
+        val status: BleOperationStatus,
+    ) : BleTransportEvent
 }
 
 /**
@@ -124,6 +135,13 @@ interface BlePeripheralTransport {
 
     /** The MTU the link currently uses, if the platform exposes it. Read-only: asking never sends a request. */
     fun currentMtu(identifier: String): Int? = null
+
+    /**
+     * Asks the controller for the link's current RSSI; the answer arrives as
+     * [BleTransportEvent.RssiRead]. Independent of the GATT operation lane, so it can never delay a
+     * location write. Returns false when unsupported or the link is gone.
+     */
+    fun initiateReadRssi(identifier: String): Boolean = false
 
     // ---- Operation initiation. Completion arrives via [events]. ----
     // Returning false means the operation could not even be started

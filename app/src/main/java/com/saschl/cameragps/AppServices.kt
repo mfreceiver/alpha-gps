@@ -15,6 +15,7 @@ import com.saschl.cameragps.service.coordinator.AppExitGate
 import com.saschl.cameragps.service.location.createLocationSource
 import com.saschl.cameragps.service.transport.AndroidBleTransport
 import com.saschl.cameragps.utils.PreferencesManager
+import com.saschl.cameragps.utils.SharedPrefsCameraStatusPersistence
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -57,6 +58,7 @@ class AppServices(context: Context) {
         // encryption is still re-establishing, and the retry queues behind it.
         // A 3s first delay would stall every reconnect handshake.
         pairingPolicy = PairingRetryPolicy(firstRetryDelayMs = 0),
+        statusPersistence = SharedPrefsCameraStatusPersistence(appContext),
     )
 
     /**
