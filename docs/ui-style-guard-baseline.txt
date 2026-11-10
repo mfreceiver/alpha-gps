@@ -1,0 +1,26 @@
+# ui_style_guard.sh 基线：<违规行数> <路径>。只允许下降；迁移完一个文件就删掉它的行。
+# 最后一批迁移后本文件应只剩注释，并以 --strict 运行守卫。
+4 app/src/main/java/com/saschl/cameragps/ui/about/AboutComponents.kt
+4 app/src/main/java/com/saschl/cameragps/ui/about/AboutScreen.kt
+2 app/src/main/java/com/saschl/cameragps/ui/about/LicensesScreen.kt
+2 app/src/main/java/com/saschl/cameragps/ui/about/PrivacyScreen.kt
+1 app/src/main/java/com/saschl/cameragps/ui/device/ScanForDevicesMenu.kt
+5 app/src/main/java/com/saschl/cameragps/ui/HelpScreen.kt
+13 app/src/main/java/com/saschl/cameragps/ui/PermissionBox.kt
+3 app/src/main/java/com/saschl/cameragps/ui/settings/BatteryOptimizationCard.kt
+4 app/src/main/java/com/saschl/cameragps/ui/settings/EventSoundsSettingsCard.kt
+2 app/src/main/java/com/saschl/cameragps/ui/settings/PhotoTransferSettingsCard.kt
+4 app/src/main/java/com/saschl/cameragps/ui/SystemStateWarnings.kt
+2 sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/device/DeviceInfoDialogs.kt
+4 sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/devicelist/SharedDeviceList.kt
+8 sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/help/TroubleshootingGuideScreen.kt
+4 sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/logs/SharedLogViewerScreen.kt
+4 sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/pairing/SharedPairingPreparationScreen.kt
+3 sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiConnectionOverlay.kt
+5 sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiPhotoBrowser.kt
+3 sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiPhotoDates.kt
+4 sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiPhotoTopBar.kt
+29 sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiPhotoViewer.kt
+2 sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/settings/SharedRadioOption.kt
+5 sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/settings/SharedSettingsCard.kt
+5 sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/welcome/SharedWelcomeScreen.kt
