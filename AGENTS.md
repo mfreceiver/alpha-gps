@@ -1,5 +1,12 @@
 # AGENTS.md（alpha-gps 定制版）
 
+## 项目定位与名称规范
+- 产品名一律 **AlphaGPS**（无连字符，A/G/P/S 大写，显示时区分大小写）。保持小写不动的只有：包名 `cn.vectory.alphagps`、仓库名 `alphagps`、文件名 `alpha-gps-*`。
+- 定位：向索尼 Alpha 相机经蓝牙写入 GPS 位置与时间 + 经相机 Wi-Fi 浏览/下载照片的个人定制版；**不涉及任何应用市场分发**（无 Google Play / F-Droid / App Store / Obtainium，商店徽章与 fastlane/website 素材已删除）。
+- 崩溃上报（Sentry）不用：W2 移除后应用完全不收集、不上传任何数据（见 privacy.md）。
+- iOS 目标默认禁用，源码保留。
+- `docs/brand/` 项目品牌图标（SVG 源，含导出方法）；`docs/design/` 界面设计方案（索引 `docs/design/README.md`，当前生效版本 v3）。
+
 ## 待办纪律
 - 待办唯一入口：`docs/todo.md`，**只放当前待完成**的事项。
 - 完成一项，在**同一次提交**中把对应条目从文件里删除；不打勾保留，不建“已完成”区。完成历史靠 git 记录。
