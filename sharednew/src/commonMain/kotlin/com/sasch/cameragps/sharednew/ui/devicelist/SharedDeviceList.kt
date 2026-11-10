@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,10 +31,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cameragps.sharednew.generated.resources.Res
@@ -130,12 +134,14 @@ fun SharedDeviceList(
     val savedDevices = devices.filter { it.isSaved }
     val nearbyDevices = devices.filter { !it.isSaved }
 
+    // The screen margin goes into the content padding (not an outer padding + scrollbar gutter):
+    // cards then span exactly the width of "Add camera" and the other header elements, and the
+    // scroll indicator is drawn inside the margin.
     ScrollbarLazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = AlphaDimens.screenMargin),
+        modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = contentPadding,
+        contentPadding = withScreenMargin(contentPadding, LocalLayoutDirection.current),
+        scrollbarGutter = 0.dp,
     ) {
         if (savedDevices.isNotEmpty()) {
             item(key = "header_saved") {
@@ -408,3 +414,15 @@ private fun DeviceCard(
         }
     }
 }
+
+/**
+ * [padding] plus the horizontal screen margin on both sides, so list rows line up with the
+ * full-width header elements of the device list (they all sit at [AlphaDimens.screenMargin]).
+ */
+internal fun withScreenMargin(padding: PaddingValues, layoutDirection: LayoutDirection): PaddingValues =
+    PaddingValues(
+        start = padding.calculateStartPadding(layoutDirection) + AlphaDimens.screenMargin,
+        top = padding.calculateTopPadding(),
+        end = padding.calculateEndPadding(layoutDirection) + AlphaDimens.screenMargin,
+        bottom = padding.calculateBottomPadding(),
+    )

@@ -15,22 +15,31 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 
-/** A lazy list with a persistent scroll indicator and a small gutter for it. */
+/**
+ * A lazy list with a persistent scroll indicator and a small end gutter for it.
+ *
+ * The gutter narrows the list's content on the end side. A list whose rows must line up with
+ * full-width elements outside the list (same screen margin on both sides) passes
+ * `scrollbarGutter = 0.dp` and puts its screen margin into [contentPadding] instead: the indicator
+ * is then drawn inside that margin and the rows keep the full width.
+ */
 @Composable
 fun ScrollbarLazyColumn(
     modifier: Modifier = Modifier,
     state: LazyListState = rememberLazyListState(),
     contentPadding: PaddingValues = PaddingValues(0.dp),
     verticalArrangement: Arrangement.Vertical = Arrangement.Top,
+    scrollbarGutter: Dp = 8.dp,
     content: LazyListScope.() -> Unit,
 ) {
     LazyColumn(
         modifier = modifier
             .verticalScrollbar(state.scrollIndicatorState)
-            .padding(end = 8.dp),
+            .padding(end = scrollbarGutter),
         state = state,
         contentPadding = contentPadding,
         verticalArrangement = verticalArrangement,
