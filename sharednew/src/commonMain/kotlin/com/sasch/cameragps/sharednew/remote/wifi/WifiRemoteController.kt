@@ -99,15 +99,20 @@ internal fun interface WifiRemoteConnector {
     suspend fun open(host: String, scope: CoroutineScope): WifiRemoteConnection
 }
 
-internal fun interface WifiAutomaticConnector {
+/**
+ * Deliberately not a `fun interface` and without a default for [phonePreconditions]: every
+ * implementation (including wrappers) must state whether it forwards the phone radio checks, so a
+ * wrapper can no longer silently drop them and bypass the controller's preflight.
+ */
+internal interface WifiAutomaticConnector {
     suspend fun open(identifier: String, scope: CoroutineScope, onPhase: (WifiRemotePhase) -> Unit): WifiRemoteConnection
 
     /**
-     * Phone-side preconditions the controller checks before anything else; null (default) when the
-     * connector has no radio to ask. [AutomaticWifiRemoteConnector] forwards its [WifiPreconditions]
+     * Phone-side preconditions the controller checks before anything else; null only when the
+     * connector has no radio to ask. [AutomaticWifiRemoteConnector] exposes its [WifiPreconditions]
      * so the controller can fail fast without touching the camera's BLE control takeover.
      */
-    val phonePreconditions: WifiPreconditions? get() = null
+    val phonePreconditions: WifiPreconditions?
 }
 
 internal interface WifiManualSetupConnector {

@@ -28,12 +28,26 @@ fun createAndroidWifiRemoteController(
     )
     return WifiRemoteController(scope, orchestrator.registry, connector,
         orchestrator::claimWifiControls, orchestrator::releaseWifiControls,
-        WifiAutomaticConnector { id, sessionScope, phase ->
-            try { automatic.open(id, sessionScope, phase) }
-            catch (_: SecurityException) { throw WifiRemoteConnectException(WifiRemoteFailure.NetworkPermissionDenied) }
-        },
+        AndroidWifiAutomaticConnector(automatic),
         onBatteryRead = orchestrator.liveStatus::onBattery,
     )
+}
+
+/**
+ * Production wrapper around the automatic connector: maps a missing runtime permission to
+ * [WifiRemoteFailure.NetworkPermissionDenied] and forwards [phonePreconditions] so the controller's
+ * preflight (before PreparingCamera / BLE claim) really runs on device.
+ */
+internal class AndroidWifiAutomaticConnector(
+    private val delegate: WifiAutomaticConnector,
+) : WifiAutomaticConnector {
+    override val phonePreconditions: WifiPreconditions? get() = delegate.phonePreconditions
+
+    override suspend fun open(
+        identifier: String, scope: CoroutineScope, onPhase: (WifiRemotePhase) -> Unit,
+    ): WifiRemoteConnection =
+        try { delegate.open(identifier, scope, onPhase) }
+        catch (_: SecurityException) { throw WifiRemoteConnectException(WifiRemoteFailure.NetworkPermissionDenied) }
 }
 
 /**
