@@ -50,7 +50,7 @@ android {
         // original com.saschl.cameragps. Namespace stays com.saschl.cameragps
         // so Kotlin packages / R class are untouched.
         applicationId = "cn.vectory.alphagps"
-        minSdk = 26
+        minSdk = 31
         targetSdk = 37
         versionCode = providers.gradleProperty("alphagps.versionCode").get().toInt()
         versionName = "0.1.3"
