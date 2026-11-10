@@ -12,11 +12,7 @@ import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -27,7 +23,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -37,6 +32,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.dismiss_button
 import cameragps.sharednew.generated.resources.guide_open_button
+import cameragps.sharednew.generated.resources.m2_error_24px
 import cameragps.sharednew.generated.resources.pairing_failed_device_message
 import cameragps.sharednew.generated.resources.pairing_failed_hint_camera_pairing
 import cameragps.sharednew.generated.resources.pairing_failed_hint_intro
@@ -46,7 +42,11 @@ import cameragps.sharednew.generated.resources.pairing_failed_title
 import com.sasch.cameragps.sharednew.database.LogDatabase
 import com.sasch.cameragps.sharednew.database.devices.CameraDevice
 import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
+import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
 import com.sasch.cameragps.sharednew.ui.device.autoOpenDeviceAddress
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.sasch.cameragps.sharednew.whatsnew.WhatsNewDialog
 import com.sasch.cameragps.sharednew.whatsnew.WhatsNewState
 import com.saschl.cameragps.AppServices
@@ -59,6 +59,7 @@ import com.saschl.cameragps.ui.EnhancedLocationPermissionBox
 import com.saschl.cameragps.ui.pairing.startDevicePresenceObservation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import timber.log.Timber
 
@@ -311,40 +312,39 @@ fun CameraDeviceManager(
                     .find { it.address.equals(failedAddress, ignoreCase = true) }
                     ?.name
                     ?: failedAddress
-                AlertDialog(
+                CapsuleDialog(
                     onDismissRequest = { dismissedPairingFailedAddress = failedAddress },
-                    title = { Text(text = stringResource(Res.string.pairing_failed_title)) },
-                    text = {
-                        Column(
-                            modifier = Modifier.verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = stringResource(
-                                    Res.string.pairing_failed_device_message,
-                                    failedDeviceName
-                                )
-                            )
-                            Text(text = stringResource(Res.string.pairing_failed_hint_intro))
-                            Text(text = stringResource(Res.string.pairing_failed_hint_pairing_mode))
-                            Text(text = stringResource(Res.string.pairing_failed_hint_camera_pairing))
-                            Text(text = stringResource(Res.string.pairing_failed_hint_phone_pairing))
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                dismissedPairingFailedAddress = failedAddress
-                                onTroubleshootingClick()
-                            }
-                        ) { Text(text = stringResource(Res.string.guide_open_button)) }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = {
+                    title = stringResource(Res.string.pairing_failed_title),
+                    icon = painterResource(Res.drawable.m2_error_24px),
+                    iconTint = AlphaTheme.colors.error,
+                    confirm = DialogAction(
+                        label = stringResource(Res.string.guide_open_button),
+                        onClick = {
                             dismissedPairingFailedAddress = failedAddress
-                        }) { Text(text = stringResource(Res.string.dismiss_button)) }
+                            onTroubleshootingClick()
+                        },
+                    ),
+                    dismiss = DialogAction(
+                        label = stringResource(Res.string.dismiss_button),
+                        onClick = { dismissedPairingFailedAddress = failedAddress },
+                    ),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            stringResource(Res.string.pairing_failed_device_message, failedDeviceName),
+                            stringResource(Res.string.pairing_failed_hint_intro),
+                            stringResource(Res.string.pairing_failed_hint_pairing_mode),
+                            stringResource(Res.string.pairing_failed_hint_camera_pairing),
+                            stringResource(Res.string.pairing_failed_hint_phone_pairing),
+                        ).forEach { line ->
+                            Text(
+                                text = line,
+                                style = AlphaTextStyles.dialogBody,
+                                color = AlphaTheme.colors.onSurfaceVariant,
+                            )
+                        }
                     }
-                )
+                }
             }
     }
 }

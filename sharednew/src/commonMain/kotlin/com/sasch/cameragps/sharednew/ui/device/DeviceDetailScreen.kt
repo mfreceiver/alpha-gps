@@ -1,68 +1,136 @@
 package com.sasch.cameragps.sharednew.ui.device
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.LifecycleStartEffect
 import cameragps.sharednew.generated.resources.Res
-import cameragps.sharednew.generated.resources.camera_24px
+import cameragps.sharednew.generated.resources.cancel
 import cameragps.sharednew.generated.resources.cancel_button
-import cameragps.sharednew.generated.resources.connected
 import cameragps.sharednew.generated.resources.device_connection_connect
-import cameragps.sharednew.generated.resources.device_connection_connecting
-import cameragps.sharednew.generated.resources.device_connection_disconnect
-import cameragps.sharednew.generated.resources.device_connection_disconnecting
-import cameragps.sharednew.generated.resources.device_connection_status
-import cameragps.sharednew.generated.resources.keyboard_arrow_right_24px
-import cameragps.sharednew.generated.resources.rename_camera_hint
-import cameragps.sharednew.generated.resources.rename_camera_label
-import cameragps.sharednew.generated.resources.rename_camera_save
-import cameragps.sharednew.generated.resources.rename_camera_title
-import cameragps.sharednew.generated.resources.tap_to_connect
-import cameragps.sharednew.generated.resources.wifi_remote_entry_hint
-import cameragps.sharednew.generated.resources.wifi_remote_title
-import com.sasch.cameragps.sharednew.ui.components.ScreenContent
+import cameragps.sharednew.generated.resources.m2_age_days
+import cameragps.sharednew.generated.resources.m2_age_hours
+import cameragps.sharednew.generated.resources.m2_age_just_now
+import cameragps.sharednew.generated.resources.m2_age_minutes
+import cameragps.sharednew.generated.resources.m2_battery_unknown
+import cameragps.sharednew.generated.resources.m2_battery_value
+import cameragps.sharednew.generated.resources.m2_battery_value_hours
+import cameragps.sharednew.generated.resources.m2_battery_value_minutes
+import cameragps.sharednew.generated.resources.m2_bluetooth_24px
+import cameragps.sharednew.generated.resources.m2_bluetooth_disabled_24px
+import cameragps.sharednew.generated.resources.m2_bt_auto_reconnect
+import cameragps.sharednew.generated.resources.m2_bt_connected
+import cameragps.sharednew.generated.resources.m2_bt_connecting
+import cameragps.sharednew.generated.resources.m2_bt_disconnected
+import cameragps.sharednew.generated.resources.m2_bt_disconnecting
+import cameragps.sharednew.generated.resources.m2_bt_manual_off
+import cameragps.sharednew.generated.resources.m2_card_location
+import cameragps.sharednew.generated.resources.m2_cell_last_write
+import cameragps.sharednew.generated.resources.m2_cell_signal
+import cameragps.sharednew.generated.resources.m2_cell_written
+import cameragps.sharednew.generated.resources.m2_disconnect_bt
+import cameragps.sharednew.generated.resources.m2_disconnect_bt_confirm
+import cameragps.sharednew.generated.resources.m2_disconnect_bt_message
+import cameragps.sharednew.generated.resources.m2_disconnect_bt_title
+import cameragps.sharednew.generated.resources.m2_error_24px
+import cameragps.sharednew.generated.resources.m2_photo_library_24px
+import cameragps.sharednew.generated.resources.m2_photo_transfer
+import cameragps.sharednew.generated.resources.m2_photo_transfer_bt_failed
+import cameragps.sharednew.generated.resources.m2_photo_transfer_hint
+import cameragps.sharednew.generated.resources.m2_photo_transfer_hint_bt_first
+import cameragps.sharednew.generated.resources.m2_schedule_24px
+import cameragps.sharednew.generated.resources.m2_signal_24px
+import cameragps.sharednew.generated.resources.m2_signal_excellent
+import cameragps.sharednew.generated.resources.m2_signal_fair
+import cameragps.sharednew.generated.resources.m2_signal_good
+import cameragps.sharednew.generated.resources.m2_signal_poor
+import cameragps.sharednew.generated.resources.m2_time_sync_applied
+import cameragps.sharednew.generated.resources.m2_time_sync_failed
+import cameragps.sharednew.generated.resources.m2_time_sync_in_progress
+import cameragps.sharednew.generated.resources.m2_time_sync_not_run
+import cameragps.sharednew.generated.resources.m2_time_sync_rejected
+import cameragps.sharednew.generated.resources.m2_time_sync_unconfirmed
+import cameragps.sharednew.generated.resources.m2_time_sync_unsupported
+import cameragps.sharednew.generated.resources.m2_upload_24px
+import cameragps.sharednew.generated.resources.m2_value_none
+import com.sasch.cameragps.sharednew.bluetooth.status.CameraLiveStatus
+import com.sasch.cameragps.sharednew.bluetooth.status.SignalLevel
+import com.sasch.cameragps.sharednew.bluetooth.status.TimeSyncOutcome
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleSize
+import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
+import com.sasch.cameragps.sharednew.ui.components.glass.IconEmphasis
+import com.sasch.cameragps.sharednew.ui.components.glass.InfoTag
+import com.sasch.cameragps.sharednew.ui.components.glass.StatusItem
+import com.sasch.cameragps.sharednew.ui.components.glass.StatusLine
+import com.sasch.cameragps.sharednew.ui.components.glass.StatusRow
+import com.sasch.cameragps.sharednew.ui.components.glass.StatusTone
+import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.WindowClass
+import com.sasch.cameragps.sharednew.ui.theme.windowClassOf
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import kotlin.time.Clock
 
 /**
- * Shared device detail content: camera name with its connection status, and one
- * large "photo transfer" entry pinned to the bottom (thumb reach). Platform hosts
- * wrap this with their own scaffold/toolbar (title, remove, info).
+ * Shared device page body (design v3, task M2). The host draws the top bar (title = camera name,
+ * Ⓘ) and the [com.sasch.cameragps.sharednew.ui.components.glass.GlassBackground].
  *
- * Auto time correction / auto area adjustment have no switches: they are kept on
- * automatically ([DeviceDetailViewModel.enforceAutoCorrection]).
+ * - Connection card: status line (Bluetooth state; while connected the time-correction state is
+ *   its supporting text) with the connection control in a fixed trailing slot — a small
+ *   disconnect icon (confirmed in a danger dialog), "Cancel" while connecting, "Connect" when off.
+ *   A manual disconnect is persisted by [DeviceDetailViewModel.disconnect]; nothing reconnects
+ *   until the user taps Connect.
+ * - Location card: one row of three cells (signal / written / last write).
+ * - "Photo transfer" pinned to the bottom: opens the Wi-Fi flow ([onWifiRemote]) once Bluetooth is
+ *   ready, connecting Bluetooth first when needed ([DeviceDetailViewModel.requestPhotoTransfer]).
+ *
+ * Auto time correction / auto area adjustment have no switches: they are kept on automatically
+ * ([DeviceDetailViewModel.enforceAutoCorrection]). The page never opens a Wi-Fi session on its
+ * own (the battery shown is whatever the last photo transfer cached).
  */
 @Composable
 fun DeviceDetailContent(
@@ -71,24 +139,34 @@ fun DeviceDetailContent(
     deviceName: String? = null,
     modifier: Modifier = Modifier,
     onDeviceReEnabled: (() -> Unit)? = null,
-    onPresentSystemRename: (() -> Unit)? = null,
-    renameEnabled: Boolean = true,
     onWifiRemote: (() -> Unit)? = null,
-    /** Android: show the connect/disconnect button under the status (iOS has no such control yet). */
-    connectionControls: Boolean = false,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
     val state = viewModel.uiState.collectAsState().value
     val sessions by viewModel.sessions.collectAsState()
     val session = sessions[deviceId.uppercase()]
     val status = deviceConnectionStatus(session)
     val pending by viewModel.pending.collectAsState()
+    val photoTransfer by viewModel.photoTransfer.collectAsState()
+    val live by remember(deviceId) { viewModel.liveStatus(deviceId) }.collectAsState(initial = null)
+    val now by produceState(Clock.System.now().toEpochMilliseconds()) {
+        while (true) {
+            delay(TICK_MILLIS)
+            value = Clock.System.now().toEpochMilliseconds()
+        }
+    }
+    var confirmDisconnect by rememberSaveable(deviceId) { mutableStateOf(false) }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         viewModel.refreshCameraSettings(deviceId)
     }
 
-    // Reload on a name change too: an iOS system rename lands asynchronously,
-    // through the accessory snapshot rather than through this screen.
+    // Signal polling only while the page is visible.
+    LifecycleStartEffect(deviceId) {
+        val release = viewModel.acquireSignalMonitoring(deviceId)
+        onStopOrDispose { release() }
+    }
+
     LaunchedEffect(deviceId, deviceName) {
         viewModel.load(deviceId, deviceName, onDeviceReEnabled)
     }
@@ -98,209 +176,322 @@ fun DeviceDetailContent(
         viewModel.enforceAutoCorrection(deviceId)
     }
 
-    ScreenContent(modifier = modifier) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
+    // Bluetooth became ready for a pending "Photo transfer" tap: hand over to the Wi-Fi flow.
+    LaunchedEffect(photoTransfer) {
+        if (photoTransfer == PhotoTransferEntry.Ready) {
+            viewModel.photoTransferOpened()
+            onWifiRemote?.invoke()
+        }
+    }
+
+    // Leaving the page drops a pending "connect, then open" (Bluetooth itself stays as it is).
+    DisposableEffect(deviceId) {
+        onDispose { viewModel.abandonPhotoTransfer() }
+    }
+
+    val connectionCard: @Composable () -> Unit = {
+        ConnectionCard(
+            headline = connectionHeadline(status, pending),
+            action = connectionAction(status, pending),
+            manuallyOff = !state.isDeviceEnabled,
+            live = live,
+            nowMillis = now,
+            onConnect = { viewModel.connect(deviceId) },
+            onCancelConnecting = { viewModel.cancelConnecting(deviceId) },
+            onDisconnect = { confirmDisconnect = true },
+        )
+    }
+    val locationCard: @Composable () -> Unit = { LocationCard(live = live, nowMillis = now) }
+    val photoEntry: @Composable (Modifier) -> Unit = { entryModifier ->
+        if (onWifiRemote != null) {
+            PhotoTransferEntryBlock(
+                entry = photoTransfer,
+                bluetoothReady = status == DeviceConnectionStatus.Connected,
+                enabled = pending != PendingConnection.Disconnecting,
+                onClick = { viewModel.requestPhotoTransfer(deviceId) },
+                modifier = entryModifier,
+            )
+        }
+    }
+
+    BoxWithConstraints(modifier.fillMaxSize().padding(contentPadding)) {
+        val windowClass = windowClassOf(maxWidth.value, maxHeight.value)
+        if (windowClass == WindowClass.Landscape) {
+            // C: cards on the left, the photo entry on the right (thumb reach on both sides).
+            Row(
+                Modifier.fillMaxSize().padding(horizontal = AlphaDimens.screenMargin, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(AlphaDimens.screenMargin),
+            ) {
+                Column(
+                    Modifier.weight(1.2f).fillMaxHeight().verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(AlphaDimens.cardGap),
+                ) {
+                    connectionCard()
+                    locationCard()
+                }
+                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.BottomCenter) {
+                    photoEntry(Modifier.fillMaxWidth())
+                }
+            }
+        } else {
+            // A (portrait) / B (near square, width-limited and centred).
+            val maxContentWidth = if (windowClass == WindowClass.NearSquare) 560.dp else maxWidth
             Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = AlphaDimens.screenMargin)
+                    .padding(top = 8.dp, bottom = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(AlphaDimens.cardGap),
+            ) {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .widthIn(max = maxContentWidth)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(AlphaDimens.cardGap),
+                ) {
+                    connectionCard()
+                    locationCard()
+                }
+                photoEntry(Modifier.widthIn(max = maxContentWidth).fillMaxWidth())
+            }
+        }
+    }
+
+    if (confirmDisconnect) {
+        CapsuleDialog(
+            onDismissRequest = { confirmDisconnect = false },
+            title = stringResource(Res.string.m2_disconnect_bt_title),
+            message = stringResource(Res.string.m2_disconnect_bt_message),
+            icon = painterResource(Res.drawable.m2_bluetooth_disabled_24px),
+            destructive = true,
+            confirm = DialogAction(stringResource(Res.string.m2_disconnect_bt_confirm), onClick = {
+                confirmDisconnect = false
+                viewModel.disconnect(deviceId)
+            }),
+            dismiss = DialogAction(stringResource(Res.string.cancel_button), onClick = {
+                confirmDisconnect = false
+            }),
+        )
+    }
+}
+
+@Composable
+private fun ConnectionCard(
+    headline: ConnectionHeadline,
+    action: ConnectionAction,
+    manuallyOff: Boolean,
+    live: CameraLiveStatus?,
+    nowMillis: Long,
+    onConnect: () -> Unit,
+    onCancelConnecting: () -> Unit,
+    onDisconnect: () -> Unit,
+) {
+    GlassCard(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val tone = when (headline) {
+                ConnectionHeadline.Connected -> StatusTone.Success
+                ConnectionHeadline.Connecting, ConnectionHeadline.Disconnecting -> StatusTone.Active
+                ConnectionHeadline.Disconnected -> StatusTone.Neutral
+            }
+            val title = stringResource(
+                when (headline) {
+                    ConnectionHeadline.Connected -> Res.string.m2_bt_connected
+                    ConnectionHeadline.Connecting -> Res.string.m2_bt_connecting
+                    ConnectionHeadline.Disconnecting -> Res.string.m2_bt_disconnecting
+                    ConnectionHeadline.Disconnected -> Res.string.m2_bt_disconnected
+                },
+            )
+            val supporting = when (headline) {
+                ConnectionHeadline.Connected -> timeSyncText(live?.timeSync?.outcome ?: TimeSyncOutcome.NotRun)
+                ConnectionHeadline.Disconnected ->
+                    stringResource(if (manuallyOff) Res.string.m2_bt_manual_off else Res.string.m2_bt_auto_reconnect)
+                else -> null
+            }
+            StatusLine(
+                title = title,
+                tone = tone,
+                supportingText = supporting,
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+            )
+            // Fixed trailing slot: the control changes, its place does not.
+            Box(
+                Modifier.padding(start = 8.dp).heightIn(min = AlphaDimens.minTouchTarget),
+                contentAlignment = Alignment.CenterEnd,
             ) {
-                DeviceNameBlock(
-                    currentName = state.deviceName.ifEmpty { deviceName.orEmpty() },
-                    status = status,
-                    renameEnabled = renameEnabled,
-                    onPresentSystemRename = onPresentSystemRename,
-                    onRenameInApp = { newName -> viewModel.renameDevice(deviceId, newName) },
-                )
-                if (connectionControls) {
-                    val button = deviceConnectionButton(status, pending)
-                    OutlinedButton(
-                        onClick = {
-                            when (button) {
-                                DeviceConnectionButton.Connect -> viewModel.connect(deviceId)
-                                DeviceConnectionButton.Disconnect -> viewModel.disconnect(deviceId)
-                                else -> Unit
-                            }
-                        },
-                        enabled = button.enabled,
-                        modifier = Modifier.padding(top = 12.dp),
+                when (action) {
+                    ConnectionAction.Disconnect -> GlassIconButton(
+                        icon = painterResource(Res.drawable.m2_bluetooth_disabled_24px),
+                        contentDescription = stringResource(Res.string.m2_disconnect_bt),
+                        onClick = onDisconnect,
+                        emphasis = IconEmphasis.Subtle,
+                    )
+
+                    ConnectionAction.CancelConnecting -> TextButton(
+                        onClick = onCancelConnecting,
+                        modifier = Modifier.heightIn(min = AlphaDimens.minTouchTarget),
                     ) {
                         Text(
-                            stringResource(
-                                when (button) {
-                                    DeviceConnectionButton.Connect -> Res.string.device_connection_connect
-                                    DeviceConnectionButton.Connecting -> Res.string.device_connection_connecting
-                                    DeviceConnectionButton.Disconnect -> Res.string.device_connection_disconnect
-                                    DeviceConnectionButton.Disconnecting -> Res.string.device_connection_disconnecting
-                                },
-                            ),
+                            stringResource(Res.string.cancel),
+                            style = AlphaTextStyles.button,
+                            color = AlphaTheme.colors.primary,
                         )
                     }
-                }
-            }
 
-            if (onWifiRemote != null) {
-                Button(
-                    onClick = onWifiRemote,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 88.dp),
-                    shape = MaterialTheme.shapes.large,
-                    contentPadding = PaddingValues(20.dp),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        Icon(
-                            painterResource(Res.drawable.camera_24px),
-                            contentDescription = null,
-                            modifier = Modifier.size(28.dp)
-                        )
-                        Column(
-                            Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                stringResource(Res.string.wifi_remote_title),
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                stringResource(Res.string.wifi_remote_entry_hint),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        Icon(
-                            painterResource(Res.drawable.keyboard_arrow_right_24px),
-                            contentDescription = null
-                        )
-                    }
+                    ConnectionAction.Connect -> CapsuleButton(
+                        text = stringResource(Res.string.device_connection_connect),
+                        onClick = onConnect,
+                        role = CapsuleRole.Tonal,
+                        icon = painterResource(Res.drawable.m2_bluetooth_24px),
+                    )
+
+                    ConnectionAction.None -> CircularProgressIndicator(
+                        modifier = Modifier.padding(12.dp).size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = AlphaTheme.colors.onSurfaceVariant,
+                    )
                 }
             }
         }
-    }
-}
-
-/** Camera name (with rename) and, directly beneath it, the connection status entry. */
-@Composable
-private fun DeviceNameBlock(
-    currentName: String,
-    status: DeviceConnectionStatus,
-    renameEnabled: Boolean,
-    onPresentSystemRename: (() -> Unit)?,
-    onRenameInApp: (String) -> Unit,
-) {
-    var showDialog by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = stringResource(Res.string.rename_camera_label),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (currentName.isNotEmpty()) {
-                Text(text = currentName, style = MaterialTheme.typography.titleMedium)
-            }
-            ConnectionStatusEntry(status)
-        }
-        if (renameEnabled) {
-            TextButton(
-                onClick = {
-                    if (onPresentSystemRename != null) onPresentSystemRename() else showDialog = true
-                },
-            ) {
-                Text(stringResource(Res.string.rename_camera_title))
-            }
-        }
-    }
-
-    if (showDialog) {
-        RenameCameraDialog(
-            currentName = currentName,
-            onDismiss = { showDialog = false },
-            onConfirm = { newName ->
-                showDialog = false
-                onRenameInApp(newName)
-            },
-        )
+        InfoTag(text = batteryText(batteryDisplay(live?.battery, nowMillis)))
     }
 }
 
 @Composable
-private fun ConnectionStatusEntry(status: DeviceConnectionStatus) {
-    val label = when (status) {
-        DeviceConnectionStatus.Connected -> stringResource(Res.string.connected)
-        DeviceConnectionStatus.Connecting -> stringResource(Res.string.device_connection_connecting)
-        DeviceConnectionStatus.Disconnected -> stringResource(Res.string.tap_to_connect)
-    }
-    val dot = when (status) {
-        DeviceConnectionStatus.Connected -> Color(0xFF2E7D32)
-        DeviceConnectionStatus.Connecting -> Color(0xFFF9A825)
-        DeviceConnectionStatus.Disconnected -> MaterialTheme.colorScheme.outline
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .padding(end = 8.dp)
-                .size(8.dp)
-                .background(dot, CircleShape),
-        )
+private fun LocationCard(live: CameraLiveStatus?, nowMillis: Long) {
+    GlassCard(Modifier.fillMaxWidth()) {
         Text(
-            text = stringResource(Res.string.device_connection_status, label),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            stringResource(Res.string.m2_card_location),
+            style = AlphaTextStyles.statusLabel,
+            color = AlphaTheme.colors.onSurfaceVariant,
+        )
+        val none = stringResource(Res.string.m2_value_none)
+        val signal = if (live?.connected == true) live.signalLevel else SignalLevel.Unknown
+        StatusRow(
+            items = listOf(
+                StatusItem(
+                    label = stringResource(Res.string.m2_cell_signal),
+                    value = signalText(signal) ?: none,
+                    icon = painterResource(Res.drawable.m2_signal_24px),
+                    tone = if (signal == SignalLevel.Poor) StatusTone.Warning else StatusTone.Neutral,
+                ),
+                StatusItem(
+                    label = stringResource(Res.string.m2_cell_written),
+                    value = live?.gps?.writtenCount?.toString() ?: none,
+                    icon = painterResource(Res.drawable.m2_upload_24px),
+                ),
+                StatusItem(
+                    label = stringResource(Res.string.m2_cell_last_write),
+                    value = ageText(relativeAge(live?.lastWriteAtMillis, nowMillis)) ?: none,
+                    icon = painterResource(Res.drawable.m2_schedule_24px),
+                ),
+            ),
         )
     }
 }
 
 @Composable
-internal fun RenameCameraDialog(
-    currentName: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
+private fun PhotoTransferEntryBlock(
+    entry: PhotoTransferEntry,
+    bluetoothReady: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    var text by remember(currentName) { mutableStateOf(currentName) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.rename_camera_title)) },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    singleLine = true,
-                    label = { Text(stringResource(Res.string.rename_camera_label)) },
-                    modifier = Modifier.fillMaxWidth(),
+    Column(
+        modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (entry == PhotoTransferEntry.Failed) {
+            // Red icon + short text, no fill; tapping the button again is the retry.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            ) {
+                Image(
+                    painterResource(Res.drawable.m2_error_24px),
+                    contentDescription = null,
+                    colorFilter = ColorFilter.tint(AlphaTheme.colors.error),
+                    modifier = Modifier.size(18.dp),
                 )
                 Text(
-                    text = stringResource(Res.string.rename_camera_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
+                    stringResource(Res.string.m2_photo_transfer_bt_failed),
+                    style = AlphaTextStyles.statusLabel.copy(fontSize = AlphaTextStyles.dialogBody.fontSize),
+                    color = AlphaTheme.colors.error,
                 )
             }
-        },
-        confirmButton = {
-            // A blank name would erase the camera's identity in the list.
-            TextButton(
-                onClick = { onConfirm(text) },
-                enabled = text.isNotBlank(),
-            ) {
-                Text(stringResource(Res.string.rename_camera_save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(Res.string.cancel_button))
-            }
-        },
-    )
+        } else {
+            Text(
+                stringResource(
+                    if (bluetoothReady) Res.string.m2_photo_transfer_hint else Res.string.m2_photo_transfer_hint_bt_first,
+                ),
+                style = AlphaTextStyles.statusLabel.copy(fontSize = AlphaTextStyles.dialogBody.fontSize),
+                color = AlphaTheme.colors.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
+        CapsuleButton(
+            text = stringResource(Res.string.m2_photo_transfer),
+            onClick = onClick,
+            role = CapsuleRole.Primary,
+            size = CapsuleSize.Hero,
+            icon = painterResource(Res.drawable.m2_photo_library_24px),
+            enabled = enabled,
+            loading = entry == PhotoTransferEntry.ConnectingBluetooth,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 }
+
+@Composable
+private fun timeSyncText(outcome: TimeSyncOutcome): String = stringResource(
+    when (outcome) {
+        TimeSyncOutcome.Applied -> Res.string.m2_time_sync_applied
+        TimeSyncOutcome.InProgress -> Res.string.m2_time_sync_in_progress
+        TimeSyncOutcome.Unconfirmed -> Res.string.m2_time_sync_unconfirmed
+        TimeSyncOutcome.Rejected -> Res.string.m2_time_sync_rejected
+        TimeSyncOutcome.Failed -> Res.string.m2_time_sync_failed
+        TimeSyncOutcome.Unsupported -> Res.string.m2_time_sync_unsupported
+        TimeSyncOutcome.NotRun -> Res.string.m2_time_sync_not_run
+    },
+)
+
+@Composable
+private fun signalText(level: SignalLevel): String? = when (level) {
+    SignalLevel.Excellent -> stringResource(Res.string.m2_signal_excellent)
+    SignalLevel.Good -> stringResource(Res.string.m2_signal_good)
+    SignalLevel.Fair -> stringResource(Res.string.m2_signal_fair)
+    SignalLevel.Poor -> stringResource(Res.string.m2_signal_poor)
+    SignalLevel.Unknown -> null
+}
+
+@Composable
+private fun ageText(age: RelativeAge): String? = when (age) {
+    RelativeAge.Never -> null
+    RelativeAge.JustNow -> stringResource(Res.string.m2_age_just_now)
+    is RelativeAge.Minutes -> stringResource(Res.string.m2_age_minutes, age.value.toInt())
+    is RelativeAge.Hours -> stringResource(Res.string.m2_age_hours, age.value.toInt())
+    is RelativeAge.Days -> stringResource(Res.string.m2_age_days, age.value.toInt())
+}
+
+@Composable
+private fun batteryText(display: BatteryDisplay): String = when (display) {
+    BatteryDisplay.Unknown -> stringResource(Res.string.m2_battery_unknown)
+    is BatteryDisplay.Value -> {
+        val percent = "${display.percent}%"
+        val minutes = display.ageMinutes
+        when {
+            minutes == null -> stringResource(Res.string.m2_battery_value, percent)
+            minutes < 60 -> stringResource(Res.string.m2_battery_value_minutes, percent, minutes.toInt())
+            else -> stringResource(Res.string.m2_battery_value_hours, percent, (minutes / 60).toInt())
+        }
+    }
+}
+
+private const val TICK_MILLIS = 30_000L
