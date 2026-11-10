@@ -1,7 +1,6 @@
 package com.sasch.cameragps.sharednew.ui.devicelist
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,11 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
@@ -38,7 +36,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.camera_24px
 import cameragps.sharednew.generated.resources.cancel
@@ -67,16 +64,20 @@ import com.sasch.cameragps.sharednew.ui.components.ScrollbarLazyColumn
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleSize
 import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconTile
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassSurface
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusDot
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusTone
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
-import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
+import com.sasch.cameragps.sharednew.ui.theme.GlassTintRole
+import com.sasch.cameragps.sharednew.ui.theme.GlassTints
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -206,19 +207,19 @@ fun EmptyStateCard(
                 Image(
                     painterResource(Res.drawable.camera_24px),
                     contentDescription = null,
-                    colorFilter = ColorFilter.tint(AlphaTheme.colors.primary),
+                    colorFilter = ColorFilter.tint(AlphaTheme.colors.accent),
                     modifier = Modifier.size(48.dp),
                 )
                 Text(
                     text = title,
-                    style = AlphaTextStyles.dialogTitle,
-                    color = AlphaTheme.colors.onSurface,
+                    style = AlphaType.Heading,
+                    color = AlphaTheme.colors.textPrimary,
                     textAlign = TextAlign.Center,
                 )
                 Text(
                     text = message,
-                    style = AlphaTextStyles.dialogBody,
-                    color = AlphaTheme.colors.onSurfaceVariant,
+                    style = AlphaType.Body,
+                    color = AlphaTheme.colors.textSecondary,
                     textAlign = TextAlign.Center,
                 )
                 if (actionLabel != null) {
@@ -233,8 +234,8 @@ fun EmptyStateCard(
 private fun SectionHeader(title: String, modifier: Modifier = Modifier) {
     Text(
         text = title,
-        style = AlphaTextStyles.statusLabel.copy(fontSize = 13.sp),
-        color = AlphaTheme.colors.onSurfaceVariant,
+        style = AlphaType.Caption,
+        color = AlphaTheme.colors.textSecondary,
         modifier = modifier.padding(start = 4.dp, top = 4.dp, bottom = 2.dp),
     )
 }
@@ -266,19 +267,19 @@ private fun SwipeToDeleteDeviceCard(
         backgroundContent = {
             val isActive = dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart
             val colors = AlphaTheme.colors
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        color = if (isActive) colors.errorContainer else colors.surfaceContainerHigh,
-                        shape = AlphaShapes.row,
-                    ),
+            // Glass row underneath; it turns danger-tinted once the swipe is heading for delete.
+            val danger = GlassTints.of(GlassTintRole.Danger, colors)
+            GlassSurface(
+                modifier = Modifier.fillMaxSize(),
+                shape = AlphaShapes.row,
+                tint = if (isActive) danger.tint else Color.Transparent,
                 contentAlignment = Alignment.CenterEnd,
+                contentPadding = PaddingValues(0.dp),
             ) {
                 Image(
                     painter = painterResource(Res.drawable.delete_24px),
                     contentDescription = stringResource(Res.string.delete_device),
-                    colorFilter = ColorFilter.tint(colors.onErrorContainer),
+                    colorFilter = ColorFilter.tint(if (isActive) danger.content else colors.danger),
                     modifier = Modifier.padding(end = 24.dp).size(24.dp),
                 )
             }
@@ -317,41 +318,19 @@ private fun DeviceCard(
         contentAlignment = Alignment.CenterStart,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Icon tile: tinted by state (connected / problem / neutral).
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(
-                        when {
-                            hasProblem -> colors.errorContainer
-                            device.isConnected -> colors.primaryContainer
-                            else -> colors.surfaceContainerHigh
-                        },
-                        CircleShape,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Image(
-                    painterResource(Res.drawable.camera_24px),
-                    contentDescription = null,
-                    colorFilter = ColorFilter.tint(
-                        when {
-                            hasProblem -> colors.onErrorContainer
-                            device.isConnected -> colors.onPrimaryContainer
-                            else -> colors.onSurfaceVariant
-                        },
-                    ),
-                    modifier = Modifier.size(22.dp),
-                )
-            }
+            // Icon tile: tinted by state (problem / connected / neutral).
+            GlassIconTile(
+                icon = painterResource(Res.drawable.camera_24px),
+                tone = deviceTileTone(hasProblem = hasProblem, connected = device.isConnected),
+            )
             Column(
                 modifier = Modifier.weight(1f).padding(start = 14.dp, end = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
                     text = device.name,
-                    style = AlphaTextStyles.buttonLarge,
-                    color = colors.onSurface,
+                    style = AlphaType.Label,
+                    color = colors.textPrimary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -377,33 +356,30 @@ private fun DeviceCard(
                     )
                     Text(
                         text = statusText,
-                        style = AlphaTextStyles.statusLabel.copy(fontSize = 13.sp),
-                        color = if (device.isConnected) colors.success else colors.onSurfaceVariant,
+                        style = AlphaType.Caption,
+                        color = if (device.isConnected) colors.success else colors.textSecondary,
                     )
                 }
                 if (!device.isPaired) {
                     Text(
                         text = stringResource(Res.string.not_paired_tap_to_pair_again),
-                        style = AlphaTextStyles.statusLabel.copy(fontSize = 13.sp),
-                        color = colors.error,
+                        style = AlphaType.Caption,
+                        color = colors.danger,
                     )
                 }
                 if (item?.locationDisabledByCamera == true) {
                     Text(
                         text = stringResource(Res.string.location_linking_disabled_by_camera),
-                        style = AlphaTextStyles.statusLabel.copy(fontSize = 13.sp),
-                        color = colors.error,
+                        style = AlphaType.Caption,
+                        color = colors.danger,
                     )
-                    TextButton(
+                    CapsuleButton(
+                        text = stringResource(Res.string.guide_open_button),
                         onClick = onOpenTroubleshooting,
-                        contentPadding = PaddingValues(horizontal = 0.dp),
-                    ) {
-                        Text(
-                            stringResource(Res.string.guide_open_button),
-                            style = AlphaTextStyles.button,
-                            color = colors.primary,
-                        )
-                    }
+                        role = CapsuleRole.Tonal,
+                        size = CapsuleSize.Small,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                 }
             }
             GlassIconButton(
@@ -413,6 +389,13 @@ private fun DeviceCard(
             )
         }
     }
+}
+
+/** Tone of a device row's icon tile: a problem (unpaired / location off) wins over "connected". */
+internal fun deviceTileTone(hasProblem: Boolean, connected: Boolean): StatusTone = when {
+    hasProblem -> StatusTone.Error
+    connected -> StatusTone.Active
+    else -> StatusTone.Neutral
 }
 
 /**
