@@ -331,6 +331,72 @@ before entering non-cancellable commit, and in error handlers that must distingu
 cancellation from failure. A `suspend` function declaration alone does not guarantee that its
 implementation checks cancellation.
 
+## Android visibility, downloads, and explicit exit
+
+BLE location/time writing and Wi-Fi photo transfer have separate lifetimes. Home, lock screen,
+switching apps, task removal, and root Back do **not** actively close GATT, stop GPS writing, or
+stop the foreground service while connection demand remains. Device-page **Disconnect** still
+persists the user's disabled intent, uses the existing confirmation and per-device teardown, and
+prevents CDM/restart from reconnecting that device. App disable, Bluetooth loss, and the existing
+no-demand/presence retirement paths are not UI exits and retain their service cleanup rules.
+
+`MainActivity` sends immediate `onStart`/`onStop` visibility to `AppServices` (configuration changes
+and stale activity owners excluded). The app-scoped [controller][controller], not the composition,
+applies [BackgroundWifiPolicy](../sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/remote/wifi/BackgroundWifiPolicy.kt):
+
+| Event | Wi-Fi / browser / network request | BLE / GPS / demanded FGS |
+|---|---|---|
+| Home / lock / switch, no user download | Cancel and close immediately | Keep |
+| Home / lock / switch, accepted single or batch download | Retain until the entire download job finishes | Keep |
+| That download succeeds, fails, or is cancelled while still backgrounded | Close automatically after download cleanup | Keep |
+| Return visible before it finishes | Cancel pending automatic close and its deadline | Keep |
+| Swipe task / root Back / finishing activity | Cancel even a download and close immediately | Keep |
+| User explicitly disconnects a device | Close its Wi-Fi, then its BLE via the existing manual path | Other devices unchanged |
+
+Only the accepted `downloadPhotos` job qualifies (single-photo download uses the same path).
+The flag covers the full batch, including conversion, gallery preparation/commit, and cancellation
+cleanup; a file boundary does not end the exception. Thumbnail fetching, preview loading, catalog
+loading, a busy-looking UI, and a settled/pending batch summary never qualify. Screen disposal and
+`WifiRemoteViewModel.onCleared` in the background consult the same policy; navigating out explicitly still closes. Returning to the
+foreground never starts a closed session. The Android entry-attempt latch is saved across activity
+recreation, so a restored browser cannot silently request camera Wi-Fi again; the user must start
+photo transfer/reconnect explicitly.
+
+During retention the [automatic connector][automatic] keeps the same
+[Android network request][android-network] registered until normal connection cleanup releases it.
+The acquisition timeout (60 seconds) does not expire an already acquired request. A separate
+30-minute background-download deadline cancels a stuck download, logs
+`Wi-Fi background download retention timed out; attempt=…`, and runs normal abort/connection/network
+cleanup. Repeated stop/dispose notifications cannot extend it. Returning visible retires it; the
+captured background epoch, session attempt and owner prevent a cancelled old deadline from closing
+a replacement session, including a same-camera reconnect. The timer is coroutine-scheduled, not an
+exact wakeup alarm: Android/OEM suspension or force-stop can delay execution or kill the process;
+FGS/network retention cannot promise survival against those policies. Real-device lock-screen and
+long-download testing remains required. Existing pending-write abort versus already-committed-file
+semantics are unchanged.
+
+Explicit exit still passes through `AppExitGate`'s owner/epoch and frozen retirement snapshot;
+its counterexample tests are retained. `AppExitCoordinator.disconnectEverything` now has **only**
+a Wi-Fi close capability, bounded by the existing three-second coordinator wait; it has no BLE,
+GPS, session-shutdown or FGS-stop callback. The controller's cancellation-safe cleanup can outlive
+that wait, so the bound is not a promise that a non-cancellable protocol/gallery cleanup finishes
+within three seconds. `LocationSenderService.onTaskRemoved` no longer calls `stopSelf`, and
+finishing the activity no longer calls `stopService`.
+
+### Accepted late task-removal delivery risk
+
+Android 15 AOSP `ActivityTaskSupervisor.cleanUpRemovedTask` → `ActiveServices.cleanUpServices`
+posts service enumeration to the system-server Handler; the first unowned `onTaskRemoved` delivery
+can therefore arrive after an old flow completes and a new activity/session starts. When the old
+flow was already completed at retirement, or the gate has no owned predecessor to reject, that
+sequence is indistinguishable locally from a genuine new task removal. The gate intentionally
+keeps the real-removal behavior instead of adding a timing heuristic. Root Back still uses
+`finishAndRemoveTask`, eliminating the old still-listed-card path. The remaining first-delivery
+window is accepted: it can close a replacement **Wi-Fi** session (and cancel its download), never
+new GATT/GPS or the FGS. This is the reassessment of former todo P3 #8 (AOSP delivery analysis,
+2026-11-09); its completed assessment is removed from the pending-only todo list, not claimed as
+an Android delivery fix.
+
 ## Disconnecting and handling failures
 
 `disconnect()` sets the controller state to `Closing` and cancels its top-level job. The coroutine

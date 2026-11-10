@@ -81,7 +81,7 @@ class AppExitGateTest {
             // The valid connect command arrives while the teardown waits on Wi-Fi close.
             g.cancelPendingExit()
 
-            assertFalse("afterwards (service stop) must not run after a connect cancelled the exit", afterwardsRan)
+            assertFalse("afterwards must not run after a connect cancelled the exit", afterwardsRan)
         }
     }
 
