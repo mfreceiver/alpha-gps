@@ -41,9 +41,8 @@ processes stays on your device or goes directly to the camera you paired with it
 | Battery-optimization exemption (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`) | Keep the foreground service alive on aggressive vendor ROMs | Some devices may stop the service in the background |
 | Internet / network state | Talk to the camera over Wi-Fi; the app contacts no servers | Camera Wi-Fi features unavailable |
 
-Legacy permissions limited to old Android versions (`WRITE_EXTERNAL_STORAGE` up to SDK 28,
-`BLUETOOTH`/`BLUETOOTH_ADMIN` up to SDK 30) remain declared in the manifest for historical
-builds; current installations (Android 12+) do not use them.
+AlphaGPS requires Android 12 or later (API 31); permissions that only apply to older Android
+versions are no longer declared.
 
 ## Data retention and deletion
 
