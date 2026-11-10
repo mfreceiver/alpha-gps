@@ -55,7 +55,7 @@ inkscape docs/brand/alpha-gps-icon.svg --export-type=png --export-width=512 --ex
 当前 app 的启动器图标仍然用的是 `app/src/main/res/mipmap-anydpi/ic_launcher.xml`，引用 `@drawable/ic_launcher_background` / `@drawable/ic_launcher_foreground`，monochrome 层也直接复用了前景层。要接入本套图标：
 
 1. 用 Android Studio「Vector Asset」或 `svg2vectordrawable` 把三个 108×108 SVG 转成 VectorDrawable XML，替换 `drawable/ic_launcher_background.xml`、`drawable/ic_launcher_foreground.xml`，另外新增 `drawable/ic_launcher_monochrome.xml`。转换后检查渐变是否保留（VectorDrawable 支持 `<gradient>`，需 `aapt:attr` 内联写法）。
-2. 把 `mipmap-anydpi/ic_launcher.xml` 的 `<monochrome>` 改为引用 `@drawable/ic_launcher_monochrome`。minSdk 是 26，因此 `mipmap-anydpi` 与 `mipmap-anydpi-v26` 效果相同。
+2. 把 `mipmap-anydpi/ic_launcher.xml` 的 `<monochrome>` 改为引用 `@drawable/ic_launcher_monochrome`。minSdk 是 31，因此 `mipmap-anydpi` 与 `mipmap-anydpi-v26` 效果相同。
 3. iOS AppIcon（`iosApp/alphagps/Assets.xcassets/AppIcon.appiconset/icon.png`）已由 W1 直接替换为新图标，无需再处理；上游 `fastlane/` 目录已删除。
 4. 跑 `AGENTS.md` 中的验证命令，并在真机上检查圆形、圆角方形和主题图标三种形态。
 
