@@ -3,9 +3,6 @@ package com.sasch.cameragps.sharednew.ui.remote
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.Button
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -17,8 +14,17 @@ import cameragps.sharednew.generated.resources.wifi_remote_network_name
 import cameragps.sharednew.generated.resources.wifi_remote_network_password
 import cameragps.sharednew.generated.resources.wifi_remote_settings
 import com.sasch.cameragps.sharednew.remote.wifi.CameraWifiCredentials
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassTextField
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import org.jetbrains.compose.resources.stringResource
 
+/**
+ * Manual join fallback: the camera's network name and password as read-only [GlassTextField]s
+ * (selectable for copying), then "Wi-Fi settings" (secondary) and "continue" (primary).
+ */
 @Composable
 internal fun WifiManualJoin(
     credentials: CameraWifiCredentials,
@@ -26,24 +32,35 @@ internal fun WifiManualJoin(
     onContinue: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(Res.string.wifi_remote_manual_join_hint))
-        OutlinedTextField(
+        Text(
+            stringResource(Res.string.wifi_remote_manual_join_hint),
+            style = AlphaType.Body,
+            color = AlphaTheme.colors.textSecondary,
+        )
+        GlassTextField(
             credentials.ssid,
             onValueChange = {},
             readOnly = true,
             singleLine = true,
-            label = { Text(stringResource(Res.string.wifi_remote_network_name)) },
+            label = stringResource(Res.string.wifi_remote_network_name),
             modifier = Modifier.fillMaxWidth()
         )
-        OutlinedTextField(
+        GlassTextField(
             credentials.password,
             onValueChange = {},
             readOnly = true,
             singleLine = true,
-            label = { Text(stringResource(Res.string.wifi_remote_network_password)) },
+            label = stringResource(Res.string.wifi_remote_network_password),
             modifier = Modifier.fillMaxWidth()
         )
-        OutlinedButton(onClick = onWifiSettings) { Text(stringResource(Res.string.wifi_remote_settings)) }
-        Button(onClick = onContinue) { Text(stringResource(Res.string.wifi_remote_manual_join_continue)) }
+        CapsuleButton(
+            text = stringResource(Res.string.wifi_remote_settings),
+            onClick = onWifiSettings,
+            role = CapsuleRole.Secondary,
+        )
+        CapsuleButton(
+            text = stringResource(Res.string.wifi_remote_manual_join_continue),
+            onClick = onContinue,
+        )
     }
 }
