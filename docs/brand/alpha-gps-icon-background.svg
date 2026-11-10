@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AlphaGPS adaptive icon: background layer (108x108dp, full bleed).
+     Original artwork drawn by mfreceiver for AlphaGPS. License: GPL-3.0. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108">
+  <title>AlphaGPS adaptive icon background</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2F7BF0"/>
+      <stop offset="0.5" stop-color="#0B57D0"/>
+      <stop offset="1" stop-color="#062E6F"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="34" cy="28" r="70" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="108" height="108" fill="url(#bg)"/>
+  <rect width="108" height="108" fill="url(#glow)"/>
+  <!-- faint globe graticule -->
+  <g fill="none" stroke="#FFFFFF" stroke-opacity="0.07" stroke-width="0.6">
+    <circle cx="54" cy="54" r="44"/>
+    <ellipse cx="54" cy="54" rx="20" ry="44"/>
+    <path d="M10 54H98M14.5 34H93.5M14.5 74H93.5"/>
+  </g>
+</svg>
