@@ -162,6 +162,8 @@ class WifiRemoteController internal constructor(
     private val _owner = MutableStateFlow<String?>(null)
     val owner = _owner.asStateFlow()
     private var job: Job? = null
+    /** True while an attempt's phone preflight runs: nothing has been published or claimed yet. */
+    private var preflightActive = false
     private val _thumbnails = MutableStateFlow<Map<Long, ImageBitmap>>(emptyMap())
     val thumbnails = _thumbnails.asStateFlow()
     private val _thumbnailsLoading = MutableStateFlow(false)
@@ -259,35 +261,17 @@ class WifiRemoteController internal constructor(
 
     fun connectAutomatically(identifier: String) {
         val automatic = automaticConnector ?: return
-        // Phone-side preconditions run before anything is published or claimed: a disabled phone
+        // Phone-side preconditions are the first step of the managed attempt: a disabled phone
         // Wi-Fi (or location services on API <= 32) must not wake the camera via BLE control
-        // takeover and must not flash "preparing camera" first. The connector re-checks as a
+        // takeover and must not flash "preparing camera" first. The check runs inside the same
+        // job/attempt gate as a normal start (so Back/disconnect cancel it, a repeated call is
+        // ignored and a late result cannot touch a newer session). The connector re-checks as a
         // belt-and-braces guard for any caller that reaches it directly.
         val preconditions = automatic.phonePreconditions
-        if (preconditions == null) {
-            startAutomatic(automatic, identifier)
-            return
-        }
-        scope.launch {
-            val failure = when {
-                !preconditions.isWifiEnabled() -> WifiRemoteFailure.WifiDisabled
-                !preconditions.isLocationEnabled() -> WifiRemoteFailure.LocationServicesRequired
-                else -> null
-            }
-            if (failure == null) {
-                startAutomatic(automatic, identifier)
-            } else {
-                if (registry.get(identifier) == null) {
-                    registry.upsert(identifier) { it.copy(phase = BleSessionPhase.Disconnected) }
-                }
-                registry.updateWifiRemote(identifier, WifiRemoteState(WifiRemotePhase.Failed, failure))
-                log.i { "Wi-Fi remote attempt skipped: $failure" }
-            }
-        }
-    }
-
-    private fun startAutomatic(automatic: WifiAutomaticConnector, identifier: String) {
-        start(identifier, WifiRemotePhase.PreparingCamera) { id, sessionScope ->
+        start(
+            identifier, WifiRemotePhase.PreparingCamera,
+            preflight = preconditions?.let { radio -> { checkPhonePreconditions(radio) } },
+        ) { id, sessionScope ->
             automatic.open(id, sessionScope) { phase ->
                 log.i { "Wi-Fi remote attempt=$attempt phase=$phase" }
                 if (registry.get(id)?.wifiRemote?.phase != WifiRemotePhase.Closing) {
@@ -295,6 +279,27 @@ class WifiRemoteController internal constructor(
                 }
             }
         }
+    }
+
+    /**
+     * The failure the phone's radio state implies, or null when everything is satisfied. A check that
+     * throws maps like the same failure inside the connector would: a typed
+     * [WifiRemoteConnectException] keeps its failure, anything else is a protocol error;
+     * cancellation propagates.
+     */
+    private suspend fun checkPhonePreconditions(radio: WifiPreconditions): WifiRemoteFailure? = try {
+        when {
+            !radio.isWifiEnabled() -> WifiRemoteFailure.WifiDisabled
+            !radio.isLocationEnabled() -> WifiRemoteFailure.LocationServicesRequired
+            else -> null
+        }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failed: WifiRemoteConnectException) {
+        failed.failure
+    } catch (failed: Exception) {
+        log.w { "Wi-Fi remote preflight failed: ${failed::class.simpleName}: ${failed.message}" }
+        WifiRemoteFailure.ProtocolError
     }
 
     fun prepareManualConnection(identifier: String) {
@@ -332,7 +337,15 @@ class WifiRemoteController internal constructor(
         }
     }
 
+    /**
+     * Starts one managed connection attempt. With a [preflight] the attempt first runs it inside the
+     * job — before [phase] is published and before the BLE controls are claimed. A failing preflight
+     * publishes `Failed` directly (no phase, no claim, no release); a cancelled one (disconnect, Back,
+     * backgrounding) publishes nothing and starts nothing. The job/attempt gate is held for the whole
+     * preflight, so a repeated start is ignored and a late result can never reach a newer session.
+     */
     private fun start(identifier: String, phase: WifiRemotePhase,
+                      preflight: (suspend () -> WifiRemoteFailure?)? = null,
                       open: suspend (String, CoroutineScope) -> WifiRemoteConnection) {
         if (job != null) {
             log.w { "Wi-Fi remote connect ignored: previous attempt=$attempt is still active or closing" }
@@ -343,21 +356,42 @@ class WifiRemoteController internal constructor(
         if (!isForeground) return
         cancelBackgroundDownloadTimer()
         attempt++
+        val thisAttempt = attempt
         log.i { "Wi-Fi remote attempt=$attempt starting phase=$phase" }
         val id = identifier.uppercase()
         if (registry.get(id) == null) registry.upsert(id) { it.copy(phase = BleSessionPhase.Disconnected) }
         _owner.value = id
         _image.value = null
-        registry.updateWifiRemote(id, WifiRemoteState(phase = phase))
+        if (preflight == null) registry.updateWifiRemote(id, WifiRemoteState(phase = phase))
+        preflightActive = preflight != null
         var entered = false
+        var preflightFailure: WifiRemoteFailure? = null
         val connecting = scope.launch(start = CoroutineStart.LAZY) {
+            if (preflight != null) {
+                val failure = preflight()
+                // A result that arrives after cancel/disconnect or for an older attempt is dropped.
+                currentCoroutineContext().ensureActive()
+                if (attempt != thisAttempt) return@launch
+                preflightActive = false
+                if (failure != null) {
+                    log.i { "Wi-Fi remote attempt=$thisAttempt skipped by preflight: $failure" }
+                    preflightFailure = failure
+                    return@launch
+                }
+                registry.updateWifiRemote(id, WifiRemoteState(phase = phase))
+            }
             entered = true
             runSession(id, open)
         }
         job = connecting
         connecting.invokeOnCompletion {
             if (!entered && job === connecting) {
-                registry.updateWifiRemote(id, WifiRemoteState())
+                preflightActive = false
+                val failure = preflightFailure
+                registry.updateWifiRemote(
+                    id, if (failure == null) WifiRemoteState()
+                    else WifiRemoteState(WifiRemotePhase.Failed, failure)
+                )
                 _owner.value = null
                 job = null
             }
@@ -1050,7 +1084,8 @@ class WifiRemoteController internal constructor(
         if (identifier != null && !id.equals(identifier, true)) return
         cancelBackgroundDownloadTimer()
         log.i { "Wi-Fi remote attempt=$attempt disconnect requested" }
-        registry.updateWifiRemote(id, WifiRemoteState(phase = WifiRemotePhase.Closing))
+        // Nothing exists to close while only the phone preflight runs: cancelling it publishes nothing.
+        if (!preflightActive) registry.updateWifiRemote(id, WifiRemoteState(phase = WifiRemotePhase.Closing))
         job?.cancel()
     }
 
