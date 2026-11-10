@@ -206,4 +206,5 @@ GlassBottomSheet(visible, onDismissRequest, modifier = Modifier, title: String? 
 
 - `scripts/ui_style_guard.sh`：扫描 `sharednew/…/ui/` 与 `app/src/main/java/com/saschl/cameragps/ui/` 下 `*.kt`（豁免 `sharednew/…/ui/theme/`），模式 `fontSize =`、`MaterialTheme.typography`、`Color.White`、`Color(0x`。
 - 基线 `docs/ui-style-guard-baseline.txt`（`<违规行数> <路径>`）：不在基线的文件必须 0；基线文件只能下降。**迁移完一个页面后运行 `scripts/ui_style_guard.sh --update-baseline`**（只接受下降）并提交基线变化。最后一批清空基线后改用 `--strict`。
+- 扫描必须真实发生：仓库根或任一扫描目录缺失、受管 `*.kt` 为 0 个、grep 出错（如文件不可读）均 rc=2 失败，不当作"无违规"；成功输出报告"扫描了 N 个文件"。
 - 自测：`scripts/ui_style_guard_test.sh`。

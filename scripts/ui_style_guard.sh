@@ -17,7 +17,7 @@
 #   --list             打印当前所有违规行
 # 环境变量：UI_STYLE_GUARD_ROOT（仓库根，默认脚本上级目录；自测用）、
 #           UI_STYLE_GUARD_BASELINE（基线路径，默认 $ROOT/docs/ui-style-guard-baseline.txt）。
-# 退出码：0 通过；1 违规；2 用法错误。
+# 退出码：0 通过；1 违规；2 用法/配置/扫描错误（根或扫描目录缺失、受管文件为 0、grep 出错）。
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)
@@ -37,25 +37,36 @@ for arg in "$@"; do
     --strict) STRICT=1 ;;
     --update-baseline) UPDATE=1 ;;
     --list) LIST=1 ;;
-    -h|--help) sed -n '2,23p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "ui_style_guard: 未知参数 $arg" >&2; exit 2 ;;
   esac
 done
 
-# 当前违规：输出 "<count> <path>"，按路径排序。
-scan() {
-  local dir
-  for dir in "${SCAN_DIRS[@]}"; do
-    [ -d "$ROOT/$dir" ] || continue
-    (cd "$ROOT" && grep -rnE --include='*.kt' "$PATTERN" "$dir" 2>/dev/null)
-  done | while IFS= read -r line; do
-    local path=${line%%:*}
-    case $path in "$EXEMPT_PREFIX"*) continue ;; esac
-    printf '%s\n' "$line"
-  done
-}
+# 扫描必须真实发生：根或任一扫描目录缺失、受管文件为 0、grep 出错（rc>1，如文件不可读）都是
+# 配置/扫描错误（rc=2），不能当作"无违规"放行。带 "# mut:" 标记的行由自测做删行变异验证。
+if [ ! -d "$ROOT" ]; then echo "ui_style_guard: 仓库根不是目录：$ROOT" >&2; exit 2; fi # mut:root
+for dir in "${SCAN_DIRS[@]}"; do
+  if [ ! -d "$ROOT/$dir" ]; then echo "ui_style_guard: 扫描目录缺失：$ROOT/$dir" >&2; exit 2; fi # mut:dirs
+done
 
-HITS=$(scan)
+# 受管文件清单（相对 ROOT，豁免 token 目录），按路径排序。
+FILES=()
+for dir in "${SCAN_DIRS[@]}"; do
+  if ! LISTED=$(cd "$ROOT" && find "$dir" -type f -name '*.kt' -print | LC_ALL=C sort); then
+    echo "ui_style_guard: 列举 $ROOT/$dir 失败" >&2; exit 2
+  fi
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case $f in "$EXEMPT_PREFIX"*) continue ;; esac
+    FILES+=("$f")
+  done <<< "$LISTED"
+done
+SCANNED=${#FILES[@]}
+if [ "$SCANNED" -eq 0 ]; then echo "ui_style_guard: 扫描了 0 个文件（$ROOT 下没有受管的 *.kt），视为失败" >&2; exit 2; fi # mut:zero
+
+# 当前违规行 "<path>:<line>:<text>"。grep：0 有匹配、1 无匹配，>1 扫描出错（stderr 原样保留）。
+HITS=$(cd "$ROOT" && grep -HnE -e "$PATTERN" -- "${FILES[@]}"); GREP_RC=$?
+if [ "$GREP_RC" -gt 1 ]; then echo "ui_style_guard: grep 扫描出错（rc=$GREP_RC），结果不可信" >&2; exit 2; fi # mut:grep
 if [ "$LIST" -eq 1 ] && [ -n "$HITS" ]; then printf '%s\n' "$HITS"; fi
 CURRENT=$(printf '%s\n' "$HITS" | sed -n 's/^\([^:]*\):.*/\1/p' | sort | uniq -c | awk '{print $1" "$2}')
 
@@ -108,7 +119,7 @@ if [ "$UPDATE" -eq 1 ]; then
     echo "# 最后一批迁移后本文件应只剩注释，并以 --strict 运行守卫。"
     [ -n "$CURRENT" ] && printf '%s\n' "$CURRENT" | sort -k2
   } > "$BASELINE"
-  echo "ui_style_guard: 基线已更新（$(printf '%s\n' "$CURRENT" | grep -c . ) 个文件）"
+  echo "ui_style_guard: 扫描了 $SCANNED 个文件，基线已更新（$(printf '%s\n' "$CURRENT" | grep -c . ) 个文件）"
   exit 0
 fi
 
@@ -119,5 +130,5 @@ fi
 
 if [ "$FAIL" -ne 0 ]; then exit 1; fi
 total=0; for path in "${!CUR[@]}"; do total=$((total + CUR[$path])); done
-echo "ok ui-style: ${#CUR[@]} 个基线文件共 $total 处待迁移，无新增违规"
+echo "ok ui-style: 扫描了 $SCANNED 个文件；${#CUR[@]} 个基线文件共 $total 处待迁移，无新增违规"
 exit 0
