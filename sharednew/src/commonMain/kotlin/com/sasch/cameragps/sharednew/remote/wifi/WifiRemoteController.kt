@@ -20,6 +20,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -50,6 +51,12 @@ internal interface WifiRemoteConnection {
 
     suspend fun photoThumbnail(handle: Long, stats: ThumbnailStatsSink? = null): ImageBitmap? = null
     suspend fun photoPreview(handle: Long): ImageBitmap? = null
+
+    /**
+     * The first [length] bytes of the original of a displayed photo (for EXIF), or `null` when this
+     * connection cannot read partial data. Failures throw; they never affect other operations.
+     */
+    suspend fun photoMetadataHead(handle: Long, length: Int): ByteArray? = null
     suspend fun downloadPhoto(
         handle: Long,
         format: WifiPhotoDownloadFormat,
@@ -166,6 +173,20 @@ class WifiRemoteController internal constructor(
     /** Full handle index of pages that loaded successfully within the current generation. */
     private var photoCatalog = emptyMap<Long, WifiCameraPhoto>()
     private var captureRequests: Channel<Unit>? = null
+
+    /**
+     * Metadata of the photo the viewer shows (see [PhotoMetadataLoader]): basic data at once, EXIF on
+     * request through one debounced, cancellable partial read that waits for an idle camera.
+     */
+    private val metadataLoader = PhotoMetadataLoader(
+        scope,
+        basicFor = { photoCatalog[it]?.toBasicMetadata() },
+        fetchHead = { handle, length -> activeConnection?.photoMetadataHead(handle, length) },
+        awaitIdle = { thumbnailHolds.first { it == 0 } },
+        hold = ::holdThumbnails,
+        release = ::releaseThumbnails,
+    )
+    val metadata: StateFlow<PhotoMetadataState> = metadataLoader.state
     private var manualJoin: CompletableDeferred<Unit>? = null
 
     fun connect(identifier: String, host: String) {
@@ -645,6 +666,24 @@ class WifiRemoteController internal constructor(
         }.also { it.invokeOnCompletion { releaseThumbnails() } }
     }
 
+    /**
+     * Starts reading the metadata of [handle] (a photo of the displayed page) and publishes it on
+     * [metadata]. Call on viewer entry and after every swipe; the previous unfinished read is
+     * cancelled. With [extended] false only the free basic data is produced; with true, JPEGs get
+     * their shooting parameters after a 250 ms debounce. Never affects preview or download.
+     */
+    fun loadMetadata(identifier: String, handle: Long, extended: Boolean = false) {
+        val id = identifier.uppercase()
+        val state = registry.get(id)?.wifiRemote ?: return
+        if (_owner.value != id || state.phase != WifiRemotePhase.Ready || !state.photoBrowser.open) return
+        metadataLoader.request(handle, browserGeneration, extended)
+    }
+
+    /** Stops any pending read and resets [metadata] to [PhotoMetadataState.Idle] (viewer closed). */
+    fun cancelMetadata(identifier: String) {
+        if (_owner.value.equals(identifier, true)) metadataLoader.cancel()
+    }
+
     fun clearPhotoPreview(identifier: String) {
         if (!_owner.value.equals(identifier, true)) return
         photoPreviewJob?.cancel()
@@ -804,6 +843,7 @@ class WifiRemoteController internal constructor(
         ) return
         photoPreviewJob?.cancel()
         photoPreviewJob = null
+        metadataLoader.interrupt()
         _photoPreview.value =
             _photoPreview.value?.takeIf { it.image != null }?.copy(loading = false)
         registry.updateWifiRemote(id, starting(state))
@@ -957,6 +997,7 @@ class WifiRemoteController internal constructor(
             thumbnailHolds.value = 0
             photoPreviewJob = null
             photoCatalog = emptyMap()
+            metadataLoader.clear()
             _photoPreview.value = null
             _thumbnails.value = emptyMap()
             captureRequests?.close()
