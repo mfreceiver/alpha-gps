@@ -81,31 +81,11 @@ class WifiBrowserModelTest {
     fun gridOptionsDefaultToSmallTilesWithEveryTagOff() {
         val options = WifiGridOptions()
         assertEquals(WifiGridSize.Small, options.gridSize)
-        assertFalse(options.showFormat || options.showSize || options.showProtection)
+        assertFalse(options.showFormat || options.showSize)
         assertEquals(listOf(4, 3, 2), WifiGridSize.entries.map { it.columns })
         assertEquals(WifiGridSize.Large, options.withSize(WifiGridSize.Large).gridSize)
         assertEquals("Large", options.withSize(WifiGridSize.Large).size, "the persisted value is the name")
         assertEquals(WifiGridSize.Small, WifiGridOptions(size = "bogus").gridSize, "unknown values fall back")
-    }
-
-    private fun photo(handle: Long, capture: String, mime: String, size: Long = 0, protected: Boolean? = null) =
-        WifiCameraPhoto(handle, "F$handle", size, mime, "20240501T100000", captureId = capture, isProtected = protected)
-
-    @Test
-    fun protectionIsKnownOnlyWhenTheCatalogReportsIt() {
-        val captures = groupCameraPhotos(
-            listOf(
-                photo(1, "a", "image/jpeg", protected = true),
-                photo(2, "a", "image/x-sony-arw", protected = false),
-                photo(3, "b", "image/jpeg", protected = false),
-                photo(4, "c", "image/jpeg"),
-            )
-        ).associateBy { it.id }
-        assertEquals(true, captures.getValue("a").isProtected, "any protected file protects the capture")
-        assertEquals(false, captures.getValue("b").isProtected)
-        assertNull(captures.getValue("c").isProtected, "unknown is never guessed")
-        assertTrue(protectionKnown(captures.values.toList()))
-        assertFalse(protectionKnown(listOf(captures.getValue("c"))), "v4 catalogs grey the switch out")
     }
 
     @Test

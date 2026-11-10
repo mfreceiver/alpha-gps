@@ -90,12 +90,6 @@ data class PhotoMetadata(
     /** Pixel size from the object info; falls back to the EXIF value after an extended read. */
     val width: Int? = null,
     val height: Int? = null,
-    /**
-     * PTP ProtectionStatus of the object (standard layout): `true` read-only, `false` none, `null`
-     * unknown (v4 catalog entries, or a vendor value). Real-device confirmation of Sony's protect flag
-     * mapping is pending.
-     */
-    val isProtected: Boolean? = null,
     val exif: PhotoExif? = null,
     /** True once the extended (EXIF) read was attempted successfully, even if the file had no EXIF. */
     val extendedRead: Boolean = false,
@@ -115,7 +109,6 @@ internal fun WifiCameraPhoto.toBasicMetadata() = PhotoMetadata(
     capturedAt = capturedAt,
     width = width,
     height = height,
-    isProtected = isProtected,
 )
 
 /** Why metadata could not be read; mirrors [WifiTransferFailureReason] plus protocol-level causes. */

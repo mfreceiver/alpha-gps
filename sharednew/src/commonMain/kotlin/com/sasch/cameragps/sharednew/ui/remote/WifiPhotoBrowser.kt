@@ -72,8 +72,6 @@ import cameragps.sharednew.generated.resources.check_24px
 import cameragps.sharednew.generated.resources.close_24px
 import cameragps.sharednew.generated.resources.dismiss_button
 import cameragps.sharednew.generated.resources.download_24px
-import cameragps.sharednew.generated.resources.mw_lock_24px
-import cameragps.sharednew.generated.resources.mw_protected
 import cameragps.sharednew.generated.resources.wifi_remote_batch_download_jpg
 import cameragps.sharednew.generated.resources.wifi_remote_batch_download_none
 import cameragps.sharednew.generated.resources.wifi_remote_batch_download_size
@@ -431,7 +429,7 @@ internal fun WifiPhotoBrowser(
 
 /**
  * One square tile of the day grid: the thumbnail cropped to the square (portrait shots centred),
- * opt-in tags (format and size bottom-left, protection top-right), the preview corner (top-left)
+ * opt-in tags (format and size bottom-left), the preview corner (top-left)
  * and the check box (bottom-right). The preview never changes the selection.
  */
 @Composable
@@ -493,16 +491,6 @@ private fun PhotoGridTile(
             ) {
                 if (format != null) InfoTag(format, style = InfoTagStyle.OnPhoto)
                 if (size != null) InfoTag(size, style = InfoTagStyle.OnPhoto)
-            }
-            // Protection is only known from the older catalog; unknown shows nothing, never a guess.
-            if (options.showProtection && capture.isProtected == true) {
-                val protectedLabel = stringResource(Res.string.mw_protected)
-                InfoTag(
-                "", modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
-                    .semantics { contentDescription = protectedLabel },
-                style = InfoTagStyle.OnPhoto,
-                icon = painterResource(Res.drawable.mw_lock_24px),
-                )
             }
         }
         // Checkbox (bottom-right) and preview (top-left) are always there, selecting or not. Both are

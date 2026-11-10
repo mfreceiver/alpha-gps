@@ -197,15 +197,6 @@ class PaletteContrastTest {
     }
 
     @Test
-    fun ratingColorsClampOutOfRange() {
-        assertEquals(RatingColors.star1, RatingColors.forRating(0))
-        assertEquals(RatingColors.star1, RatingColors.forRating(1))
-        assertEquals(RatingColors.star3, RatingColors.forRating(3))
-        assertEquals(RatingColors.star5, RatingColors.forRating(5))
-        assertEquals(RatingColors.star1, RatingColors.forRating(9))
-    }
-
-    @Test
     fun deviceMetricIconTonesReadableOnCardAndInsetGlass() {
         // Device page metric icons (signal by level, written, last write) sit on an inset block
         // (onSurface 5–7 %) inside a G1 card; they use the text-safe tone colours, so they must

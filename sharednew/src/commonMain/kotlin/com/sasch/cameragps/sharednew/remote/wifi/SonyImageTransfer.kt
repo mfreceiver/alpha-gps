@@ -40,7 +40,6 @@ internal data class SonyImageInfo(
     val captureId: String? = null,
     val width: Int? = null,
     val height: Int? = null,
-    val isProtected: Boolean? = null,
 ) {
     companion object {
         fun parse(data: ByteArray): SonyImageInfo {
@@ -80,14 +79,12 @@ internal data class SonyImageInfo(
             }
             val captureId = "object:${number(0, 4)}:${number(38, 4)}:" +
                 "${filename.substringBeforeLast('.').uppercase()}:$capturedAt"
-            // Standard PTP ObjectInfo: ProtectionStatus@6 (0 none, 1 read-only), ImagePixWidth@26,
-            // ImagePixHeight@30; zero means "not provided" (RAW/HEIF often leave it out).
-            val protection = number(6, 2).toInt()
+            // Standard PTP ObjectInfo: ImagePixWidth@26, ImagePixHeight@30; zero means "not
+            // provided" (RAW/HEIF often leave it out).
             return SonyImageInfo(
                 size, filename, mime, capturedAt, captureId,
                 width = number(26, 4).toInt().takeIf { it in 1..100_000 },
                 height = number(30, 4).toInt().takeIf { it in 1..100_000 },
-                isProtected = when (protection) { 0 -> false; 1 -> true; else -> null },
             )
         }
     }
@@ -192,7 +189,7 @@ internal class SonyImageTransfer(
             if (info.mimeType.isNotEmpty()) photos += WifiCameraPhoto(
                 handle, info.filename, info.size, info.mimeType, info.capturedAt,
                 info.size in 1..MAX_IMAGE_BYTES, info.captureId,
-                info.width, info.height, info.isProtected
+                info.width, info.height
             )
         }
         snapshot = CatalogSnapshot.of(groupCameraPhotos(photos.sortedByDescending { it.capturedAt }))

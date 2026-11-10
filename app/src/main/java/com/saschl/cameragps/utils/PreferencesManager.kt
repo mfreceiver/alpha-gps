@@ -259,27 +259,33 @@ object PreferencesManager {
     // ---- Wi-Fi photo grid view options (wave 2 / Wi-Fi screen; keys prefixed mw_) ----
 
     /** Wi-Fi day-grid view options; default small tiles with every tag off. */
-    fun getWifiGridOptions(context: Context): WifiGridOptions {
-        val prefs = getPreferences(context)
-        return WifiGridOptions(
-            size = prefs.getString(KEY_MW_WIFI_GRID_SIZE, null) ?: WifiGridOptions().size,
-            showFormat = prefs.getBoolean(KEY_MW_WIFI_GRID_SHOW_FORMAT, false),
-            showSize = prefs.getBoolean(KEY_MW_WIFI_GRID_SHOW_SIZE, false),
-            showProtection = prefs.getBoolean(KEY_MW_WIFI_GRID_SHOW_PROTECTION, false),
-        )
-    }
+    fun getWifiGridOptions(context: Context): WifiGridOptions =
+        wifiGridOptionsFrom(getPreferences(context).all)
 
     fun setWifiGridOptions(context: Context, options: WifiGridOptions) {
         getPreferences(context).edit {
             putString(KEY_MW_WIFI_GRID_SIZE, options.size)
             putBoolean(KEY_MW_WIFI_GRID_SHOW_FORMAT, options.showFormat)
             putBoolean(KEY_MW_WIFI_GRID_SHOW_SIZE, options.showSize)
-            putBoolean(KEY_MW_WIFI_GRID_SHOW_PROTECTION, options.showProtection)
         }
     }
 
-    private const val KEY_MW_WIFI_GRID_SIZE = "mw_wifi_grid_size"
-    private const val KEY_MW_WIFI_GRID_SHOW_FORMAT = "mw_wifi_grid_show_format"
-    private const val KEY_MW_WIFI_GRID_SHOW_SIZE = "mw_wifi_grid_show_size"
-    private const val KEY_MW_WIFI_GRID_SHOW_PROTECTION = "mw_wifi_grid_show_protection"
+    /**
+     * Grid options from the stored preference map. Only the size / format / size-tag keys are read;
+     * keys of removed features (the 0.2.0 protection switch `mw_wifi_grid_show_protection`, the
+     * viewer histogram / parameter / lens switches) stay in old installs untouched and are ignored.
+     * A value of the wrong type falls back to the default instead of throwing.
+     */
+    internal fun wifiGridOptionsFrom(stored: Map<String, *>): WifiGridOptions {
+        val defaults = WifiGridOptions()
+        return WifiGridOptions(
+            size = stored[KEY_MW_WIFI_GRID_SIZE] as? String ?: defaults.size,
+            showFormat = stored[KEY_MW_WIFI_GRID_SHOW_FORMAT] as? Boolean ?: defaults.showFormat,
+            showSize = stored[KEY_MW_WIFI_GRID_SHOW_SIZE] as? Boolean ?: defaults.showSize,
+        )
+    }
+
+    internal const val KEY_MW_WIFI_GRID_SIZE = "mw_wifi_grid_size"
+    internal const val KEY_MW_WIFI_GRID_SHOW_FORMAT = "mw_wifi_grid_show_format"
+    internal const val KEY_MW_WIFI_GRID_SHOW_SIZE = "mw_wifi_grid_show_size"
 }
