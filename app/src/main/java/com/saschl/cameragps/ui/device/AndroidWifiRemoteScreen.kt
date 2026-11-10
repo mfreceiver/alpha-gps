@@ -43,6 +43,8 @@ fun AndroidWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
     }
     var pendingHost by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingAutomatic by rememberSaveable { mutableStateOf(false) }
+    // A restored browser must not auto-reconnect after its background session was closed.
+    var entryConnectAttempted by rememberSaveable(identifier) { mutableStateOf(false) }
     fun startCameraSetup() {
         if (controller.supportsAutomaticConnection) controller.connectAutomatically(identifier)
         else controller.prepareManualConnection(identifier)
@@ -66,11 +68,15 @@ fun AndroidWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
             pendingAutomatic = false
         }
     }
-    // Backgrounding keeps Wi-Fi alive; leaving remote or stopping the FGS closes it.
+    // The app-owned policy survives composition disposal during a background download.
+    // Explicit Back/close above still cancels immediately, just like task removal.
     DisposableEffect(identifier) {
-        onDispose { if (activity?.isChangingConfigurations != true) controller.disconnect(identifier) }
+        onDispose {
+            if (activity?.isChangingConfigurations != true) controller.onRemoteScreenDisposed(identifier)
+        }
     }
     val connect: (String?) -> Unit = { host ->
+        entryConnectAttempted = true
         val required = buildList {
             if (Build.VERSION.SDK_INT >= 37) add("android.permission.ACCESS_LOCAL_NETWORK")
             if (host == null) {
@@ -90,7 +96,7 @@ fun AndroidWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
         } else if (host == null) startCameraSetup() else controller.connect(identifier, host)
     }
     WifiRemoteScreen(model, onConnect = { connect(it) }, onConnectAutomatically = { connect(null) },
-        autoConnectOnEntry = true,
+        autoConnectOnEntry = !entryConnectAttempted,
         isExperimentalNoticeAcknowledged = {
             PreferencesManager.isWifiRemoteNoticeAcknowledged(
                 context

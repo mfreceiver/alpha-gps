@@ -3,6 +3,8 @@ package com.sasch.cameragps.sharednew.remote.wifi
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.ImageBitmapConfig
 import androidx.compose.ui.graphics.colorspace.ColorSpaces
+import androidx.lifecycle.ViewModelStore
+import com.sasch.cameragps.sharednew.bluetooth.BleSessionPhase
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionRegistry
 import com.sasch.cameragps.sharednew.ui.remote.WifiRemoteViewModel
 import kotlinx.coroutines.CompletableDeferred
@@ -15,6 +17,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -172,6 +175,273 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             cleanup += "wifi-off"
             return WifiShutdownStatus.Requested
         }
+    }
+
+    private data class BackgroundFixture(
+        val controller: WifiRemoteController,
+        val registry: CameraSessionRegistry,
+        val connection: Connection,
+    )
+
+    private fun TestScope.backgroundFixture(
+        connection: Connection = batchConnection(),
+        timeoutMs: Long = 30 * 60 * 1_000L,
+    ): BackgroundFixture {
+        val registry = CameraSessionRegistry().apply {
+            upsert("camera") { it.copy(phase = BleSessionPhase.Transmitting) }
+            upsert("other") { it.copy(phase = BleSessionPhase.Transmitting) }
+        }
+        val controller = WifiRemoteController(
+            backgroundScope, registry, { _, _ -> connection }, {}, {},
+            backgroundDownloadTimeoutMs = timeoutMs,
+        )
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        assertTrue(registry.get("camera")!!.wifiRemote.photoBrowser.open)
+        return BackgroundFixture(controller, registry, connection)
+    }
+
+    @Test
+    fun homeWithoutDownloadClosesOnlyWifiOwnerAndNeverEitherCamerasGps() = runTest {
+        val (controller, registry, connection) = backgroundFixture()
+        controller.onAppVisibilityChanged(false)
+        runCurrent()
+        assertNull(controller.owner.value)
+        assertTrue("connection" in connection.cleanup)
+        assertEquals(setOf("CAMERA", "OTHER"), registry.readyIdentifiers())
+        assertEquals(WifiRemotePhase.Idle, registry.get("other")!!.wifiRemote.phase)
+        controller.onAppVisibilityChanged(true)
+        runCurrent()
+        assertNull(controller.owner.value, "Foreground does not automatically reopen photo transfer")
+    }
+
+    @Test
+    fun homeDuringBatchRetainsWholeBatchThenClosesAfterFinalSave() = runTest {
+        val (controller, registry, connection) = backgroundFixture()
+        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(42), WifiPhotoDownload(43)))
+        runCurrent()
+        controller.onAppVisibilityChanged(false)
+        controller.onRemoteScreenDisposed("camera")
+        runCurrent()
+        assertEquals("CAMERA", controller.owner.value)
+        assertFalse("connection" in connection.cleanup)
+        connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Saved))
+        runCurrent()
+        assertEquals("CAMERA", controller.owner.value, "First file does not end a multi-file exception")
+        assertEquals(listOf(42L, 43L), connection.downloadedHandles)
+        connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Saved))
+        runCurrent()
+        assertNull(controller.owner.value)
+        assertTrue("connection" in connection.cleanup)
+        assertEquals(setOf("CAMERA", "OTHER"), registry.readyIdentifiers())
+    }
+
+    @Test
+    fun clearingBrowserViewModelCannotCancelBackgroundDownloadButForegroundDisposalStillCloses() = runTest {
+        for (background in listOf(true, false)) {
+            val (controller, registry, connection) = backgroundFixture()
+            val store = ViewModelStore()
+            store.put("remote", WifiRemoteViewModel("camera", controller))
+            controller.downloadPhoto("camera", 42)
+            runCurrent()
+            if (background) controller.onAppVisibilityChanged(false)
+            store.clear()
+            runCurrent()
+            if (background) {
+                assertEquals("CAMERA", controller.owner.value, "ViewModel lifetime does not own downloads")
+                assertFalse("download" in connection.cleanup)
+                connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Saved))
+                runCurrent()
+            }
+            assertNull(controller.owner.value)
+            assertTrue("connection" in connection.cleanup)
+            assertEquals(setOf("CAMERA", "OTHER"), registry.readyIdentifiers())
+        }
+    }
+
+    @Test
+    fun singleDownloadAlreadyAcceptedButNotYetScheduledAlsoSurvivesHome() = runTest {
+        val (controller, _, connection) = backgroundFixture()
+        controller.downloadPhoto("camera", 42)
+        controller.onAppVisibilityChanged(false)
+        runCurrent()
+        assertEquals("CAMERA", controller.owner.value)
+        connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Saved))
+        runCurrent()
+        assertNull(controller.owner.value)
+        assertEquals(listOf(42L), connection.downloadedHandles)
+    }
+
+    @Test
+    fun returningForegroundDuringDownloadCancelsPendingCloseAndItsDeadline() = runTest {
+        val (controller, _, connection) = backgroundFixture(timeoutMs = 1_000)
+        controller.downloadPhoto("camera", 42)
+        runCurrent()
+        controller.onAppVisibilityChanged(false)
+        advanceTimeBy(500)
+        controller.onAppVisibilityChanged(true)
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertEquals("CAMERA", controller.owner.value)
+        connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Saved))
+        runCurrent()
+        assertEquals("CAMERA", controller.owner.value, "Finishing in foreground must not close")
+        controller.onAppVisibilityChanged(false)
+        runCurrent()
+        assertNull(controller.owner.value)
+    }
+
+    @Test
+    fun downloadFailureAndUserCancellationBothEndBackgroundException() = runTest {
+        for (cancel in listOf(false, true)) {
+            val (controller, registry, connection) = backgroundFixture()
+            controller.downloadPhoto("camera", 42)
+            runCurrent()
+            controller.onAppVisibilityChanged(false)
+            if (cancel) controller.cancelPhotoOperation("camera")
+            else connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Failed))
+            runCurrent()
+            assertNull(controller.owner.value, "cancel=$cancel")
+            assertTrue("download" in connection.cleanup)
+            assertEquals(setOf("CAMERA", "OTHER"), registry.readyIdentifiers())
+        }
+    }
+
+    @Test
+    fun taskRemovalOrRootBackCancelsDownloadImmediatelyWithoutChangingBleGps() = runTest {
+        val (controller, registry, connection) = backgroundFixture()
+        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(42), WifiPhotoDownload(43)))
+        runCurrent()
+        connection.downloadResults!!.send(WifiImageTransferState(WifiImageTransferStatus.Saved))
+        runCurrent()
+        controller.onAppVisibilityChanged(false)
+        assertEquals("CAMERA", controller.owner.value)
+        // Both Android explicit exits enter AppExitCoordinator.closeWifi -> closeAndJoin.
+        controller.closeAndJoin()
+        assertNull(controller.owner.value)
+        assertTrue("download" in connection.cleanup)
+        assertTrue("connection" in connection.cleanup)
+        assertEquals(listOf(42L, 43L), connection.downloadedHandles)
+        assertEquals(setOf("CAMERA", "OTHER"), registry.readyIdentifiers())
+    }
+
+    @Test
+    fun thumbnailLoadingIsNotAUserDownloadException() = runTest {
+        val (controller, _, connection) = backgroundFixture(Connection().apply {
+            thumbnailHook = { awaitCancellation() }
+        })
+        assertEquals(listOf(42L), connection.thumbnailRequests)
+        controller.onAppVisibilityChanged(false)
+        runCurrent()
+        assertNull(controller.owner.value)
+        assertEquals(0, connection.downloads)
+    }
+
+    @Test
+    fun previewLoadingIsNotAUserDownloadException() = runTest {
+        val (controller, _, connection) = backgroundFixture(Connection())
+        connection.screenPreviewGate = CompletableDeferred()
+        controller.showPhotoPreview("camera", 42)
+        runCurrent()
+        assertEquals(listOf(42L), connection.screenPreviewRequests)
+        controller.onAppVisibilityChanged(false)
+        runCurrent()
+        assertNull(controller.owner.value)
+        assertEquals(0, connection.downloads)
+    }
+
+    @Test
+    fun backgroundDeadlineIsBoundedAndRepeatedStopOrDisposeCannotExtendIt() = runTest {
+        val (controller, registry, connection) = backgroundFixture(timeoutMs = 1_000)
+        controller.downloadPhoto("camera", 42)
+        runCurrent()
+        controller.onAppVisibilityChanged(false)
+        runCurrent()
+        advanceTimeBy(600)
+        controller.onAppVisibilityChanged(false)
+        controller.onRemoteScreenDisposed("camera")
+        advanceTimeBy(400)
+        runCurrent()
+        assertNull(controller.owner.value)
+        assertTrue("download" in connection.cleanup)
+        assertTrue("connection" in connection.cleanup)
+        assertEquals(setOf("CAMERA", "OTHER"), registry.readyIdentifiers())
+    }
+
+    @Test
+    fun retiredBackgroundTimerCannotKillNewSameCameraSession() = runTest {
+        val (controller, _, connection) = backgroundFixture(timeoutMs = 1_000)
+        controller.downloadPhoto("camera", 42)
+        runCurrent()
+        controller.onAppVisibilityChanged(false)
+        advanceTimeBy(500)
+        controller.closeAndJoin()
+        controller.onAppVisibilityChanged(true)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        controller.downloadPhoto("camera", 43)
+        runCurrent()
+        controller.onAppVisibilityChanged(false)
+        advanceTimeBy(500)
+        runCurrent()
+        assertEquals("CAMERA", controller.owner.value, "Old attempt deadline cannot close replacement")
+        assertEquals(listOf(42L, 43L), connection.downloadedHandles)
+        advanceTimeBy(500)
+        runCurrent()
+        assertNull(controller.owner.value, "Replacement has its own bounded deadline")
+    }
+
+    @Test
+    fun backgroundRejectsLateConnectAndDoesNotCloseADifferentDevicesSession() = runTest {
+        val (controller, registry, _) = backgroundFixture()
+        controller.onRemoteScreenDisposed("other")
+        assertEquals("CAMERA", controller.owner.value)
+        controller.onAppVisibilityChanged(false)
+        runCurrent()
+        controller.connect("other", "127.0.0.1")
+        runCurrent()
+        assertNull(controller.owner.value)
+        assertEquals(setOf("CAMERA", "OTHER"), registry.readyIdentifiers())
+    }
+
+    @Test
+    fun automaticNetworkRequestStaysRegisteredUntilBackgroundDownloadFinishes() = runTest {
+        val connection = Connection()
+        var releases = 0
+        val request = object : CameraNetworkRequest<String> {
+            override val events = flow {
+                emit(CameraNetworkEvent.Ready("camera-network", "192.168.122.1"))
+                awaitCancellation()
+            }
+            override fun close() { releases++ }
+        }
+        val automatic = AutomaticWifiRemoteConnector(
+            { CameraWifiCredentials("DIRECT-camera", "secret-pass", null) }, { request },
+            { _, _, _ -> connection },
+        )
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(
+            backgroundScope, registry, { _, _ -> error("Manual not expected") }, {}, {},
+            automaticConnector = automatic,
+        )
+        controller.connectAutomatically("camera")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        controller.downloadPhoto("camera", 42)
+        runCurrent()
+        controller.onAppVisibilityChanged(false)
+        runCurrent()
+        assertEquals(0, releases)
+        assertEquals("CAMERA", controller.owner.value)
+        connection.downloadResult.complete(WifiImageTransferState(WifiImageTransferStatus.Saved))
+        runCurrent()
+        assertNull(controller.owner.value)
+        assertEquals(1, releases)
     }
 
     private val pageSize = SonyImageTransfer.PAGE_SIZE

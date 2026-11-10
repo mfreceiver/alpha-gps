@@ -13,15 +13,17 @@
 ## P1
 
 ### 1. 真机冒烟：11 项 UI/UX 改造（0673adf..451c31f）
-- 做什么：装新版后验证：单机直达、设备页简化/底部照片传输入口/删除二次确认、直达连接、图标顶栏与方形角标、预览页直接下载与时间副标题、自适应列数与不裁剪缩略图、图标分页栏+跳页、退出应用（划走任务/根页返回）后相机 BLE 断开、缩略图分批渐进显示（`adb logcat -s AlphaThumb` 看 batch 行）。
-- 验收：逐项无异常；特别注意退出断开与重开应用秒开不冲突。
+- 做什么：装新版后验证：单机直达、设备页简化/底部照片传输入口/删除二次确认、直达连接、图标顶栏与方形角标、预览页直接下载与时间副标题、自适应列数与不裁剪缩略图、图标分页栏+跳页、退出应用（划走任务/根页返回）只结束 Wi-Fi，BLE/GPS 与有连接需求的前台服务保持、缩略图分批渐进显示（`adb logcat -s AlphaThumb` 看 batch 行）。
+- 验收：逐项无异常；退出/后台不得主动断 BLE，设备页用户主动断开才断 BLE；无下载退后台即结束 Wi-Fi，有用户单张/批量下载则保留至结束。重开应用不自动重建已结束的 Wi-Fi，需用户再次启动照片传输。
 - 依据：sonnet 五提交（ad8626b/8f542f6/acea142/b7226b2/451c31f）自报需真机验证清单。
 
 ### 9. 真机冒烟：第三轮 UI/UX（ac52215..E 提交）
-- 做什么：装新版后验证：①打开相册先显示"正在读取照片目录"，随后日期列表（按日倒序、未知日期最后，张数按 capture 计），进入某日只翻该日页，Back：网格→日期→退出；切日/翻页/返回日期不清选择、不丢"已选 N 张（含其它日期）"、不清已完成汇总；②缩略图只加载可见+前后余量（`adb logcat -s AlphaThumb` 看 batch 行，快速滑动不应整页扫描，翻页/刷新/断开立即停）；③网格长按拖动范围选取（长按格子变选中/取消、拖过范围批量、反向拖回恢复、边缘低速自动滚动且不翻页、checkbox/放大镜仍独立）；④角标 JPG/RAW/J&R/HEIF/H&R 只按文件格式；⑤JPG-only：RAW-only/HEIF-only 跳过并汇总"无 JPEG"，全跳过显示"下载 0/跳过 N"且不发起下载；Original：单张 JPG+RAW 一次下两个无格式选择器；⑥设备页仅 Ⓘ：对话框含重命名/删除二次确认/保持活跃/自动时间区域只读/MTU；连接按钮 连接/连接中…/断开连接/断开中…；断开后相机真实 BLE 断开（相机屏幕连接图标熄灭）、再开设备页仍保持断开、CDM 重新出现/重启不自动重连，点连接才恢复；多相机只断目标；Wi-Fi 会话中断开先关 Wi-Fi；⑦"保持活跃"开关：关（默认）时相机离开范围且无连接后服务应自行停止，开则保活；退出应用（划走/根页返回）仍断开。
-- 验收：逐项无异常；特别核对 ⑥ 断开后 CDM 重新出现不重连、⑦ 默认行为变化无意外掉线。
+- 做什么：装新版后验证：①打开相册先显示"正在读取照片目录"，随后日期列表（按日倒序、未知日期最后，张数按 capture 计），进入某日只翻该日页，Back：网格→日期→退出；切日/翻页/返回日期不清选择、不丢"已选 N 张（含其它日期）"、不清已完成汇总；②缩略图只加载可见+前后余量（`adb logcat -s AlphaThumb` 看 batch 行，快速滑动不应整页扫描，翻页/刷新/断开立即停）；③网格长按拖动范围选取（长按格子变选中/取消、拖过范围批量、反向拖回恢复、边缘低速自动滚动且不翻页、checkbox/放大镜仍独立）；④角标 JPG/RAW/J&R/HEIF/H&R 只按文件格式；⑤JPG-only：RAW-only/HEIF-only 跳过并汇总"无 JPEG"，全跳过显示"下载 0/跳过 N"且不发起下载；Original：单张 JPG+RAW 一次下两个无格式选择器；⑥设备页仅 Ⓘ：对话框含重命名/删除二次确认/保持活跃/自动时间区域只读/MTU；连接按钮 连接/连接中…/断开连接/断开中…；断开后相机真实 BLE 断开（相机屏幕连接图标熄灭）、再开设备页仍保持断开、CDM 重新出现/重启不自动重连，点连接才恢复；多相机只断目标；Wi-Fi 会话中断开先关 Wi-Fi；⑦"保持活跃"开关：关（默认）时相机离开范围且无连接后服务应自行停止，开则保活；退出应用（划走/根页返回）不再断 BLE/GPS，仅立即取消下载并结束 Wi-Fi；Home/锁屏/切应用有用户下载时保留 Wi-Fi 至下载结束，无下载立即结束。
+- 验收：逐项无异常；特别核对 ⑥ 用户主动断开后 CDM 重新出现不重连、多设备只断目标；⑦ 退出/后台仍继续 GPS 写入且前台服务不被 UI 退出停止，离开范围后的 presence 退休规则不变。
 - 依据：本轮 5 提交自报需真机验证（日期/视口/拖选/planner/Info 连接状态机均含无法在 JVM 验证的 Android 传输与手势部分）。
 - 子项（权限请求改造，fix(permissions)）：Android 12（API 31/32）全新安装，首次授权定位应一次弹出 FINE+COARSE 同请求（系统显示"精确/大致位置"二选一）；选"精确位置"后走后台定位分步授权（先前台全部通过再弹 ACCESS_BACKGROUND_LOCATION），选"仅大致位置"不放行、仍提示需要精确位置。API 33+ 同步确认 FINE+COARSE+通知一次请求。依据：sol 审阅 03dc59ae（Android 12 要求 FINE 与 COARSE 同请求，`PermissionBox.kt` `foregroundRuntimePermissions`）。
+
+- 子项（M1 后台/退出常驻）：真机分别在单张、跨文件批量下载中按 Home、锁屏、切换应用：确认 Wi-Fi 网络请求与下载不断，最后一项成功/失败/用户取消后仍在后台则释放 Wi-Fi（不留半文件，已提交文件保留），期间回前台则完成后继续保留会话。无下载、只有缩略图/大图预览时退后台立即释放；返回/旋转/活动重建不自动重连。下载中划卡、根页 Back 均立即取消并释放 Wi-Fi，但多台相机 BLE/GPS 与 FGS 保持；设备页主动断开仍仅断目标且保留既有持久化意图。验收还需覆盖后台超过 30 分钟的超时日志/清理、相机或网络丢失、OEM 电池策略。依据：`BackgroundWifiPolicy`、`WifiRemoteController` 的后台保留与 `AppExitCoordinator` 的 Wi-Fi-only 退出；宿主测试不能验证 Android 锁屏调度/系统网络许可窗口。
 
 ## P2
 
@@ -42,11 +44,6 @@
 - 做什么：在 `SonyImageTransferTest.kt` 增加用例：openBrowser 后 `queue.close()`，再 `download`，断言 `failureReason == Protocol`。
 - 验收：用例通过；去掉 `ensureResponded` 对 Closed 的映射时该用例必须失败。
 - 依据：sol 对 a4f756f 的复核（实现分支直接，仅覆盖缺口）；`PtpIpCommandQueueTest.kt:57-67` 现只验证 Closed 解挂。
-
-### 8. 残余风险：任务移除的首次 onTaskRemoved 迟到投递可落在重连后的新服务上
-- 做什么：评估在 AppExitGate/LocationSenderService 增加对“重连后立刻到达的 unowned removal”的启发式甄别，。窗口条件：Android 15 AOSP 中 ActivityTaskSupervisor.cleanUpRemovedTask → ActiveServices.cleanUpServices 只把 taskRemoved 的枚举投到 system-server Handler，执行时才枚举当时运行的服务；同一 removal 的**首次**投递可晚于旧服务 teardown 完成与 Connect 重启，落到新服务实例上。若旧 flow 在退休时已完成（completedAtRetire=true），Gate 按状态机会放行该迟到投递（AppExitGate.kt scheduleExit），disconnectAll 会清掉新 GATT、stopSelf 停掉新 FGS。根页 Back 已改 finishAndRemoveTask()，"Back 完成后卡片仍在→真实划卡" 主路径已消除；该残余窗口与既有 unowned-entered flow 的同类窗口同级，本地无法区分（事件序列与"真实新划卡"完全相同）。AOSP 依据：ActivityTaskSupervisor.cleanUpRemovedTask/ActiveServices.cleanUpServices 的异步 Handler 投递（sol 源码分析，2026-11-09）。
-- 验收：若处置，需与 AppExitGateTest 全部既有反例测试兼容；若评估后决定接受风险，把依据迁到 docs/ 风险文档并在决策提交里删除本条。
-- 依据：sol 对 9b436d9 的复核（P2-2 设计处置结论）。
 
 ### 10. Info 里的电池电量
 - 做什么：设计要求"仅 Wi-Fi 会话查 1 次电池并标注获取时间"，但 sharednew 内没有任何电池查询协议（grep battery 仅帮助文案），本轮已砍掉。需先确认 Sony PTP/Camera Remote 是否提供电池属性，再接入 Info（缓存 {value,obtainedAt,cameraId}，失败显示未知）。

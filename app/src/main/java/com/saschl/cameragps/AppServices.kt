@@ -75,31 +75,35 @@ class AppServices(context: Context) {
 
     private val exitCoordinator = AppExitCoordinator(
         closeWifi = { wifiRemote.closeAndJoin() },
-        shutdownSessions = { orchestrator.shutdownAll() },
-        disconnectBle = { transport.disconnectAll() },
     )
 
     /**
-     * Leaving the app (task removed / last activity finished) disconnects the camera:
-     * Wi-Fi session first, then every BLE session and GATT connection. [afterwards]
-     * runs once that is done (used to stop the foreground service). [owner] is the
-     * activity session the request belongs to; teardowns from a superseded owner
-     * are dropped (see [AppExitGate]).
+     * Explicit exit ends Wi-Fi even during downloads, never BLE/GPS or the foreground service.
+     * [owner] rejects callbacks of a superseded activity via the unchanged [AppExitGate].
      */
-    fun disconnectAllOnExit(owner: Any? = null, afterwards: () -> Unit = {}) {
-        exitGate.scheduleExit(owner, { exitCoordinator.disconnectEverything() }, afterwards)
+    fun disconnectAllOnExit(owner: Any? = null) {
+        exitGate.scheduleExit(owner, { exitCoordinator.disconnectEverything() }, {})
     }
 
     /**
      * A new app session started while an exit teardown was still running (quick relaunch,
      * or an incoming connect command from CDM/the notification): drop the rest of it,
-     * otherwise the late GATT close / service stop would kill the connection the new
-     * session just made.
+     * otherwise a late Wi-Fi close could end the new session's photo transfer.
      */
     fun cancelPendingExit() = exitGate.cancelPendingExit()
 
+    private var activityOwner: Any? = null
+
     /** A new foreground activity session started; voids exits of older sessions. */
-    fun beginAppSession(owner: Any) = exitGate.beginSession(owner)
+    fun beginAppSession(owner: Any) {
+        activityOwner = owner
+        exitGate.beginSession(owner)
+    }
+
+    /** Immediate Activity ON_START/ON_STOP, ignoring configuration changes and stale owners. */
+    fun setAppVisible(owner: Any, visible: Boolean) {
+        if (activityOwner === owner) wifiRemote.onAppVisibilityChanged(visible)
+    }
 
     private val exitGate = AppExitGate(scope)
 

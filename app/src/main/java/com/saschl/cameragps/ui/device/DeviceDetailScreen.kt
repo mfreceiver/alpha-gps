@@ -85,7 +85,6 @@ fun DeviceDetailScreen(
     onDisassociate: (device: AssociatedDeviceCompat) -> Unit,
     associationId: Int,
     onClose: () -> Unit,
-    onHelpClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var wifiRemoteOpen by rememberSaveable(device.address) { mutableStateOf(false) }
@@ -168,7 +167,6 @@ fun DeviceDetailScreen(
         viewModel = viewModel,
         deviceId = device.address,
         deviceName = resolvedName,
-        onHelp = onHelpClick,
         // Still the caller's second confirmation path: the route's confirm step runs first.
         onDelete = { onDisassociate(device) },
     )
