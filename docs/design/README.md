@@ -6,12 +6,14 @@ alpha-gps 的 UI/UX 设计方案。**纯设计交付**：这里的内容不改�
 
 | 版本 | PDF | 页数 | 范围 | 状态 |
 |---|---|---|---|---|
-| **v3** | [`ui-v3/ui-design-v3.pdf`](ui-v3/ui-design-v3.pdf) | 27 | 全应用界面重设计（玻璃风格、固定蓝色、亮/暗） | **当前生效** |
+| **v3**（第二轮修订） | [`ui-v3/ui-design-v3.pdf`](ui-v3/ui-design-v3.pdf) | 30 | 全应用界面重设计（玻璃风格、固定蓝色、亮/暗；仅 Android） | **当前生效** |
 | v2 | [`history/ui-status-enhancement-v2.pdf`](history/ui-status-enhancement-v2.pdf) | 17 | 相机/照片界面改版 | 历史，已被 v3 取代 |
 | v1 | [`history/ui-status-enhancement.pdf`](history/ui-status-enhancement.pdf) | 14 | 状态信息增强 | 历史；其数据层规格仍有效 |
 
 - v3 说明与每页摘要：[`ui-v3/README.md`](ui-v3/README.md)
-- v1/v2 说明：[`history/ui-status-enhancement/README.md`](history/ui-status-enhancement/README.md)；v1 数据层规格（字段、阈值、写入位置）：[`history/ui-status-enhancement/SPEC.md`](history/ui-status-enhancement/SPEC.md)，v3 第 25 页沿用。
+- v1/v2 说明：[`history/ui-status-enhancement/README.md`](history/ui-status-enhancement/README.md)；v1 数据层规格（字段、阈值、写入位置）：[`history/ui-status-enhancement/SPEC.md`](history/ui-status-enhancement/SPEC.md)，v3 第 28 页沿用。
+
+v3 经过两轮评审：第一轮 27 页（提交 `47038fe`），第二轮原地修订为 30 页，修订对照在 PDF 第 2 页。
 
 ## 重建
 
@@ -30,7 +32,7 @@ cd docs/design/history/ui-status-enhancement && python3 pages.py   # v1 → ../u
 
 - 设计里的“待确认问题”（Q 编号）和“开发拆分”（M 编号）**不复制进** `docs/todo.md`。
 - 决定开发某个里程碑时，再按 `AGENTS.md` 的待办纪律把当期条目写入 `docs/todo.md`（要做什么 / 验收标准 / 依据位置），完成即删。
-- 设计与代码不一致时，以“v3 PDF 第 26 页：与现有实现的差异”为对照清单；行号基于 HEAD `587f510`（v0.1.5）。
+- 设计与代码不一致时，以“v3 PDF 第 29 页：与现有实现的差异”为对照清单；行号基于 HEAD `587f510`（v0.1.5）。
 
 ## 约定
 

@@ -8,7 +8,7 @@ MOCK = os.path.join(HERE, "mockups")
 os.makedirs(MOCK, exist_ok=True)
 F = {}
 pages = []
-DOC = "alpha-gps · 界面重设计 UI 设计方案 v3"
+DOC = "alpha-gps · 界面重设计 UI 设计方案 v3（第二轮修订）"
 
 
 def save(key, svg):

@@ -12,7 +12,7 @@ import screens3 as A
 import screens3b as B
 from doc3 import shot
 
-TOTAL = 27
+TOTAL = 30
 
 
 def mockups():
@@ -58,10 +58,12 @@ def mockups():
     # ---- viewer (always dark inside)
     shot("view_land", lambda: B.viewer_screen("land"))
     shot("view_land_c", lambda: B.viewer_screen("land", callouts=True))
+    shot("view_port", lambda: B.viewer_screen("port", card2=True))
+    shot("view_full", lambda: B.viewer_screen("port", opts=("params", "lens", "hist")))
+    shot("view_params", lambda: B.viewer_screen("land", opts=("params",)))
     shot("view_sheet", lambda: B.viewer_screen("land", sheet=True))
-    shot("view_port_c", lambda: B.viewer_screen("port", callouts=True))
-    shot("view_loading", lambda: B.viewer_screen("land", exif="loading", gps="loading"))
-    shot("view_fail", lambda: B.viewer_screen("land", exif="fail", gps="fail"))
+    shot("view_loading", lambda: B.viewer_screen("land", exif="loading", gps="loading", opts=("params",)))
+    shot("view_fail", lambda: B.viewer_screen("land", exif="fail", gps="fail", opts=("params",)))
     shot("view_nogps", lambda: B.viewer_screen("land", gps="none"))
     shot("view_dl", lambda: B.viewer_screen("land", state="downloading"))
     shot("view_saved", lambda: B.viewer_screen("port", state="saved"))
@@ -71,6 +73,8 @@ def mockups():
     shot("logs", B.logs_screen)
     shot("help_c", lambda: B.help_screen(callouts=True))
     shot("trouble", B.troubleshoot_screen)
+    shot("about_c", lambda: B.about_screen(callouts=True))
+    shot("licenses", B.licenses_screen)
     # ---- dark set
     shot("d_list", lambda: A.device_list_screen("normal"), "dark")
     shot("d_dev_ok", lambda: A.device_screen("ok"), "dark")
