@@ -8,9 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
@@ -24,12 +21,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.a1_address_hidden
 import cameragps.sharednew.generated.resources.a1_address_hide
@@ -81,13 +78,15 @@ import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleSize
 import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassInsetBlock
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSwitch
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassTextField
 import com.sasch.cameragps.sharednew.ui.components.glass.IconEmphasis
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusTone
 import com.sasch.cameragps.sharednew.ui.components.glass.statusIconColor
 import com.sasch.cameragps.sharednew.ui.components.glass.statusToneColor
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
-import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -240,8 +239,8 @@ private fun DeviceInfoDialog(
             ) {
                 Text(
                     deviceName,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = colors.onSurface,
+                    style = AlphaType.Heading,
+                    color = colors.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
@@ -296,7 +295,7 @@ private fun DeviceInfoDialog(
                 Text(
                     addressText(deviceId, addressVisibility),
                     style = InfoValueStyle,
-                    color = colors.onSurface,
+                    color = colors.textPrimary,
                     maxLines = 1,
                     modifier = if (addressVisibility == AddressVisibility.Hidden) {
                         Modifier.clearAndSetSemantics { contentDescription = hiddenDescription }
@@ -328,20 +327,28 @@ private fun DeviceInfoDialog(
             }
 
             GlassInsetBlock(modifier = Modifier.fillMaxWidth()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // The whole row is the toggle (one target, one announcement); the switch only draws.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.toggleable(
+                        value = keepActive,
+                        role = Role.Switch,
+                        onValueChange = onKeepActiveChange,
+                    ),
+                ) {
                     Column(Modifier.weight(1f).padding(end = 12.dp)) {
                         Text(
                             stringResource(Res.string.device_info_keep_active),
-                            style = AlphaTextStyles.statusValue,
-                            color = colors.onSurface,
+                            style = AlphaType.Label,
+                            color = colors.textPrimary,
                         )
                         Text(
                             stringResource(Res.string.m2_info_keep_active_hint),
-                            style = AlphaTextStyles.statusLabel,
-                            color = colors.onSurfaceVariant,
+                            style = AlphaType.Caption,
+                            color = colors.textSecondary,
                         )
                     }
-                    Switch(checked = keepActive, onCheckedChange = onKeepActiveChange)
+                    GlassSwitch(checked = keepActive, onCheckedChange = null)
                 }
             }
 
@@ -358,7 +365,7 @@ private fun DeviceInfoDialog(
     }
 }
 
-private val InfoValueStyle = AlphaTextStyles.dialogBody.copy(fontSize = 14.sp)
+private val InfoValueStyle = AlphaType.Body
 
 @Composable
 private fun InfoRow(label: String, value: @Composable () -> Unit) {
@@ -368,8 +375,8 @@ private fun InfoRow(label: String, value: @Composable () -> Unit) {
     ) {
         Text(
             label,
-            style = AlphaTextStyles.dialogBody,
-            color = AlphaTheme.colors.onSurfaceVariant,
+            style = AlphaType.Body,
+            color = AlphaTheme.colors.textSecondary,
             modifier = Modifier.weight(1f).padding(end = 8.dp),
         )
         Row(
@@ -436,17 +443,13 @@ internal fun RenameCameraDialog(
         dismiss = DialogAction(stringResource(Res.string.cancel_button), onClick = onDismiss),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
+            GlassTextField(
                 value = text,
                 onValueChange = { text = it },
                 singleLine = true,
-                label = { Text(stringResource(Res.string.rename_camera_label)) },
+                label = stringResource(Res.string.rename_camera_label),
+                supportingText = stringResource(Res.string.rename_camera_hint),
                 modifier = Modifier.fillMaxWidth(),
-            )
-            Text(
-                text = stringResource(Res.string.rename_camera_hint),
-                style = AlphaTextStyles.statusLabel,
-                color = AlphaTheme.colors.onSurfaceVariant,
             )
         }
     }

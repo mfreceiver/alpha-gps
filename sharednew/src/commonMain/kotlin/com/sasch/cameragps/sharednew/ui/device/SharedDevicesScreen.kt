@@ -2,20 +2,17 @@ package com.sasch.cameragps.sharednew.ui.device
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.sasch.cameragps.sharednew.ui.components.ScreenContent
-import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
-import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassTopBar
 
-/** Device list scaffold: transparent over the app's GlassBackground (design v3). */
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Device list scaffold: transparent over the app's GlassBackground (design v3), with a
+ * [GlassTopBar] (left-aligned title, [topBarActions] as glass icon buttons on the right).
+ */
 @Composable
 fun SharedDevicesScreen(
     title: String,
@@ -28,25 +25,12 @@ fun SharedDevicesScreen(
         snackbarHost = snackbarHost,
         topBar = {
             ScreenContent {
-                CenterAlignedTopAppBar(
-                    title = {
-                        Text(
-                            text = title,
-                            style = AlphaTextStyles.topBarTitle,
-                        )
-                    },
-                    actions = {
-                        topBarActions()
-
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                        scrolledContainerColor = Color.Transparent,
-                        titleContentColor = AlphaTheme.colors.onSurface,
-                    )
+                GlassTopBar(
+                    title = title,
+                    actions = { topBarActions() },
                 )
             }
-        }
+        },
     ) { innerPadding ->
         ScreenContent(modifier = Modifier.padding(innerPadding)) {
             content(innerPadding)
