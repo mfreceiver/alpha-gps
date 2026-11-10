@@ -183,4 +183,29 @@ class WifiFormatPolicyTest {
         assertEquals(WifiFormatPolicy.JpegOnly, WifiFormatPolicy.of(true))
         assertEquals(WifiFormatPolicy.Original, WifiFormatPolicy.of(false))
     }
+
+    @Test
+    fun captureSizeIsWhatTheDefaultFormatWouldDownload() {
+        // JPG only: just the JPEG of a JPG+RAW capture; Original: every file.
+        assertEquals(CaptureDownloadSize(2000, notDownloaded = false), captureDownloadSize(jpgRaw, jpegOnly))
+        assertEquals(CaptureDownloadSize(32000, notDownloaded = false), captureDownloadSize(jpgRaw, original))
+        assertEquals(CaptureDownloadSize(1500, notDownloaded = false), captureDownloadSize(jpgOnly, original))
+    }
+
+    @Test
+    fun rawOnlyUnderJpgOnlyShowsItsOwnSizeButIsMarkedNotDownloaded() {
+        assertEquals(CaptureDownloadSize(40000, notDownloaded = true), captureDownloadSize(rawOnly, jpegOnly))
+        assertEquals(CaptureDownloadSize(900, notDownloaded = true), captureDownloadSize(heifOnly, jpegOnly))
+        assertEquals(CaptureDownloadSize(40000, notDownloaded = false), captureDownloadSize(rawOnly, original))
+    }
+
+    @Test
+    fun tileSizesAddUpToTheBatchButton() {
+        // The floating "Download N JPG (x MB)" and the tile tags come from the same planner.
+        val selection = listOf(jpgRaw, rawJpg, jpgOnly, rawOnly, heifRaw)
+        for (policy in listOf(jpegOnly, original)) {
+            val tags = selection.map { captureDownloadSize(it, policy) }.filter { !it.notDownloaded }.sumOf { it.bytes }
+            assertEquals(planDownloads(selection, policy, emptySet()).totalBytes, tags, "policy $policy")
+        }
+    }
 }

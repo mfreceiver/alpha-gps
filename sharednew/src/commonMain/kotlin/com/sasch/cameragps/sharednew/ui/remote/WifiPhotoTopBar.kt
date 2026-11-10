@@ -16,7 +16,6 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -59,6 +58,7 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
 import com.sasch.cameragps.sharednew.remote.wifi.dateKey
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSwitch
 import com.sasch.cameragps.sharednew.ui.components.glass.glass
 import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
@@ -251,6 +251,6 @@ private fun OptionSwitch(
                 note, style = MaterialTheme.typography.bodySmall, color = AlphaTheme.colors.onSurfaceVariant
             )
         }
-        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
+        GlassSwitch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }

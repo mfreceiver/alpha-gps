@@ -1,6 +1,5 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -56,7 +55,6 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onLongClick
@@ -76,6 +74,9 @@ import cameragps.sharednew.generated.resources.wifi_remote_batch_download_jpg
 import cameragps.sharednew.generated.resources.wifi_remote_batch_download_none
 import cameragps.sharednew.generated.resources.wifi_remote_batch_download_size
 import cameragps.sharednew.generated.resources.search_24px
+import cameragps.sharednew.generated.resources.m2_warning_24px
+import cameragps.sharednew.generated.resources.b1_tile_size
+import cameragps.sharednew.generated.resources.b1_tile_size_not_downloaded
 import cameragps.sharednew.generated.resources.wifi_remote_browser_empty
 import cameragps.sharednew.generated.resources.wifi_remote_browser_failed
 import cameragps.sharednew.generated.resources.wifi_remote_batch_skip_hint
@@ -107,12 +108,16 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiTransferFailureReason
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
 import com.sasch.cameragps.sharednew.remote.wifi.WifiSkipReason
 import com.sasch.cameragps.sharednew.remote.wifi.formatBadge
+import com.sasch.cameragps.sharednew.remote.wifi.captureDownloadSize
 import com.sasch.cameragps.sharednew.remote.wifi.formatByteSize
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import com.sasch.cameragps.sharednew.remote.wifi.shouldShowBatchSummary
 import com.sasch.cameragps.sharednew.remote.wifi.thumbnailWindow
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
+import com.sasch.cameragps.sharednew.ui.components.glass.glass
+import com.sasch.cameragps.sharednew.ui.components.glass.glassContentColor
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleSize
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassFloatingBar
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
@@ -120,6 +125,7 @@ import com.sasch.cameragps.sharednew.ui.components.glass.InfoTag
 import com.sasch.cameragps.sharednew.ui.components.glass.InfoTagStyle
 import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.GlassLevel
 import cameragps.sharednew.generated.resources.wifi_remote_back_busy
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -338,6 +344,7 @@ internal fun WifiPhotoBrowser(
                             busy = busy,
                             actionsEnabled = actionsEnabled,
                             options = gridOptions,
+                            policy = policy,
                             shape = tileShape,
                             viewModel = viewModel,
                         )
@@ -404,7 +411,9 @@ internal fun WifiPhotoBrowser(
                     )
                     // A plan with nothing in it stays tappable: the tap records the
                     // "downloaded 0, skipped N" result instead of doing nothing.
-                    GlassFloatingBar(contentPadding = PaddingValues(6.dp)) { CapsuleButton(
+                    // The glass primary capsule floats on its own: no extra bar ring around it and no
+                    // dark glow (the old Primary-in-GlassFloatingBar read as a thick dark outline).
+                    CapsuleButton(
                         text = when {
                             plan.files.isEmpty() -> stringResource(Res.string.wifi_remote_batch_download_none)
                             policy == WifiFormatPolicy.JpegOnly -> stringResource(
@@ -418,9 +427,10 @@ internal fun WifiPhotoBrowser(
                         },
                         onClick = { viewModel.requestBatchDownload(policy, state, onDownload) },
                         icon = painterResource(Res.drawable.download_24px),
+                        role = CapsuleRole.GlassPrimary,
                         size = CapsuleSize.Large,
                         enabled = !busy,
-                    ) }
+                    )
                 }
             }
         }
@@ -428,9 +438,10 @@ internal fun WifiPhotoBrowser(
 }
 
 /**
- * One square tile of the day grid: the thumbnail cropped to the square (portrait shots centred),
- * opt-in tags (format and size bottom-left), the preview corner (top-left)
- * and the check box (bottom-right). The preview never changes the selection.
+ * One tile of the day grid: a fixed square *frame* (pale glass fill) with the photo fitted whole and
+ * centred inside it — never cropped. The corner elements are anchored to the frame, not to the photo
+ * ([tileCorner]): preview top-left, size tag top-right, format tag bottom-left, check box bottom-right,
+ * each [TILE_CORNER_INSET_DP] from the edges. The preview never changes the selection.
  */
 @Composable
 private fun PhotoGridTile(
@@ -442,6 +453,7 @@ private fun PhotoGridTile(
     busy: Boolean,
     actionsEnabled: Boolean,
     options: WifiGridOptions,
+    policy: WifiFormatPolicy,
     shape: RoundedCornerShape,
     viewModel: WifiRemoteViewModel,
 ) {
@@ -450,9 +462,10 @@ private fun PhotoGridTile(
         if (isSelected) Res.string.wifi_remote_viewer_deselect
         else Res.string.wifi_remote_viewer_select
     )
+    val inset = TILE_CORNER_INSET_DP.dp
     Box(
         Modifier.fillMaxWidth().aspectRatio(1f).clip(shape)
-            .background(AlphaTheme.colors.onSurface.copy(alpha = 0.08f))
+            .background(tileFrameColor(AlphaTheme.colors.isDark))
     ) {
         // The clickable layer is a sibling of the preview button below, so the magnifier is its own
         // accessibility node and never toggles selection.
@@ -479,56 +492,81 @@ private fun PhotoGridTile(
             if (isSelected) {
                 Box(
                     Modifier.fillMaxSize()
-                        .background(AlphaTheme.colors.primary.copy(alpha = 0.25f))
+                        .background(AlphaTheme.colors.primary.copy(alpha = 0.22f))
                         .border(3.dp, AlphaTheme.colors.primary, shape)
                 )
             }
-            val format = if (options.showFormat) capture.formatBadge() else null
-            val size = if (options.showSize) formatSizeTag(capture.files.sumOf { it.size }) else null
-            if (format != null || size != null) Row(
-                Modifier.align(Alignment.BottomStart).padding(start = 4.dp, bottom = 4.dp, end = TileActionSize),
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                if (format != null) InfoTag(format, style = InfoTagStyle.OnPhoto)
-                if (size != null) InfoTag(size, style = InfoTagStyle.OnPhoto)
+            if (options.showSize) {
+                val size = captureDownloadSize(capture, policy)
+                formatSizeTag(size.bytes)?.let { text ->
+                    val description = stringResource(
+                        if (size.notDownloaded) Res.string.b1_tile_size_not_downloaded else Res.string.b1_tile_size, text
+                    )
+                    InfoTag(
+                        text,
+                        modifier = Modifier.align(tileCorner(TileElement.SizeTag).alignment).padding(inset)
+                            .semantics { contentDescription = description },
+                        style = InfoTagStyle.OnPhoto,
+                        // Not part of a JPG-only download (RAW-only): marked, never implied.
+                        icon = if (size.notDownloaded) painterResource(Res.drawable.m2_warning_24px) else null,
+                    )
+                }
+            }
+            if (options.showFormat) capture.formatBadge()?.let { format ->
+                InfoTag(
+                    format,
+                    modifier = Modifier.align(tileCorner(TileElement.FormatTag).alignment).padding(inset),
+                    style = InfoTagStyle.OnPhoto,
+                )
             }
         }
-        // Checkbox (bottom-right) and preview (top-left) are always there, selecting or not. Both are
-        // siblings of the clickable layer, so each is its own accessibility node and never double-fires
-        // the tile tap. A load/transfer in flight disables them (the ViewModel refuses too).
+        // Checkbox and preview are always there, selecting or not. Both are siblings of the clickable
+        // layer, so each is its own accessibility node and never double-fires the tile tap. A
+        // load/transfer in flight disables them (the ViewModel refuses too).
+        val checkboxCorner = tileCorner(TileElement.Checkbox).alignment
         Box(
-            Modifier.align(Alignment.BottomEnd).size(TileActionSize).clickable(
+            Modifier.align(checkboxCorner).size(TileActionSize).clickable(
                 enabled = actionsEnabled,
                 role = Role.Checkbox,
                 onClick = { viewModel.togglePhotoSelection(capture.id) },
             ).semantics {
                 contentDescription = toggleLabel
                 selected = isSelected
-            },
-            contentAlignment = Alignment.Center
+            }.padding(inset),
+            contentAlignment = checkboxCorner,
         ) { SelectionCheck(isSelected) }
         val previewLabel = stringResource(Res.string.wifi_remote_preview_photo)
+        val previewCorner = tileCorner(TileElement.Preview).alignment
         Box(
-            Modifier.align(Alignment.TopStart).size(TileActionSize).clickable(
+            Modifier.align(previewCorner).size(TileActionSize).clickable(
                 enabled = actionsEnabled,
                 role = Role.Button,
                 onClick = { viewModel.previewPhoto(capture.id) },
-            ).semantics { contentDescription = previewLabel },
-            contentAlignment = Alignment.Center
+            ).semantics { contentDescription = previewLabel }.padding(inset),
+            contentAlignment = previewCorner,
         ) {
-            // Square, with a smaller fill than the touch target around it.
+            // Small square glass button inside the larger touch target.
             Box(
-                Modifier.size(22.dp).background(Color.Black.copy(alpha = 0.55f), SquareBadgeShape),
+                Modifier.size(TILE_BADGE_DP.dp).glass(GlassLevel.Float, SquareBadgeShape, shadow = false),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     painterResource(Res.drawable.search_24px), contentDescription = null,
-                    tint = Color.White, modifier = Modifier.size(15.dp)
+                    tint = glassContentColor(GlassLevel.Float), modifier = Modifier.size(15.dp)
                 )
             }
         }
     }
 }
+
+/** Compose alignment of a frame corner. */
+private val TileCorner.alignment: Alignment
+    get() = when (this) {
+        TileCorner.TopStart -> Alignment.TopStart
+        TileCorner.TopEnd -> Alignment.TopEnd
+        TileCorner.BottomStart -> Alignment.BottomStart
+        TileCorner.BottomEnd -> Alignment.BottomEnd
+    }
 
 @Composable
 internal fun skipReasonsText(skipped: Map<WifiSkipReason, Int>): String =
@@ -568,7 +606,7 @@ private class RangeDragState {
 }
 
 /** Touch target of the checkbox / preview overlays on a grid tile. */
-private val TileActionSize = 40.dp
+private val TileActionSize = TILE_ACTION_DP.dp
 
 /** Small corner radius: the overlays read as squares, not circles. */
 private val SquareBadgeShape = RoundedCornerShape(3.dp)
@@ -577,7 +615,7 @@ private val SquareBadgeShape = RoundedCornerShape(3.dp)
 @Composable
 internal fun SelectionCheck(selected: Boolean, modifier: Modifier = Modifier) {
     Box(
-        modifier.size(22.dp).clip(SquareBadgeShape).then(
+        modifier.size(TILE_BADGE_DP.dp).clip(SquareBadgeShape).then(
             if (selected) Modifier.background(MaterialTheme.colorScheme.primary)
             else Modifier.background(Color.Black.copy(alpha = 0.25f)).border(2.dp, Color.White, SquareBadgeShape)
         ),
@@ -591,14 +629,14 @@ internal fun SelectionCheck(selected: Boolean, modifier: Modifier = Modifier) {
 }
 
 /**
- * Grid thumbnail: cropped to fill the square tile (a portrait shot shows its centre). Bitmaps are
- * already upright; the viewer always shows the whole picture.
+ * Grid thumbnail: the whole picture fitted into the square frame and centred (never cropped), with
+ * the camera's baked-in letterbox bars trimmed ([FittedThumbnail]). Bitmaps are already upright.
  */
 @Composable
 private fun PhotoTile(image: ImageBitmap?, loading: Boolean) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         if (image != null) {
-            Image(image, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            FittedThumbnail(image, Modifier.fillMaxSize())
         } else if (loading) {
             CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
         } else {
