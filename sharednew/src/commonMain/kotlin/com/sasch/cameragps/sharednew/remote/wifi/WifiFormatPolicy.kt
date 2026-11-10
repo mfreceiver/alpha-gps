@@ -110,21 +110,33 @@ internal fun planDownloads(
 
 /**
  * The size shown for one capture (grid size tag, viewer info strip): what a download of it under
- * [policy] fetches, from the same [planDownloads] as the batch button ("Download N JPG (x MB)"), so a
- * selection's tags add up to the button. Saved files are not excluded — the label is the photo's,
- * not the remaining work.
+ * [policy] fetches, planned exactly like the batch button's plan — including [saved], so a tag never
+ * counts a file that is already on the phone and the tile tags of a selection add up to the floating
+ * button ("Download N (x MB)") in every case.
  *
- * When the policy would download nothing (RAW-only / HEIF-only under JPG only — those are never
- * fetched silently — or every file is over the limit) the size of the original files is shown with
- * [CaptureDownloadSize.notDownloaded] set, so the UI marks it ("only RAW") instead of implying a
- * download.
+ * [CaptureDownloadSize.reason] says why nothing would be fetched (null = the bytes will download):
+ * - [WifiSkipReason.NoJpeg] — JPG-only policy over a RAW/HEIF-only capture: the size of the original
+ *   files is still shown with the reason, so the UI can mark it ("only RAW") — the user-confirmed
+ *   exception of showing a size that will not download.
+ * - [WifiSkipReason.TooLarge] — every candidate file is over the download limit: nothing is shown.
+ * - [WifiSkipReason.AlreadySaved] — every candidate file was saved earlier in this catalog
+ *   generation: the tile shows its saved state instead of a size.
  */
-internal data class CaptureDownloadSize(val bytes: Long, val notDownloaded: Boolean)
+internal data class CaptureDownloadSize(val bytes: Long, val reason: WifiSkipReason? = null)
 
-internal fun captureDownloadSize(capture: WifiCameraCapture, policy: WifiFormatPolicy): CaptureDownloadSize {
-    val plan = planDownloads(listOf(capture), policy, emptySet())
-    return if (plan.files.isNotEmpty()) CaptureDownloadSize(plan.totalBytes, notDownloaded = false)
-    else CaptureDownloadSize(capture.files.sumOf { it.size }, notDownloaded = true)
+internal fun captureDownloadSize(
+    capture: WifiCameraCapture,
+    policy: WifiFormatPolicy,
+    saved: Set<WifiPhotoDownload> = emptySet(),
+): CaptureDownloadSize {
+    val plan = planDownloads(listOf(capture), policy, saved)
+    if (plan.files.isNotEmpty()) return CaptureDownloadSize(plan.totalBytes)
+    return when (plan.mainSkipReason) {
+        WifiSkipReason.NoJpeg -> CaptureDownloadSize(capture.files.sumOf { it.size }, WifiSkipReason.NoJpeg)
+        WifiSkipReason.TooLarge -> CaptureDownloadSize(0, WifiSkipReason.TooLarge)
+        WifiSkipReason.AlreadySaved -> CaptureDownloadSize(0, WifiSkipReason.AlreadySaved)
+        null -> CaptureDownloadSize(0)
+    }
 }
 
 /** Result line shown after a batch: how many files were downloaded, how many skipped. */
@@ -153,18 +165,36 @@ internal fun shouldShowBatchSummary(summarySettled: Boolean, transfer: WifiImage
     summarySettled && (transfer.status == WifiImageTransferStatus.Saved ||
             transfer.status == WifiImageTransferStatus.Idle)
 
-/** "512 KB", "4.8 MB", "48 MB", "1.2 GB" — binary units, no locale-specific formatting. */
+/**
+ * One shared number formatting for every size label (P3-1): binary units, one decimal, rounded
+ * half up; from 10 units up the decimal is dropped and the integer itself rounds half up. The unit
+ * is added by the caller ("MB" / "GB").
+ */
+private fun tenths(bytes: Long, unit: Long): String {
+    val t = (bytes * 10 + unit / 2) / unit
+    return if (t >= 100) "${(t + 5) / 10}" else "${t / 10}.${t % 10}"
+}
+
+/** "512 KB", "4.8 MB", "48 MB", "1.3 GB" — binary units, no locale-specific formatting. */
 internal fun formatByteSize(bytes: Long): String {
     val kb = 1024L
     val mb = kb * 1024
     val gb = mb * 1024
-    fun tenths(unit: Long): String {
-        val t = bytes * 10 / unit
-        return if (t >= 100) "${t / 10}" else "${t / 10}.${t % 10}"
-    }
     return when {
         bytes < mb -> "${maxOf(0L, (bytes + kb - 1) / kb)} KB"
-        bytes < gb -> "${tenths(mb)} MB"
-        else -> "${tenths(gb)} GB"
+        bytes < gb -> "${tenths(bytes, mb)} MB"
+        else -> "${tenths(bytes, gb)} GB"
     }
+}
+
+/**
+ * The unitless number of the grid's size tag and of any MB-scale label: one decimal (binary MB,
+ * half up; no decimal from 10 MB up), "<0.1" below 0.1 MB, null for an unknown (zero) size. Always
+ * agrees with [formatByteSize] on the same byte count (modulo the KB branch).
+ */
+internal fun formatSizeNumber(bytes: Long): String? {
+    if (bytes <= 0) return null
+    val mb = 1024L * 1024L
+    if (bytes * 10 < mb) return "<0.1"
+    return tenths(bytes, mb)
 }

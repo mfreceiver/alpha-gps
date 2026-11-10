@@ -86,6 +86,8 @@ import cameragps.sharednew.generated.resources.wifi_remote_preview_photo
 import cameragps.sharednew.generated.resources.wifi_remote_skip_no_jpg
 import cameragps.sharednew.generated.resources.wifi_remote_skip_saved
 import cameragps.sharednew.generated.resources.wifi_remote_skip_too_large
+import cameragps.sharednew.generated.resources.d1_tile_too_large
+import cameragps.sharednew.generated.resources.d1_tile_saved
 import cameragps.sharednew.generated.resources.wifi_remote_conversion_failed
 import cameragps.sharednew.generated.resources.wifi_remote_converting_jpeg
 import cameragps.sharednew.generated.resources.wifi_remote_preview_unavailable
@@ -345,6 +347,7 @@ internal fun WifiPhotoBrowser(
                             actionsEnabled = actionsEnabled,
                             options = gridOptions,
                             policy = policy,
+                            saved = browser.savedDownloads,
                             shape = tileShape,
                             viewModel = viewModel,
                         )
@@ -438,8 +441,10 @@ internal fun WifiPhotoBrowser(
 }
 
 /**
- * One tile of the day grid: a fixed square *frame* (pale glass fill) with the photo fitted whole and
- * centred inside it — never cropped. The corner elements are anchored to the frame, not to the photo
+ * One tile of the day grid: a fixed square *frame* (near-black fill, the theme's
+ * `thumbnailFrame`) with the photo fitted whole and centred inside it — never cropped, and the
+ * camera's baked-in letterbox bars are deliberately not trimmed (they blend into the frame).
+ * The corner elements are anchored to the frame, not to the photo
  * ([tileCorner]): preview top-left, size tag top-right, format tag bottom-left, check box bottom-right,
  * each [TILE_CORNER_INSET_DP] from the edges. The preview never changes the selection.
  */
@@ -454,6 +459,7 @@ private fun PhotoGridTile(
     actionsEnabled: Boolean,
     options: WifiGridOptions,
     policy: WifiFormatPolicy,
+    saved: Set<WifiPhotoDownload>,
     shape: RoundedCornerShape,
     viewModel: WifiRemoteViewModel,
 ) {
@@ -465,7 +471,7 @@ private fun PhotoGridTile(
     val inset = TILE_CORNER_INSET_DP.dp
     Box(
         Modifier.fillMaxWidth().aspectRatio(1f).clip(shape)
-            .background(tileFrameColor(AlphaTheme.colors.isDark))
+            .background(AlphaTheme.colors.thumbnailFrame)
     ) {
         // The clickable layer is a sibling of the preview button below, so the magnifier is its own
         // accessibility node and never toggles selection.
@@ -497,19 +503,41 @@ private fun PhotoGridTile(
                 )
             }
             if (options.showSize) {
-                val size = captureDownloadSize(capture, policy)
-                formatSizeTag(size.bytes)?.let { text ->
-                    val description = stringResource(
-                        if (size.notDownloaded) Res.string.b1_tile_size_not_downloaded else Res.string.b1_tile_size, text
-                    )
-                    InfoTag(
-                        text,
-                        modifier = Modifier.align(tileCorner(TileElement.SizeTag).alignment).padding(inset)
-                            .semantics { contentDescription = description },
+                // The same saved-aware plan as the floating button: the tag shows what a download
+                // will fetch; a capture whose files are all saved shows its saved state instead of a
+                // size (nothing more will be downloaded), so a selection's tags add up to the button.
+                val size = captureDownloadSize(capture, policy, saved)
+                when (size.reason) {
+                    WifiSkipReason.AlreadySaved -> InfoTag(
+                        stringResource(Res.string.d1_tile_saved),
+                        modifier = Modifier.align(tileCorner(TileElement.SizeTag).alignment).padding(inset),
                         style = InfoTagStyle.OnPhoto,
-                        // Not part of a JPG-only download (RAW-only): marked, never implied.
-                        icon = if (size.notDownloaded) painterResource(Res.drawable.m2_warning_24px) else null,
+                        icon = painterResource(Res.drawable.check_24px),
                     )
+                    WifiSkipReason.TooLarge -> InfoTag(
+                        stringResource(Res.string.d1_tile_too_large),
+                        modifier = Modifier.align(tileCorner(TileElement.SizeTag).alignment).padding(inset),
+                        style = InfoTagStyle.OnPhoto,
+                        icon = painterResource(Res.drawable.m2_warning_24px),
+                    )
+                    else -> formatSizeTag(size.bytes)?.let { text ->
+                        val description = stringResource(
+                            if (size.reason == WifiSkipReason.NoJpeg) {
+                                Res.string.b1_tile_size_not_downloaded
+                            } else Res.string.b1_tile_size,
+                            text
+                        )
+                        InfoTag(
+                            text,
+                            modifier = Modifier.align(tileCorner(TileElement.SizeTag).alignment).padding(inset)
+                                .semantics { contentDescription = description },
+                            style = InfoTagStyle.OnPhoto,
+                            // Not part of a JPG-only download (RAW-only): marked, never implied.
+                            icon = if (size.reason == WifiSkipReason.NoJpeg) {
+                                painterResource(Res.drawable.m2_warning_24px)
+                            } else null,
+                        )
+                    }
                 }
             }
             if (options.showFormat) capture.formatBadge()?.let { format ->
@@ -617,7 +645,8 @@ internal fun SelectionCheck(selected: Boolean, modifier: Modifier = Modifier) {
     Box(
         modifier.size(TILE_BADGE_DP.dp).clip(SquareBadgeShape).then(
             if (selected) Modifier.background(MaterialTheme.colorScheme.primary)
-            else Modifier.background(Color.Black.copy(alpha = 0.25f)).border(2.dp, Color.White, SquareBadgeShape)
+            else Modifier.background(AlphaTheme.colors.thumbnailBadgeScrim)
+                .border(2.dp, AlphaTheme.colors.thumbnailBadgeStroke, SquareBadgeShape)
         ),
         contentAlignment = Alignment.Center
     ) {
@@ -629,8 +658,9 @@ internal fun SelectionCheck(selected: Boolean, modifier: Modifier = Modifier) {
 }
 
 /**
- * Grid thumbnail: the whole picture fitted into the square frame and centred (never cropped), with
- * the camera's baked-in letterbox bars trimmed ([FittedThumbnail]). Bitmaps are already upright.
+ * Grid thumbnail: the whole picture fitted into the square frame and centred (never cropped). The
+ * camera's baked-in letterbox bars are not trimmed; the near-black frame makes them invisible.
+ * Bitmaps are already upright.
  */
 @Composable
 private fun PhotoTile(image: ImageBitmap?, loading: Boolean) {

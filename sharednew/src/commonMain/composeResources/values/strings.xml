@@ -621,4 +621,6 @@
     <string name="b1_exif_bias">Exposure compensation</string>
     <string name="b1_exif_focal">Focal length</string>
     <string name="b1_exif_camera">Camera</string>
+    <string name="d1_tile_too_large">Over the size limit, will be skipped</string>
+    <string name="d1_tile_saved">Saved</string>
 </resources>
