@@ -543,21 +543,21 @@ def help_screen(callouts=False):
     s += t(88, 244, "排障指南", 15.5, 600) + t(88, 265, "连不上、找不到相机时先看这里", 12.5, 400, C["onSurfV"])
     s += icon("chevron_right", 338, 236, 24, C["onSurfV"])
     s += section_label(28, 312, "常见问题")
-    s += glass(16, 324, 358, 222, 24, 1)
+    s += glass(16, 324, 358, 176, 24, 1)
     s += t(36, 356, "有文档或反馈渠道吗？", 15, 600) + icon("expand_less", 338, 338, 24, C["onSurfV"])
-    s += t(36, 382, "源码与问题反馈都在代码仓库（两处地址）。", 12.5, 400, C["onSurfV"])
-    for i, (lab, ic_) in enumerate((("代码仓库（GitHub）", "open_in_new"), ("代码仓库（Primary forge）", "open_in_new"), ("反馈问题（Issue）", "open_in_new"))):
+    s += t(36, 382, "源码与问题反馈都在 GitHub。", 12.5, 400, C["onSurfV"])
+    for i, (lab, ic_) in enumerate((("代码仓库（GitHub）", "open_in_new"), ("反馈问题（GitHub Issues）", "open_in_new"))):
         yy = 396 + i * 46
         s += rect(28, yy, 334, 40, C["onSurf"], 14, op=0.05 if mode() == "light" else 0.08)
         s += icon(ic_, 40, yy + 10, 20, C["primary"] if ic_ != "favorite" else C["tertiary"])
         s += t(70, yy + 25, lab, 14, 500, C["primary"])
-    y = 556
-    for q in ("我的位置数据会上传吗？", "如何开启后台同步？", "相机没有出现在列表里", "位置不准或写入延迟"):
+    y = 510
+    for q in ("我的位置数据会上传吗？", "如何开启后台同步？", "相机没有出现在列表里", "位置不准或写入延迟", "相机连不上"):
         s += glass(16, y, 358, 56, 20, 1, shadow=False)
         s += t(36, y + 33, q, 14.5, 500) + icon("expand_more", 338, y + 16, 24, C["onSurfV"])
         y += 64
     if callouts:
-        s += callout(1, 26, 222) + callout(2, 26, 494) + callout(3, 26, 112)
+        s += callout(1, 26, 222) + callout(2, 26, 448) + callout(3, 26, 112)
     return s + end()
 
 
@@ -574,10 +574,10 @@ def about_screen(callouts=False):
     s += list_row(288, "修改声明", ic="edit", kind="none", sub="由 mfreceiver 修改，自 2026 年 11 月起", h=58)
     s += list_row(346, "许可证", ic="gavel", sub="GPL-3.0，与上游项目相同", h=58)
     s += list_row(404, "开源组件许可", ic="list", sub="libheif、libde265、Compose、Haze 等", h=58)
-    s += section_label(28, 486, "源码")
+    s += section_label(28, 486, "源码与反馈")
     s += glass(16, 496, 358, 116, 24, 1)
     s += list_row(496, "GitHub", ic="code", kind="copy", sub="github.com/mfreceiver/alpha-gps", h=58)
-    s += list_row(554, "Primary forge", ic="code", kind="copy", sub="forge.example.com:443/owner/alphagps", h=58)
+    s += list_row(554, "问题反馈", ic="open_in_new", kind="link", sub="GitHub Issues · mfreceiver/alpha-gps/issues", h=58)
     s += section_label(28, 636, "其它")
     s += glass(16, 646, 358, 116, 24, 1)
     s += list_row(646, "隐私说明", ic="shield", sub="不收集、不上传任何数据", h=58)
@@ -608,7 +608,7 @@ def privacy_screen():
     y += len(items) * 62 + 20
     s += glass(16, y, 358, 116, 24, 1)
     s += list_row(y, "发布者", ic="code", kind="none", sub="mfreceiver（AlphaGPS，开源，GPL‑3.0）", h=58)
-    s += list_row(y + 58, "联系与反馈", ic="open_in_new", kind="nav", sub="两处代码仓库的 Issue", h=58)
+    s += list_row(y + 58, "联系与反馈", ic="open_in_new", kind="nav", sub="GitHub Issues · mfreceiver/alpha-gps", h=58)
     s += t(28, y + 142, "完整文本见仓库 privacy.md；应用内置同一份，离线可读。", 12, 400, C["onSurfV"])
     return s + end()
 

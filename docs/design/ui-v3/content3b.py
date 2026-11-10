@@ -202,7 +202,7 @@ def build():
   {ul(["<b>唯一入口：设备清单顶栏的帮助图标</b>（Q11）。",
        f"{n(3)}顶部<b>“关于”入口卡</b>（主色浅底玻璃）→ 关于页（下一页）；其下“排障指南”入口卡 → 常见问题（可展开的玻璃行，默认展开第一条）。",
        f"{n(1)}排障指南：按“相机端 / 手机端 / 仍然不行”三步清单，末尾“查看日志”。",
-       f"{n(2)}第一条问答里的链接只有三个：<b>代码仓库（GitHub）、代码仓库（Primary forge）、反馈问题（Issue）</b>。不再有邮箱；<b>赞助链接不在帮助页</b>，全应用只在关于页“支持上游作者”一处（Q28）。"])}
+       f"{n(2)}第一条问答里的链接只有两个：<b>代码仓库（GitHub）、反馈问题（GitHub Issues）</b>。不再有邮箱；<b>赞助链接不在帮助页</b>，全应用只在关于页“支持上游作者”一处（Q28）。"])}
   <div class="box b"><h3>赞助提醒：全面移除自动触发，仅保留手动链接</h3>
   {ul(["删除：安装 30 天后的自动弹窗、“下次启动强制弹出”的调试路径、设置页调试卡。",
        "保留唯一一处手动链接：关于页“支持上游作者”，标明受益人是 Saschl。帮助页原有的链接（<code>HelpScreen.kt:274-287</code>）移到关于页。",
@@ -233,7 +233,7 @@ def build():
   <h2>关于页</h2>
   {ul([f"入口：帮助页顶部“关于 AlphaGPS”卡。顶部是新图标与规范名称 <b>AlphaGPS</b>。{n(1)}<b>上游项目</b>：github.com/Saschl/alpha-gps，作者 Saschl；本应用基于它修改。",
        f"{n(2)}<b>修改声明</b>（GPLv3 第 5 条）：由 mfreceiver 修改，自 2026 年 11 月起。{n(3)}<b>许可证</b>：GPL‑3.0，与上游相同；点击查看全文。",
-       f"{n(4)}<b>源码</b>两处并列：GitHub github.com/mfreceiver/alpha-gps 与 Primary forge forge.example.com:443/owner/alphagps（双源发布）。",
+       f"{n(4)}<b>源码与反馈</b>只写 GitHub 一处：github.com/mfreceiver/alpha-gps，问题反馈为其 Issues（/issues）。<b>应用与代码里不出现任何私有部署仓库的地址</b>。",
        f"{n(5)}<b>隐私说明</b> → 第 26 页。{n(6)}<b>支持上游作者</b>：Buy Me a Coffee，标明受益人是 Saschl；<b>全应用仅此一处</b>（Q28）。",
        f"{n(7)}每个地址行右侧两个图标：<b>复制</b>（提示“已复制”）与<b>外部打开</b>；行本身不可点，避免误触跳出应用。",
        "页脚一行商标声明：“本应用与 Sony 无关联；Sony、α 等为其各自所有者的商标。”",
@@ -242,13 +242,13 @@ def build():
   {tbl(["对象", "许可", "依据", "结论"], lic, "xd", ["27%", "17%", "34%", "22%"])}
   <div class="box b small"><b>GPL‑3.0 下的义务与现状</b>
   {ul(["保留上游 LICENSE 与版权声明：已保留。", "标明已修改及日期：<b>待做</b>（关于页 + README，W1 / M9）。",
-       "分发时提供对应源码：两处公开仓库满足；发布 tag 须与 APK 对应。", "不附加额外限制条款。"], "xs")}</div>
+       "分发时提供对应源码：GitHub 公开仓库满足；发布 tag 须与 APK 对应。", "不附加额外限制条款。"], "xs")}</div>
  </div>
 </div>"""
-    page("关于与许可", "AlphaGPS · 来源 · 修改声明 · GPL‑3.0 · 双源码地址 · 许可核查", body)
+    page("关于与许可", "AlphaGPS · 来源 · 修改声明 · GPL‑3.0 · 源码地址 · 许可核查", body)
 
     # ------------------------------------------------------------------ 26 privacy + docs rewrite
-    pv = [["发布者", "mfreceiver（AlphaGPS）。源码：github.com/mfreceiver/alpha-gps、forge.example.com:443/owner/alphagps。"],
+    pv = [["发布者", "mfreceiver（AlphaGPS）。源码：github.com/mfreceiver/alpha-gps（仅此一处）。"],
           ["一句话结论", "AlphaGPS 不收集、不上传任何数据。没有账号、统计、崩溃上报、广告，也没有向第三方发送数据的 SDK。"],
           ["位置", "仅在你授权后读取手机定位，只通过蓝牙写入<b>你自己的相机</b>；不上传、不留历史。"],
           ["蓝牙与附近设备", "用于发现、配对并连接你的相机；不扫描或记录其它设备。"],
@@ -257,7 +257,7 @@ def build():
           ["日志", "只保存在本机；复制或导出由你自行决定是否分享。<b>定稿前核对</b>现有日志是否记录坐标：若记录，改为不记录或在此如实写明。"],
           ["权限一览", "定位（含后台）、蓝牙 / 附近设备、附近 Wi‑Fi 设备 / 本地网络、通知——逐项写明用途与“拒绝后的影响”。"],
           ["数据保留与删除", "应用数据都在本机；移除相机或卸载应用即清除。已下载的照片属于你的相册。"],
-          ["联系", "两处代码仓库的 Issue 地址；<b>不留个人邮箱</b>（Q27）。"],
+          ["联系", "GitHub Issues：github.com/mfreceiver/alpha-gps/issues；<b>不留个人邮箱</b>（Q27）。"],
           ["变更", "本文随版本更新，改动记在仓库提交历史里。"]]
     rd = [["名称与定位", "<b>AlphaGPS</b>：把手机位置写入 Sony 相机的照片，并通过相机 Wi‑Fi 浏览、下载照片。"],
           ["删除", "遥控拍摄、Sentry、商店徽章与链接（Google Play / F‑Droid / App Store / Obtainium）、外链截图、赞助图片、website 引用。"],
@@ -548,7 +548,7 @@ def build():
           ["Q24", "失败叠层自动消退", "5 秒；设备页保留一条原因"],
           ["Q25", "同步常驻通知改静默渠道", "接受"],
           ["Q26", "上游图标与素材", "<b>优先自生成</b>：图标已重绘（<code>docs/brand</code>）；其余按第 27 页清单处置"],
-          ["Q27", "隐私说明的联系方式", "两处仓库的 Issue 地址，不留个人邮箱"],
+          ["Q27", "隐私说明的联系方式", "GitHub Issues（github.com/mfreceiver/alpha-gps/issues），不留个人邮箱"],
           ["Q28", "“支持上游作者”链接", "保留，标明受益人 Saschl；全应用仅关于页一处"]]
     oq = [["Q29", "第 27 页素材清单的逐项处置（C 删除六项、B 重绘三项、A 功能图标只补来源声明）", "等用户逐项回复；回复前 W1 的删除与替换不执行"]]
     w1 = [["W1‑a", "素材清理", "按第 27 页确认结果删除 website/、fastlane/、FUNDING、徽标；替换根 <code>icon.svg</code>", "Q29"],
@@ -587,13 +587,14 @@ def build():
   <h2>W2 代码线</h2>
   {tbl(["项", "主题", "内容", "依赖"], ms, "xd", ["7%", "22%", "50%", "21%"])}
   <div class="box b xs"><b>M10 双源发布：设计要点（只写设计，不改脚本）</b>
-  {ul(["<b>主次</b>：Primary forge 为主。现有 Primary forge 发布（上传 + 资产对账，失败即中止）不变；<b>成功后</b>才执行 GitHub 步骤（mfreceiver/alpha-gps）。",
-       "<b>失败语义</b>：GitHub 失败不回滚 Primary forge；脚本非零退出并报告“Primary forge 已成功、GitHub 失败”。",
+  {ul(["<b>主次</b>：主仓库（私有部署，<b>地址仅存本机配置、不入库</b>）为主。现有主仓库发布（上传 + 资产对账，失败即中止）不变；<b>成功后</b>才执行 GitHub 步骤（mfreceiver/alpha-gps）。",
+       "<b>参数外置</b>：主仓库的主机、仓库路径、远端名等放到不入库的 <code>scripts/release.local.env</code>（加入 .gitignore）；脚本、文档与应用里不出现私有地址，缺该文件时主仓库步骤直接中止并提示。",
+       "<b>失败语义</b>：GitHub 失败不回滚主仓库；脚本非零退出并报告“主仓库已成功、GitHub 失败”。",
        "<b>可单独重跑</b>：<code>--publish-github-only</code>；同 tag 同名且 sha256 相同的资产跳过，同名不同 sha 中止。",
-       "<b>推送与凭据</b>：tag 与分支推到 github 远端（需新增远端）；<code>git credential fill</code> 取 host=github.com，沿用 15 秒超时（<code>release_build.sh:106-107</code>）。",
+       "<b>推送与凭据</b>：GitHub 步骤<b>默认只推 tag</b>（<code>--github-tag-only</code> 为默认），推分支需显式指定；执行前提示“<b>该 tag 可达的全部提交历史将对公开可见</b>”。<code>git credential fill</code> 取 host=github.com，沿用 15 秒超时（<code>release_build.sh:106-107</code>）。",
        "<b>对账</b>：现脚本 <code>--no-location</code> 不跟随重定向（<code>:151-154</code>），而 GitHub 资产下载会 302。方案是<b>手动走一跳</b>：首次请求不跟随并读取 Location，校验为 https 且主机在白名单；第二次请求<b>不带凭据</b>、仍不跟随；再次重定向或主机不在白名单即中止。",
        "<b>白名单</b>：API 与上传只允许 api.github.com / uploads.github.com；下载域名（objects.githubusercontent.com 等）以开发时 GitHub 实际使用的为准，须核对。",
-       "同步更新 <code>AGENTS.md</code> 与 README 的发版说明。"], "xs")}</div>
+       "同步更新 <code>AGENTS.md</code> 与 README 的发版说明（同样不写私有地址）。"], "xs")}</div>
   <div class="xs"><b>顺序</b>：W2‑a / W2‑b / W2‑c 与 M1 互不依赖，可先行并单独发版；M0 在 W2‑a 之后。M2–M4 设备侧、M5–M8 照片侧可并行；M9 收尾；M5b 等实机核实；M10 随时可做。</div>
  </div>
 </div>"""
