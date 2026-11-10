@@ -1,24 +1,16 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,15 +19,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.arrow_back_24px
 import cameragps.sharednew.generated.resources.back
@@ -57,12 +42,17 @@ import cameragps.sharednew.generated.resources.wifi_remote_selection_count_other
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
 import com.sasch.cameragps.sharednew.remote.wifi.dateKey
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassAnchorState
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassPopover
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressCircle
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSegmented
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassSwitch
-import com.sasch.cameragps.sharednew.ui.components.glass.glass
-import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassTopBar
+import com.sasch.cameragps.sharednew.ui.components.glass.glassAnchor
+import com.sasch.cameragps.sharednew.ui.components.glass.rememberGlassAnchor
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
-import com.sasch.cameragps.sharednew.ui.theme.GlassLevel
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -75,7 +65,6 @@ import org.jetbrains.compose.resources.stringResource
  *
  * There is no separate disconnect action: leaving the day list is the end of the session.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun WifiPhotoBrowserTopBar(
     state: WifiRemoteState,
@@ -92,36 +81,22 @@ internal fun WifiPhotoBrowserTopBar(
     val includesOtherDates = browser.grouped && dateKey != null &&
             viewModel.selectedPhotos.values.any { it.dateKey != dateKey }
     val gridShown = !browser.grouped || dateKey != null
-    TopAppBar(
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = Color.Transparent,
-            scrolledContainerColor = Color.Transparent,
-        ),
-        title = {
-            Column {
-                Text(
-                    when {
-                        selecting && includesOtherDates -> stringResource(
-                            Res.string.wifi_remote_selection_count_other_dates, selectedIds.size
-                        )
-                        selecting -> stringResource(Res.string.wifi_remote_selection_count, selectedIds.size)
-                        dateKey != null -> dateKeyLabel(dateKey)
-                        else -> stringResource(Res.string.wifi_remote_browser_title)
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (!selecting && dateKey != null && !browser.loading) Text(
-                    stringResource(
-                        Res.string.wifi_remote_dates_count,
-                        remember(browser.photos) { groupCameraPhotos(browser.photos).size }
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AlphaTheme.colors.onSurfaceVariant,
-                    maxLines = 1,
-                )
-            }
-        },
+    val title = when {
+        selecting && includesOtherDates -> stringResource(
+            Res.string.wifi_remote_selection_count_other_dates, selectedIds.size
+        )
+        selecting -> stringResource(Res.string.wifi_remote_selection_count, selectedIds.size)
+        dateKey != null -> dateKeyLabel(dateKey)
+        else -> stringResource(Res.string.wifi_remote_browser_title)
+    }
+    val subtitle = if (!selecting && dateKey != null && !browser.loading) stringResource(
+        Res.string.wifi_remote_dates_count,
+        remember(browser.photos) { groupCameraPhotos(browser.photos).size }
+    ) else null
+    // Transparent at rest over the page backdrop (the browser's Scaffold keeps content below it).
+    GlassTopBar(
+        title = title,
+        subtitle = subtitle,
         navigationIcon = {
             if (selecting) GlassIconButton(
                 painterResource(Res.drawable.close_24px),
@@ -138,21 +113,23 @@ internal fun WifiPhotoBrowserTopBar(
                 selecting -> Unit
                 gridShown -> {
                     var open by rememberSaveable { mutableStateOf(false) }
-                    Box {
-                        GlassIconButton(
-                            painterResource(Res.drawable.mw_grid_view_24px),
-                            contentDescription = stringResource(Res.string.mw_view_options),
-                            onClick = { open = true },
-                        )
-                        if (open) WifiGridOptionsPopover(
-                            options = gridOptions,
-                            onChange = onGridOptionsChange,
-                            onDismiss = { open = false },
-                        )
-                    }
+                    val anchor = rememberGlassAnchor()
+                    GlassIconButton(
+                        painterResource(Res.drawable.mw_grid_view_24px),
+                        contentDescription = stringResource(Res.string.mw_view_options),
+                        onClick = { open = true },
+                        modifier = Modifier.glassAnchor(anchor),
+                    )
+                    WifiGridOptionsPopover(
+                        expanded = open,
+                        anchor = anchor,
+                        options = gridOptions,
+                        onChange = onGridOptionsChange,
+                        onDismiss = { open = false },
+                    )
                 }
                 browser.loading -> Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                    GlassProgressCircle()
                 }
                 else -> GlassIconButton(
                     painterResource(Res.drawable.refresh_24px),
@@ -170,87 +147,61 @@ internal fun WifiPhotoBrowserTopBar(
 }
 
 /**
- * View options popover under the grid icon: tile size (small / medium / large) and two independent
- * tag switches (file format, file size). Changes apply at once; it closes on an outside tap or Back.
+ * View options popover under the grid icon (in-page [GlassPopover], no platform window): tile size
+ * as a [GlassSegmented] (small / medium / large) and two independent tag switches (file format,
+ * file size). Changes apply at once; it closes on an outside tap or Back.
  */
 @Composable
 private fun WifiGridOptionsPopover(
+    expanded: Boolean,
+    anchor: GlassAnchorState,
     options: WifiGridOptions,
     onChange: (WifiGridOptions) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    // Anchored under the 48 dp icon it belongs to.
-    val below = with(LocalDensity.current) { 48.dp.roundToPx() }
-    Popup(
-        alignment = Alignment.TopEnd,
-        offset = IntOffset(0, below),
+    GlassPopover(
+        expanded = expanded,
         onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true),
+        anchor = anchor,
+        modifier = Modifier.width(248.dp),
     ) {
         Column(
-            Modifier.width(232.dp).glass(GlassLevel.Modal, AlphaShapes.popover).padding(16.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(
-                Modifier.fillMaxWidth().height(40.dp)
-                    .background(AlphaTheme.colors.onSurface.copy(alpha = 0.06f), AlphaShapes.capsule)
-                    .padding(3.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                for (size in WifiGridSize.entries) {
-                    val selected = options.gridSize == size
-                    Box(
-                        Modifier.weight(1f).height(34.dp)
-                            .background(
-                                if (selected) AlphaTheme.colors.primary else Color.Transparent,
-                                AlphaShapes.capsule
-                            )
-                            .selectable(selected, role = Role.RadioButton) { onChange(options.withSize(size)) },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            stringResource(
-                                when (size) {
-                                    WifiGridSize.Small -> Res.string.mw_grid_small
-                                    WifiGridSize.Medium -> Res.string.mw_grid_medium
-                                    WifiGridSize.Large -> Res.string.mw_grid_large
-                                }
-                            ),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (selected) AlphaTheme.colors.onPrimary else AlphaTheme.colors.onSurface,
-                            textAlign = TextAlign.Center,
-                        )
-                    }
-                }
-            }
-            OptionSwitch(stringResource(Res.string.mw_tag_format), null, options.showFormat, true) {
+            val sizes = WifiGridSize.entries
+            GlassSegmented(
+                options = sizes.map { size ->
+                    stringResource(
+                        when (size) {
+                            WifiGridSize.Small -> Res.string.mw_grid_small
+                            WifiGridSize.Medium -> Res.string.mw_grid_medium
+                            WifiGridSize.Large -> Res.string.mw_grid_large
+                        }
+                    )
+                },
+                selectedIndex = sizes.indexOf(options.gridSize),
+                onSelect = { index -> onChange(options.withSize(sizes[index])) },
+            )
+            OptionSwitch(stringResource(Res.string.mw_tag_format), options.showFormat) {
                 onChange(options.copy(showFormat = it))
             }
-            OptionSwitch(stringResource(Res.string.mw_tag_size), null, options.showSize, true) {
+            OptionSwitch(stringResource(Res.string.mw_tag_size), options.showSize) {
                 onChange(options.copy(showSize = it))
             }
         }
     }
 }
 
+/** A whole-row switch (N1): the row is the toggle target, the [GlassSwitch] only draws the state. */
 @Composable
-private fun OptionSwitch(
-    label: String, note: String?, checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit,
-) {
+private fun OptionSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 48.dp)
-            .toggleable(checked, enabled = enabled, role = Role.Switch, onValueChange = onChange),
+            .toggleable(checked, role = Role.Switch, onValueChange = onChange),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                label, style = MaterialTheme.typography.bodyLarge,
-                color = AlphaTheme.colors.onSurface.copy(alpha = if (enabled) 1f else 0.38f)
-            )
-            if (note != null) Text(
-                note, style = MaterialTheme.typography.bodySmall, color = AlphaTheme.colors.onSurfaceVariant
-            )
-        }
-        GlassSwitch(checked = checked, onCheckedChange = null, enabled = enabled)
+        Text(label, Modifier.weight(1f), style = AlphaType.Body, color = AlphaTheme.colors.textPrimary)
+        GlassSwitch(checked = checked, onCheckedChange = null)
     }
 }
