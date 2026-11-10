@@ -119,7 +119,7 @@ TAG_NAME="v$VERSION_NAME"
 APK_NAME="alpha-gps-$VERSION_NAME.apk"
 
 # ─── 环境兜底 ────────────────────────────────────────────────────────────
-DSH_JAVA_HOME=/home/user/jdk/jdk-21.0.12+8
+DSH_JAVA_HOME="${HOME}/jdk/jdk-21.0.12+8"
 if [[ -z "${JAVA_HOME:-}" || ! -x "${JAVA_HOME:-}/bin/java" ]] && [[ -x "$DSH_JAVA_HOME/bin/java" ]]; then
   export JAVA_HOME=$DSH_JAVA_HOME
   export PATH="$JAVA_HOME/bin:$PATH"

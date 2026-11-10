@@ -25,7 +25,7 @@
 - 发版脚本自测：`scripts/*_test.sh`（无网络、沙箱 + fake curl，不碰真实仓库），改动发版脚本后须全部通过。
 - iOS 目标默认禁用（`gradle.properties` 的 `alphagps.enableIos=false`），源码保留；Linux 无法编译 iOS。
 - 验证命令：`./gradlew --no-daemon :sharednew:testAndroidHostTest :app:testFossDebugUnitTest :app:assembleFossDebug :app:compileFossDebugAndroidTestKotlin`。
-- 本机 `local.properties` 的 `sdk.dir=/home/user/Android/Sdk` 不入库（已被 .gitignore 忽略）。
+- 本机 `local.properties` 的 `sdk.dir=$HOME/Android/Sdk` 不入库（已被 .gitignore 忽略）。
 - **仅 arm64**：app 与 heif 的 `defaultConfig.ndk.abiFilters` 只含 `arm64-v8a`（native 仅构建/打包该 ABI）；老 32 位（armeabi-v7a）与 x86/x86_64 设备/模拟器不可安装。`scripts/release_assert_apk.sh` 断言 APK `lib/` 下仅含 `arm64-v8a` 且至少一个 `.so`。
 - `release_build.sh` 构建前清理 compose 资源生成残留（sharednew/build 与 app/build 的生成/中间 assets 目录），并断言 APK 仅含 en+zh-rCN 的 composeResources（`assets/composeResources/*/values*` ⊆ {values, values-zh-rCN}）。
 
