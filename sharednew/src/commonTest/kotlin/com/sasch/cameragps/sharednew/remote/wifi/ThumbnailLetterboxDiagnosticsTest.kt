@@ -2,6 +2,7 @@ package com.sasch.cameragps.sharednew.remote.wifi
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -76,5 +77,17 @@ class ThumbnailLetterboxDiagnosticsTest {
             LetterboxBarCounts(h, h, w, w),
             letterboxBarCounts(IntArray(w * h) { nearBlack }, w, h),
         )
+    }
+
+    @Test
+    fun theScanOffersACancellationPointPerLineAndPropagatesWhatItThrows() {
+        var checks = 0
+        val counts = letterboxBarCounts(IntArray(10 * 20) { bright }, 10, 20) { checks++ }
+        assertEquals(LetterboxBarCounts(0, 0, 0, 0), counts)
+        assertEquals(4, checks, "one check per edge before the first non-black line")
+        val failure = assertFailsWith<IllegalStateException> {
+            letterboxBarCounts(IntArray(10 * 20) { black }, 10, 20) { if (++checks > 6) error("cancelled") }
+        }
+        assertEquals("cancelled", failure.message)
     }
 }
