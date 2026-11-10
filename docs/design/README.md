@@ -39,3 +39,10 @@ cd docs/design/history/ui-status-enhancement && python3 pages.py   # v1 → ../u
 
 - 新版本新建目录（如 `ui-v4/`），把被取代的版本移入 `history/`，并更新本页表格。
 - mockup 为手机竖屏 390×844；文档为横版 1400×1000。
+
+## 组件库在代码中的位置
+
+- 主题与令牌：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/theme/`（`Color.kt` 固定蓝色调色板、`Theme.kt` 统一入口 `CameraGpsTheme` + `AlphaTheme`、`Glass.kt` G1/G2/G3/GV 令牌、`Dimens.kt` 圆角与尺寸、`Type.kt` 的 `AlphaTextStyles`、`Contrast.kt` 对比度计算、`WindowClass.kt` 窗口三档 A/B/C）。
+- 玻璃组件：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/components/glass/`（`GlassBackground`、`GlassSurface`/`GlassCard`/`GlassFloatingBar`/`GlassInsetBlock`、`CapsuleButton`、`GlassIconButton`、`InfoTag`、`StatusLine`/`StatusRow`、`CapsuleDialog`）。
+- 预览：`app/src/debug/java/com/saschl/cameragps/ui/preview/GlassComponentsPreview.kt`（亮 / 暗 / 无模糊回退 / 对话框）。
+- 对比度用例（第 4 页表）：`sharednew/src/commonTest/.../ui/theme/PaletteContrastTest.kt`。
