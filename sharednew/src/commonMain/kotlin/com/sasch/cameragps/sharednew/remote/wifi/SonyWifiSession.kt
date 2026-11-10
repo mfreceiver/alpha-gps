@@ -150,6 +150,8 @@ private class SonyWifiConnection(
         checkNotNull(current).transfer.thumbnail(handle, stats)
 
     override suspend fun photoPreview(handle: Long) = checkNotNull(current).transfer.preview(handle)
+    override suspend fun photoMetadataHead(handle: Long, length: Int) =
+        current?.transfer?.takeIf { it.supported }?.metadataHead(handle, length)
     override suspend fun downloadPhoto(
         handle: Long, format: WifiPhotoDownloadFormat,
         onProgress: (WifiImageTransferState) -> Unit

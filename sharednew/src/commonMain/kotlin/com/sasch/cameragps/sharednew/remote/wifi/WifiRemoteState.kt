@@ -66,6 +66,11 @@ data class WifiCameraPhoto(
     val capturedAt: String,
     val downloadable: Boolean = true,
     val captureId: String? = null,
+    /** Pixel size from the camera's object info; `null` when the catalog source does not carry it. */
+    val width: Int? = null,
+    val height: Int? = null,
+    /** PTP ProtectionStatus (`true` read-only); `null` when the catalog source does not carry it. */
+    val isProtected: Boolean? = null,
 )
 
 data class WifiPhotoBrowserState(

@@ -38,6 +38,9 @@ internal data class SonyImageInfo(
     val mimeType: String,
     val capturedAt: String = "",
     val captureId: String? = null,
+    val width: Int? = null,
+    val height: Int? = null,
+    val isProtected: Boolean? = null,
 ) {
     companion object {
         fun parse(data: ByteArray): SonyImageInfo {
@@ -77,7 +80,15 @@ internal data class SonyImageInfo(
             }
             val captureId = "object:${number(0, 4)}:${number(38, 4)}:" +
                 "${filename.substringBeforeLast('.').uppercase()}:$capturedAt"
-            return SonyImageInfo(size, filename, mime, capturedAt, captureId)
+            // Standard PTP ObjectInfo: ProtectionStatus@6 (0 none, 1 read-only), ImagePixWidth@26,
+            // ImagePixHeight@30; zero means "not provided" (RAW/HEIF often leave it out).
+            val protection = number(6, 2).toInt()
+            return SonyImageInfo(
+                size, filename, mime, capturedAt, captureId,
+                width = number(26, 4).toInt().takeIf { it in 1..100_000 },
+                height = number(30, 4).toInt().takeIf { it in 1..100_000 },
+                isProtected = when (protection) { 0 -> false; 1 -> true; else -> null },
+            )
         }
     }
 }
@@ -177,7 +188,8 @@ internal class SonyImageTransfer(
             val info = objectInfo(handle)
             if (info.mimeType.isNotEmpty()) photos += WifiCameraPhoto(
                 handle, info.filename, info.size, info.mimeType, info.capturedAt,
-                info.size in 1..MAX_IMAGE_BYTES, info.captureId
+                info.size in 1..MAX_IMAGE_BYTES, info.captureId,
+                info.width, info.height, info.isProtected
             )
         }
         snapshot = CatalogSnapshot.of(groupCameraPhotos(photos.sortedByDescending { it.capturedAt }))
@@ -250,6 +262,28 @@ internal class SonyImageTransfer(
             throw cancelled
         } catch (_: Exception) {
             null
+        }
+    }
+
+    /**
+     * The first [length] bytes of a displayed JPEG original, for EXIF parsing (one partial read; see
+     * [PhotoMetadataLoader]). Only handles of the displayed page are addressable, like previews.
+     */
+    suspend fun metadataHead(handle: Long, length: Int): ByteArray {
+        val photo = pagePhotos.firstOrNull { it.handle == handle }
+            ?: throw PtpTransportException(WifiTransferFailureReason.CatalogChanged)
+        require(length in 1..MAX_METADATA_HEAD_BYTES && length <= photo.size) { "Invalid metadata read length" }
+        return try {
+            read(handle, 0L, length)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: PtpTransportException) {
+            throw failure
+        } catch (failure: PtpOperationRejected) {
+            throw failure
+        } catch (failure: Exception) {
+            // Short/garbled chunks and similar protocol inconsistencies.
+            throw PtpTransportException(WifiTransferFailureReason.Protocol, failure)
         }
     }
 
@@ -449,11 +483,13 @@ internal class SonyImageTransfer(
 
     private fun accepted(result: PtpIpTransactionResult) {
         // Timeouts and broken connections are transport failures, not catalog changes.
-        check(result.ensureResponded().response.code == 0x2001) { "Camera refused image operation" }
+        val code = result.ensureResponded().response.code
+        if (code != PtpResponse.OK) throw PtpOperationRejected(code)
     }
 
     internal companion object {
         const val PAGE_SIZE = 60
+        const val MAX_METADATA_HEAD_BYTES = 128 * 1024
         const val MAX_IMAGE_BYTES = 512L * 1024 * 1024
         private const val GET_STORAGE_IDS = 0x1004
         private const val GET_HANDLES = 0x1007

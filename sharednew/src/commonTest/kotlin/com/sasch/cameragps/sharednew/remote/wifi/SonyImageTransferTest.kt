@@ -482,6 +482,63 @@ class SonyImageTransferTest : WifiLoggingTest() {
     }
 
     @Test
+    fun metadataHeadIsOneBoundedPartialReadFromTheStartOfAListedOriginal() = runTest {
+        val transport = Transport()
+        val queue = PtpIpCommandQueue(transport, backgroundScope)
+        val transfer = SonyImageTransfer(queue, ready()) { error("No file") }
+        transfer.openBrowser()
+        val before = transport.operations.size
+        val head = transfer.metadataHead(1L, 65_536)
+        assertEquals(65_536, head.size)
+        assertEquals(
+            listOf(0x9211 to listOf(1L, 0L, 0L, 65_536L)),
+            transport.operations.drop(before)
+        )
+        // Only displayed handles, and never more than the file or the safety cap.
+        assertFailsWith<PtpTransportException> { transfer.metadataHead(999L, 100) }.also {
+            assertEquals(WifiTransferFailureReason.CatalogChanged, it.reason)
+        }
+        assertFailsWith<IllegalArgumentException> { transfer.metadataHead(1L, 0) }
+        assertFailsWith<IllegalArgumentException> { transfer.metadataHead(1L, 600_001) }
+        queue.close()
+    }
+
+    @Test
+    fun metadataHeadSurfacesTheCameraResponseCodeAndTransportFailures() = runTest {
+        val transport = Transport()
+        val queue = PtpIpCommandQueue(transport, backgroundScope)
+        val transfer = SonyImageTransfer(queue, ready()) { error("No file") }
+        transfer.openBrowser()
+        transport.rejected = true
+        val busy = assertFailsWith<PtpOperationRejected> { transfer.metadataHead(1L, 1000) }
+        assertEquals(PtpResponse.DEVICE_BUSY, busy.code)
+        assertEquals(PhotoMetadataFailureReason.CameraBusy, photoMetadataFailureReason(busy))
+        transport.rejected = false
+        transport.failCodes = setOf(0x9211)
+        val broken = assertFailsWith<PtpTransportException> { transfer.metadataHead(1L, 1000) }
+        assertEquals(WifiTransferFailureReason.Protocol, broken.reason)
+        transport.failCodes = emptySet()
+        transport.shortChunk = true
+        val short = assertFailsWith<PtpTransportException> { transfer.metadataHead(1L, 1000) }
+        assertEquals(WifiTransferFailureReason.Protocol, short.reason)
+        queue.close()
+    }
+
+    @Test
+    fun metadataHeadHangingCameraTimesOutAndLeavesTheQueueUsable() = runTest {
+        val transport = Transport()
+        val queue = PtpIpCommandQueue(transport, backgroundScope)
+        val transfer = SonyImageTransfer(queue, ready()) { Destination() }
+        transfer.openBrowser()
+        transport.hangCodes = setOf(0x9211)
+        val timeout = assertFailsWith<PtpTransportException> { transfer.metadataHead(1L, 1000) }
+        assertEquals(WifiTransferFailureReason.Timeout, timeout.reason)
+        transport.hangCodes = emptySet()
+        assertEquals(1000, transfer.metadataHead(1L, 1000).size)
+        queue.close()
+    }
+
+    @Test
     fun standardPartialObjectFallbackUses32BitOffsetsAndChecksReturnedLength() = runTest {
         val transport = Transport()
         val queue = PtpIpCommandQueue(transport, backgroundScope)
@@ -576,8 +633,33 @@ class SonyImageTransferTest : WifiLoggingTest() {
     }
 
     @Test
+    fun objectInfoExposesProtectionAndPixelSizeWhenTheCameraProvidesThem() {
+        fun withFields(protection: Long, width: Long, height: Long) = info(42).also {
+            number(protection, 2).copyInto(it, 6)
+            number(width, 4).copyInto(it, 26)
+            number(height, 4).copyInto(it, 30)
+        }
+        val plain = SonyImageInfo.parse(withFields(1, 6000, 4000))
+        assertEquals(true, plain.isProtected)
+        assertEquals(6000, plain.width)
+        assertEquals(4000, plain.height)
+        val none = SonyImageInfo.parse(withFields(0, 0, 0))
+        assertEquals(false, none.isProtected)
+        assertEquals(null, none.width)
+        assertEquals(null, none.height)
+        // Unknown protection codes and absurd sizes are "not provided", never an error.
+        val odd = SonyImageInfo.parse(withFields(7, 0xffffffffL, 5))
+        assertEquals(null, odd.isProtected)
+        assertEquals(null, odd.width)
+        assertEquals(5, odd.height)
+    }
+
+    @Test
     fun parsesSupportedImageMetadataAndRejectsUnsafeOrTruncatedNames() {
-        assertEquals(SonyImageInfo(42, "DSC01234.JPG", "image/jpeg", captureId = "object:1:0:DSC01234:"), SonyImageInfo.parse(info(42)))
+        assertEquals(
+            SonyImageInfo(42, "DSC01234.JPG", "image/jpeg", captureId = "object:1:0:DSC01234:", isProtected = false),
+            SonyImageInfo.parse(info(42))
+        )
         assertEquals("image/x-sony-arw", SonyImageInfo.parse(info(42, "DSC.ARW", 0xb101)).mimeType)
         assertEquals("image/heif", SonyImageInfo.parse(info(42, "DSC.HIF", 0xb110)).mimeType)
         for (name in listOf("../a.jpg", "a/b.jpg", "a\\b.jpg", "", "\u0000x.jpg")) {
