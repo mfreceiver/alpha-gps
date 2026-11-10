@@ -13,7 +13,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
-import kotlin.test.assertSame
+import kotlin.test.assertNotNull
 
 /**
  * The production wiring ([AndroidWifiAutomaticConnector], used by `createAndroidWifiRemoteController`)
@@ -29,12 +29,16 @@ class AndroidWifiAutomaticConnectorTest : WifiLoggingTest() {
     }
 
     @Test
-    fun theProductionWrapperForwardsThePhonePreconditionsOfItsDelegate() {
-        val radio = object : WifiPreconditions {}
+    fun theProductionWrapperForwardsThePhonePreconditionsOfItsDelegate() = runTest {
         val automatic = AutomaticWifiRemoteConnector<String>(
-            { null }, { NetworkRequest() }, { _, _, _ -> error("unused") }, preconditions = radio,
+            { null }, { NetworkRequest() }, { _, _, _ -> error("unused") },
+            preconditions = object : WifiPreconditions {
+                override suspend fun isWifiEnabled() = false
+            },
         )
-        assertSame(radio, AndroidWifiAutomaticConnector(automatic).phonePreconditions)
+        val forwarded = AndroidWifiAutomaticConnector(automatic).phonePreconditions
+        assertNotNull(forwarded, "a wrapper that drops the preconditions bypasses the preflight")
+        assertFalse(forwarded.isWifiEnabled())
         assertNull(AndroidWifiAutomaticConnector(testAutomaticConnector { _, _, _ -> error("unused") }).phonePreconditions)
     }
 
@@ -83,5 +87,30 @@ class AndroidWifiAutomaticConnectorTest : WifiLoggingTest() {
             wrapper.open("camera", backgroundScope) {}
         }
         assertEquals(WifiRemoteFailure.NetworkPermissionDenied, failure.failure)
+    }
+
+    @Test
+    fun aSecurityExceptionInThePreflightFailsLikeTheConnectorDidWithNoClaim() = runTest {
+        val registry = CameraSessionRegistry()
+        var claims = 0
+        val automatic = AutomaticWifiRemoteConnector<String>(
+            { CameraWifiCredentials("DIRECT-x", "y", null) },
+            { error("no network request may be built") },
+            { _, _, _ -> error("no camera session may open") },
+            preconditions = object : WifiPreconditions {
+                override suspend fun isWifiEnabled(): Boolean = throw SecurityException("denied")
+            },
+        )
+        val controller = WifiRemoteController(
+            backgroundScope, registry, { _, _ -> error("manual connector unused") },
+            { claims++ }, {},
+            automaticConnector = AndroidWifiAutomaticConnector(automatic),
+        )
+        controller.connectAutomatically("camera")
+        runCurrent()
+        assertEquals(WifiRemotePhase.Failed, registry.get("camera")!!.wifiRemote.phase)
+        assertEquals(WifiRemoteFailure.NetworkPermissionDenied, registry.get("camera")!!.wifiRemote.failure)
+        assertEquals(0, claims)
+        assertNull(controller.owner.value)
     }
 }

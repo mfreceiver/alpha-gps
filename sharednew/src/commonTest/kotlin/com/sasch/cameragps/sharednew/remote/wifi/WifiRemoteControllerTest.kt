@@ -305,6 +305,156 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         assertEquals("CAMERA", controller.owner.value)
     }
 
+    /** Phone radio double whose Wi-Fi check is scripted per call (1-based) and may suspend. */
+    private class ScriptedRadio(val wifi: suspend (call: Int) -> Boolean) : WifiPreconditions {
+        var calls = 0
+        override suspend fun isWifiEnabled(): Boolean = wifi(++calls)
+    }
+
+    private class PreflightFixture(
+        val registry: CameraSessionRegistry, val radio: ScriptedRadio,
+        val controller: WifiRemoteController, val phases: MutableList<WifiRemotePhase>,
+    ) {
+        var claims = 0
+        var releases = 0
+        var opens = 0
+    }
+
+    private fun TestScope.preflightFixture(radio: ScriptedRadio): PreflightFixture {
+        val registry = CameraSessionRegistry()
+        val phases = mutableListOf<WifiRemotePhase>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            registry.sessions.collect { sessions ->
+                sessions.forEach { (_, session) -> phases += session.wifiRemote.phase }
+            }
+        }
+        lateinit var fixture: PreflightFixture
+        val connection = Connection()
+        val controller = WifiRemoteController(
+            backgroundScope, registry, { _, _ -> error("manual connector unused") },
+            { fixture.claims++ }, { fixture.releases++ },
+            automaticConnector = testAutomaticConnector(radio) { _, _, _ -> fixture.opens++; connection },
+        )
+        fixture = PreflightFixture(registry, radio, controller, phases)
+        return fixture
+    }
+
+    @Test
+    fun backDuringASuspendedPreflightCancelsItAndALateResultStartsNothingAndPublishesNothing() = runTest {
+        val gate = CompletableDeferred<Boolean>()
+        val f = preflightFixture(ScriptedRadio { gate.await() })
+        f.controller.connectAutomatically("camera")
+        runCurrent()
+        assertEquals(1, f.radio.calls)
+        f.controller.disconnect("camera")
+        runCurrent()
+        assertNull(f.controller.owner.value, "the cancelled attempt gives up the gate")
+        gate.complete(true) // the check "recovers" after Back: it must not start a connection
+        runCurrent()
+        assertEquals(0, f.claims)
+        assertEquals(0, f.releases)
+        assertEquals(0, f.opens)
+        assertEquals(WifiRemotePhase.Idle, f.registry.get("camera")?.wifiRemote?.phase ?: WifiRemotePhase.Idle)
+        assertTrue(f.phases.all { it == WifiRemotePhase.Idle }, "phases seen: ${f.phases}")
+        assertNull(f.controller.owner.value)
+    }
+
+    @Test
+    fun aLateFailedPreflightOfACancelledAttemptNeverOverwritesTheNewSessionsReady() = runTest {
+        val gate = CompletableDeferred<Boolean>()
+        val f = preflightFixture(ScriptedRadio { call -> if (call == 1) gate.await() else true })
+        f.controller.connectAutomatically("camera")
+        runCurrent()
+        f.controller.closeAndJoin("camera") // Back while the first check is still pending
+        f.controller.connectAutomatically("camera") // the user starts again from the device page
+        runCurrent()
+        assertEquals(WifiRemotePhase.Ready, f.registry.get("camera")!!.wifiRemote.phase)
+        assertEquals(1, f.claims)
+        gate.complete(false) // the first attempt's late "Wi-Fi is off"
+        runCurrent()
+        assertEquals(WifiRemotePhase.Ready, f.registry.get("camera")!!.wifiRemote.phase)
+        assertNull(f.registry.get("camera")!!.wifiRemote.failure)
+        assertEquals("CAMERA", f.controller.owner.value)
+        assertEquals(1, f.opens)
+        assertEquals(0, f.releases)
+    }
+
+    @Test
+    fun repeatedConnectDuringAPendingPreflightDoesNotStartASecondAttempt() = runTest {
+        val gate = CompletableDeferred<Boolean>()
+        val f = preflightFixture(ScriptedRadio { gate.await() })
+        f.controller.connectAutomatically("camera")
+        f.controller.connectAutomatically("camera")
+        f.controller.connectAutomatically("other")
+        runCurrent()
+        assertEquals(1, f.radio.calls, "one managed attempt, one check")
+        gate.complete(true)
+        runCurrent()
+        assertEquals(1, f.claims)
+        assertEquals(1, f.opens)
+        assertEquals(WifiRemotePhase.Ready, f.registry.get("camera")!!.wifiRemote.phase)
+        f.controller.connectAutomatically("camera") // already running: still gated
+        runCurrent()
+        assertEquals(1, f.radio.calls)
+        assertEquals(1, f.claims)
+        assertNull(f.registry.get("other")?.wifiRemote?.takeIf { it.phase != WifiRemotePhase.Idle })
+    }
+
+    @Test
+    fun backgroundingDuringAPendingPreflightCancelsItWithoutAnyClaim() = runTest {
+        val gate = CompletableDeferred<Boolean>()
+        val f = preflightFixture(ScriptedRadio { gate.await() })
+        f.controller.connectAutomatically("camera")
+        runCurrent()
+        f.controller.onAppVisibilityChanged(false)
+        runCurrent()
+        gate.complete(true)
+        runCurrent()
+        assertNull(f.controller.owner.value)
+        assertEquals(0, f.claims)
+        assertEquals(0, f.opens)
+        assertEquals(WifiRemotePhase.Idle, f.registry.get("camera")?.wifiRemote?.phase ?: WifiRemotePhase.Idle)
+    }
+
+    @Test
+    fun aPreflightThatThrowsMapsToTheOldErrorsWithoutPhaseClaimOrOwnerAndAllowsARetry() = runTest {
+        val thrown = listOf<Throwable>(
+            WifiRemoteConnectException(WifiRemoteFailure.NetworkPermissionDenied),
+            IllegalStateException("radio service died"),
+        )
+        val expected = listOf(WifiRemoteFailure.NetworkPermissionDenied, WifiRemoteFailure.ProtocolError)
+        for ((index, error) in thrown.withIndex()) {
+            val f = preflightFixture(ScriptedRadio { if (it == 1) throw error else true })
+            f.controller.connectAutomatically("camera")
+            runCurrent()
+            val state = f.registry.get("camera")!!.wifiRemote
+            assertEquals(WifiRemotePhase.Failed, state.phase, "$error")
+            assertEquals(expected[index], state.failure, "$error")
+            assertFalse(WifiRemotePhase.PreparingCamera in f.phases, "phases seen: ${f.phases}")
+            assertEquals(0, f.claims)
+            assertEquals(0, f.releases)
+            assertEquals(0, f.opens)
+            assertNull(f.controller.owner.value)
+            // The failed attempt released the gate: the next try runs (and now passes).
+            f.controller.connectAutomatically("camera")
+            runCurrent()
+            assertEquals(2, f.radio.calls)
+            assertEquals(WifiRemotePhase.Ready, f.registry.get("camera")!!.wifiRemote.phase)
+        }
+    }
+
+    @Test
+    fun aPassingPreflightStillClaimsAndReachesReadyWithPreparingCameraPublishedFirst() = runTest {
+        val f = preflightFixture(ScriptedRadio { true })
+        f.controller.connectAutomatically("camera")
+        runCurrent()
+        assertEquals(1, f.claims)
+        assertEquals(1, f.opens)
+        assertEquals(WifiRemotePhase.Ready, f.registry.get("camera")!!.wifiRemote.phase)
+        assertTrue(WifiRemotePhase.PreparingCamera in f.phases, "phases seen: ${f.phases}")
+        assertEquals("CAMERA", f.controller.owner.value)
+    }
+
     @Test
     fun homeWithoutDownloadClosesOnlyWifiOwnerAndNeverEitherCamerasGps() = runTest {
         val (controller, registry, connection) = backgroundFixture()

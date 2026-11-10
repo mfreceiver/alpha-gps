@@ -41,12 +41,27 @@ fun createAndroidWifiRemoteController(
 internal class AndroidWifiAutomaticConnector(
     private val delegate: WifiAutomaticConnector,
 ) : WifiAutomaticConnector {
-    override val phonePreconditions: WifiPreconditions? get() = delegate.phonePreconditions
+    // Same SecurityException -> NetworkPermissionDenied mapping as open(), so a preflight that
+    // trips over a missing permission fails like the old in-connector check did.
+    override val phonePreconditions: WifiPreconditions? =
+        delegate.phonePreconditions?.let(::PermissionMappedPreconditions)
 
     override suspend fun open(
         identifier: String, scope: CoroutineScope, onPhase: (WifiRemotePhase) -> Unit,
     ): WifiRemoteConnection =
         try { delegate.open(identifier, scope, onPhase) }
+        catch (_: SecurityException) { throw WifiRemoteConnectException(WifiRemoteFailure.NetworkPermissionDenied) }
+}
+
+private class PermissionMappedPreconditions(private val delegate: WifiPreconditions) : WifiPreconditions {
+    override suspend fun isWifiEnabled(): Boolean =
+        mapped { delegate.isWifiEnabled() }
+
+    override suspend fun isLocationEnabled(): Boolean =
+        mapped { delegate.isLocationEnabled() }
+
+    private inline fun <T> mapped(block: () -> T): T =
+        try { block() }
         catch (_: SecurityException) { throw WifiRemoteConnectException(WifiRemoteFailure.NetworkPermissionDenied) }
 }
 
