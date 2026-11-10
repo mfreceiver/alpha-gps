@@ -1,4 +1,4 @@
-"""alpha-gps UI design v3 — document framework: mockup registry, HTML helpers, page list, CSS."""
+"""AlphaGPS UI design v3 — document framework: mockup registry, HTML helpers, page list, CSS."""
 import os
 
 import lib3 as L
@@ -8,7 +8,7 @@ MOCK = os.path.join(HERE, "mockups")
 os.makedirs(MOCK, exist_ok=True)
 F = {}
 pages = []
-DOC = "alpha-gps · 界面重设计 UI 设计方案 v3（第二轮修订）"
+DOC = "AlphaGPS · 界面重设计 UI 设计方案 v3（第三轮修订 · 定稿）"
 
 
 def save(key, svg):

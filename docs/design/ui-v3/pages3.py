@@ -1,4 +1,4 @@
-"""alpha-gps UI design v3 — build entry: render mockups (SVG) → index.html → ui-design-v3.pdf.
+"""AlphaGPS UI design v3 — build entry: render mockups (SVG) → index.html → ui-design-v3.pdf.
 
 Usage:  cd docs/design/ui-v3 && python3 pages3.py
 Needs:  python3, google-chrome (headless print-to-pdf), CJK fonts (Noto / Source Han Sans).
@@ -12,7 +12,7 @@ import screens3 as A
 import screens3b as B
 from doc3 import shot
 
-TOTAL = 30
+TOTAL = 34
 
 
 def mockups():
@@ -29,6 +29,7 @@ def mockups():
     shot("dev_ok_c", lambda: A.device_screen("ok", callouts=True))
     shot("dev_off", lambda: A.device_screen("off"))
     shot("dev_warn", lambda: A.device_screen("warn"))
+    shot("dev_nogps", lambda: A.device_screen("nogps"))
     shot("dlg_bt", A.bt_disconnect_dialog)
     shot("info_c", lambda: A.info_dialog(callouts=True))
     shot("dlg_rename", A.rename_dialog)
@@ -61,6 +62,7 @@ def mockups():
     shot("view_port", lambda: B.viewer_screen("port", card2=True))
     shot("view_full", lambda: B.viewer_screen("port", opts=("params", "lens", "hist")))
     shot("view_params", lambda: B.viewer_screen("land", opts=("params",)))
+    shot("view_orig", lambda: B.viewer_screen("land", original=True))
     shot("view_sheet", lambda: B.viewer_screen("land", sheet=True))
     shot("view_loading", lambda: B.viewer_screen("land", exif="loading", gps="loading", opts=("params",)))
     shot("view_fail", lambda: B.viewer_screen("land", exif="fail", gps="fail", opts=("params",)))
@@ -75,6 +77,7 @@ def mockups():
     shot("trouble", B.troubleshoot_screen)
     shot("about_c", lambda: B.about_screen(callouts=True))
     shot("licenses", B.licenses_screen)
+    shot("privacy", B.privacy_screen)
     # ---- dark set
     shot("d_list", lambda: A.device_list_screen("normal"), "dark")
     shot("d_dev_ok", lambda: A.device_screen("ok"), "dark")

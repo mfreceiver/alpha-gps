@@ -1,4 +1,4 @@
-"""alpha-gps UI design v3 — explanatory diagrams (wide SVGs)."""
+"""AlphaGPS UI design v3 — explanatory diagrams (wide SVGs)."""
 from lib3 import *  # noqa: F401,F403
 import screens3 as S
 import screens3b as B
@@ -94,7 +94,7 @@ def tag_vs_button(theme="light"):
     s += tonal_btn(312, 184, 92, 40, "连接", "bluetooth")
     s += text_btn(440, 204, "取消")
     s += rect(476, 184, 112, 40, "none", 20, C["error"], 1.5) + t(532, 209, "移除相机", 13.5, 600, C["error"], "middle")
-    s += circle(612, 204, 20, C["onSurf"], op=0.07) + icon("tune", 600, 192, 24, C["onSurfV"])
+    s += circle(612, 204, 20, C["onSurf"], op=0.07) + icon("grid_view", 600, 192, 24, C["onSurfV"])
     out = svg_wrap(w_, h_, f'<clipPath id="gl"><rect width="{w_}" height="{h_}" rx="18"/></clipPath><g clip-path="url(#gl)">{s}</g>')
     set_theme(was)
     return out, w_, h_
@@ -232,12 +232,14 @@ def aspect_diagram():
         o = rect(x, y, dw, dh, "#0B0D10", 12, "#42474E", 1.4)
         if kind == "A":
             o += rect(x + 4, y + 78, dw - 8, 70, PH, 2)
+            o += rect(x + 8, y + 34, 30, 8, "#7DDB93", 3, op=.85)
             o += rect(x + 6, y + dh - 62, dw - 12, 14, STRIP, 5, op=.92)
             for k in range(7):
                 o += rect(x + 8 + k * 14, y + dh - 44, 11, 11, FILM, 2)
             o += rect(x + dw / 2 - 26, y + dh - 26, 52, 14, DL, 7)
         elif kind == "B":
             o += rect(x + 6, y + 52, dw - 12, 126, PH, 2)
+            o += rect(x + 10, y + 30, 30, 8, "#7DDB93", 3, op=.85)
             o += rect(x + 8, y + dh - 44, 112, 14, STRIP, 5, op=.92)
             o += circle(x + dw - 18, y + dh - 37, 9, DL)
             for k in range(11):
@@ -246,6 +248,7 @@ def aspect_diagram():
             o += t(x + dw - 39, y + 44, "详情", 9.5, 600, "#A8C7FA", "middle")
         else:
             o += rect(x + 40, y + 6, dw - 80, dh - 12, PH, 2)
+            o += rect(x + 46, y + 22, 30, 8, "#7DDB93", 3, op=.85)
             o += rect(x + 8, y + dh - 22, 104, 14, STRIP, 5, op=.92)
             for k in range(6):
                 o += rect(x + 118 + k * 14, y + dh - 20, 11, 11, FILM, 2)
@@ -261,11 +264,11 @@ def aspect_diagram():
         return o
 
     s += dev(24, 18, 112, 240, "A")
-    s += cap(20, 278, "A 竖长（手机竖屏）", "宽 < 600dp 且 高 ≥ 480dp", ["三层自下而上叠在照片上：", "下载 / 胶片条 / 信息条", "详情 = 底部上滑面板"])
+    s += cap(20, 278, "A 竖长（手机竖屏）", "宽 < 600dp 且 高 ≥ 480dp", ["上：状态行（定位 · 锁星）", "下：下载 / 胶片条 / 信息条", "详情 = 底部上滑面板"])
     s += dev(206, 18, 206, 240, "B")
-    s += cap(204, 278, "B 近方形（折叠屏内屏 / 小平板 / 分屏）", "宽 ≥ 600dp 且 高 ≥ 480dp", ["信息条靠左（最宽 420dp），下载缩为右侧圆钮", "胶片条独占最底一行、居中、张数随宽度增加", "详情 = 右侧面板（宽 360dp），照片让出该宽度"])
+    s += cap(204, 278, "B 近方形（折叠屏内屏 / 小平板 / 分屏）", "宽 ≥ 600dp 且 高 ≥ 480dp", ["状态行在顶栏下左侧；信息条靠左（最宽 420dp）", "下载缩为右侧圆钮；胶片条独占最底一行", "详情 = 右侧面板（宽 360dp），照片让出该宽度"])
     s += dev(452, 76, 232, 108, "C")
-    s += cap(452, 278, "C 横屏（手机横屏）", "高 < 480dp", ["一行排完：信息条 | 胶片条 | 圆形下载", "顶栏改为透明叠在照片上，单击照片全部隐藏", "详情 = 右侧面板（宽 360dp）"])
-    s += t(452, 40, "三种窗口形状 · 同一组三个部件", 12, 700, INK)
+    s += cap(452, 278, "C 横屏（手机横屏）", "高 < 480dp", ["底部一行：信息条 | 胶片条 | 圆形下载", "顶栏透明叠在照片上，状态行并入顶栏右侧", "详情 = 右侧面板（宽 360dp）"])
+    s += t(452, 40, "三种窗口形状 · 同一组四个部件", 12, 700, INK)
     s += t(452, 58, "只换位置，不换样式；都半透明、可与照片交叠", 10.5, 400, INK2)
     return svg_wrap(w_, h_, s), w_, h_
