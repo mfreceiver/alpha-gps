@@ -35,10 +35,14 @@
 - 划卡/根页 Back 为明确退出，即使下载中也立即取消并结束 Wi-Fi；不加任何 BLE/GATT 或 FGS 关闭回调。`AppExitGate` 的 owner/epoch 与退休快照反例必须保留。后台下载保留最多 30 分钟（超时记日志并走正常取消清理）；生命周期与真机限制见 `docs/wifi-architecture.md`。
 - 应用内通用帮助与运行日志的入口在设置页（设备清单顶栏只留设置图标；清单底部“需要帮助？”进入连接故障排查），赞助链接仅保留在关于页（标明受益人为上游作者）；连接故障排查不等同于通用帮助入口。
 
-## UI 组件库用法（设计 v3）
-- 位置与清单见 `docs/design/README.md`「组件库在代码中的位置」；主题唯一入口 `CameraGpsTheme`（固定蓝色，不用动态色），颜色从 `AlphaTheme.colors` / `MaterialTheme.colorScheme` 取，不写死色值。
-- 每个页面根部用 `GlassBackground { … }`（G0 底光 + 模糊取样源 + 对话框叠层）；卡片 / 行用 `GlassCard`/`GlassSurface(level = …)`，按角色选 G1/G2/G3/GV。照片网格不作模糊取样源（`GlassBackground(contentIsBackdropSource = false)` 或不包进取样区）。
-- 按钮：文字操作一律 `CapsuleButton`（role 主/次/色调/危险/危险描边，≥48dp）；纯图标用 `GlassIconButton`（必须给 contentDescription）；信息标签用 `InfoTag`（不可点）。对话框一律 `CapsuleDialog`（取消左、确认右，危险操作 `destructive = true`），不再新增 `AlertDialog`。不用分隔线。
+## UI 组件库用法（设计 v3 + 0.3.0 样式统一）
+- 速查（组件签名、示例、旧控件→新组件对照）：`docs/ui-components-cheatsheet.md`；玻璃材质参数与取值依据、Haze 行为验证：`docs/glass-material-notes.md`；规范来源 `docs/ui-audit-2026-11.md`。组件在 `sharednew/.../ui/components/glass/`，token 在 `sharednew/.../ui/theme/`。主题唯一入口 `CameraGpsTheme`（固定蓝色，不用动态色）。
+- **文字只用 `AlphaType` 6 档**：Title 22/28 SB、Heading 18/24 SB、Body 15/22、Label 15/20 SB、Caption 13/18、Tag 11/14 SB，日志/许可证用 Mono 12；letterSpacing 0。`MaterialTheme.typography` 槽已映射到同 6 档，但新代码不直接用；`AlphaTextStyles` 是过渡别名，迁移完删除。
+- **颜色只用 8 个角色**（`AlphaTheme.colors`）：textPrimary / textSecondary / textMuted / accent / success / warning（文字 `warningText`、图标 `warningIcon`）/ danger / onPhoto（及 onPhotoSecondary、onPhotoMuted）。正文 ≥4.5:1，大字/图标/textMuted ≥3:1，由 `PaletteContrastTest` 矩阵守住——不达标调 token，不放宽阈值。
+- **守卫**：UI 目录（`sharednew/.../ui/`、`app/.../cameragps/ui/`，`ui/theme/` 除外）不得出现 `fontSize =`、`MaterialTheme.typography`、`Color.White`、`Color(0x`。`scripts/ui_style_guard.sh` 以 `docs/ui-style-guard-baseline.txt` 为基线只允许下降；迁移完页面后 `--update-baseline` 下调并一起提交，基线清空后改用 `--strict`。改守卫后跑 `scripts/ui_style_guard_test.sh`。
+- 每个页面根部用 `GlassBackground { … }`（背景光斑 + 模糊取样源 + 页内叠层宿主）；卡片 / 行用 `GlassCard`/`GlassSurface(level = …)`，按角色选 G1 Card / G2 Float / G3 Modal / GV Viewer；卡片内的玻璃自动降为不模糊的半透明片。照片网格不作模糊取样源（`GlassBackground(contentIsBackdropSource = false)` 或不包进取样区）。
+- **页内叠层规则**：菜单、气泡、提示、Snackbar、底部面板、对话框一律走 `GlassOverlayHost`（`GlassMenu`/`GlassPopover`/`GlassSnackbarHost`/`GlassBottomSheet`/`CapsuleDialog`/`GlassIconButton` 自带 tooltip），**不得新开系统窗口**（`Popup`/`Dialog`/`DropdownMenu`/`ModalBottomSheet`/`AlertDialog`/M3 `TooltipBox`）——Haze 跨窗口取样未验证。
+- 按钮：文字操作一律 `CapsuleButton`（role Primary/Secondary/Tonal/Danger/DangerOutlined/GlassPrimary，`glass = true` 为玻璃变体，文字永远 Label，size 只管高度/圆角/内边距，≥48dp）；纯图标用 `GlassIconButton`（必须给 contentDescription）；信息标签用 `InfoTag`（不可点），状态用 `StatusBadge`/`StatusLine`/`StatusRow`。开关/单选/复选/输入/分段/进度/顶栏用 `GlassSwitch`/`GlassRadio`/`GlassCheckbox`/`GlassTextField`/`GlassSegmented`/`GlassProgress*`/`GlassTopBar`，不用 M3 原生控件。对话框一律 `CapsuleDialog`（取消左、确认右，危险操作 `destructive = true`）。不用分隔线。
 - 窗口适配用 `windowClassOf(widthDp, heightDp)` / `currentWindowClass()`（A 竖长 / B 近方形 / C 横屏）。
 
 ## 语言资源纪律
