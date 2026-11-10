@@ -144,6 +144,7 @@
     <string name="help_about_title">About AlphaGPS</string>
     <string name="help_about_description">This app provides real-time GPS coordinates to your camera via Bluetooth, allowing for automatic geotagging of your photos without needing a camera's built-in GPS.</string>
     <string name="help_need_more_title">Need more help?</string>
+    <string name="help_report_issue">Report an issue</string>
     <string name="help_need_more_description">Check the app logs in the top menu for troubleshooting information, or review your device settings to ensure all permissions are granted.</string>
     <!-- FAQ Questions -->
     <string name="faq_connect_camera_question">How do I connect my camera to the app?</string>
@@ -248,7 +249,7 @@
     <string name="reset_welcome">Show welcome screen on next launch</string>
     <string name="will_show_welcome">Will show welcome screen on next launch!</string>
     <string name="is_there_documenation">Is there any documentation?</string>
-    <string name="is_there_documenation_answer">Yes! Please visit the Github page \nYou can also report issues with the App there or contact us via email:</string>
+    <string name="is_there_documenation_answer">Yes! Please visit the GitHub page.\nTo report a problem with the app, open an issue on GitHub:</string>
     <string name="is_there_documenation_answer_coffee">If you like the app and want to support development, you can buy me a coffee ☕️</string>
     <string name="app_standby_title">Standby</string>
     <string name="app_standby_content">Waiting for camera to connect</string>
@@ -335,7 +336,7 @@
     <string name="welcome_ready_body">AlphaGPS needs precise location access to geotag your photos. Background access keeps location updates running while your phone is locked.</string>
 
     <string name="wifi_remote_experimental_title">Experimental Wi-Fi photo transfer</string>
-    <string name="wifi_remote_experimental_message">Wi-Fi photo transfer is experimental and has currently only been validated with the developer’s Sony α6700. Other camera models may behave differently.\n\nPlease report any issues by email or on GitHub. Include your camera model and your phone’s operating system and version (Android or iOS).</string>
+    <string name="wifi_remote_experimental_message">Wi-Fi photo transfer is experimental and has currently only been validated with the developer’s Sony α6700. Other camera models may behave differently.\n\nPlease report your camera model and test results on GitHub Issues. Include your phone’s operating system and version (Android or iOS).</string>
     <string name="wifi_remote_title">Wi-Fi photo transfer</string>
     <string name="wifi_remote_entry_hint">Browse and download photos from the camera</string>
     <string name="wifi_remote_setup">Start the camera’s smartphone Wi-Fi connection, disconnect Creators’ App, then join the camera’s Wi-Fi in phone settings. Enter the camera IP address.</string>
