@@ -89,6 +89,13 @@ internal class OverlayFocusMemory {
     /** Number of shown layers with a stored return (bottom → top). */
     val depth: Int get() = frames.size
 
+    /**
+     * Result of the focus return [settle] last performed (null: none yet). Pure observation —
+     * production code never reads it and [settle] behaves the same with or without a reader; tests
+     * of the real Compose path use it to tell Saved from Container (the focus alone cannot).
+     */
+    internal var lastReturn: FocusReturn? = null
+
     /** A closed top layer whose focus return [settle] has not performed yet. */
     val hasPendingReturn: Boolean get() = pending != null
 
@@ -139,8 +146,9 @@ internal class OverlayFocusMemory {
         val newerLayerComing = liveModalKeys.withIndex().any { (i, key) -> i > topIndex && frames.none { it.key === key } }
         if (newerLayerComing) return FocusReturn.Deferred
         pending = null
-        if (!due.hadFocus) return FocusReturn.None
-        return due.returnTo.firstOrNull { it.run() }?.kind ?: FocusReturn.None
+        val result = if (!due.hadFocus) FocusReturn.None else due.returnTo.firstOrNull { it.run() }?.kind ?: FocusReturn.None
+        lastReturn = result
+        return result
     }
 }
 

@@ -32,6 +32,7 @@ import com.sasch.cameragps.sharednew.ui.components.ScrollbarLazyColumn
 import com.sasch.cameragps.sharednew.ui.theme.CameraGpsTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -56,6 +57,7 @@ class OverlayFocusComposeTest {
     private var first by mutableStateOf(false)
     private var second by mutableStateOf(false)
     private var menuOpen by mutableStateOf(false)
+    private var sheetOpen by mutableStateOf(false)
     private lateinit var inputModes: InputModeManager
     private lateinit var host: GlassOverlayHost
     private var watching = false
@@ -102,9 +104,18 @@ class OverlayFocusComposeTest {
         compose.runOnIdle { second = true }
         compose.onNode(pane("Second")).assertIsFocused()
         compose.onNodeWithText("Open second").assertDoesNotExist() // covered: out of the a11y tree
+        forgetReturn()
         compose.runOnIdle { second = false }
         compose.waitForIdle()
     }
+
+    /**
+     * Kind of the focus return the closes since [forgetReturn] ended with, read from the real
+     * [OverlayFocusMemory] (what the focus ends up on cannot tell Saved from Container).
+     */
+    private fun lastReturn(): FocusReturn? = compose.runOnIdle { host.focusMemory.lastReturn }
+
+    private fun forgetReturn() = compose.runOnIdle { host.focusMemory.lastReturn = null }
 
     private fun assertNothingStored() = compose.runOnIdle {
         assertEquals(0, host.focusMemory.depth)
@@ -123,11 +134,14 @@ class OverlayFocusComposeTest {
         openAndCloseSecond()
         compose.onNodeWithText("Open second").assertIsFocused()
         compose.onNode(pane("First")).assertIsNotFocused()
+        assertEquals(FocusReturn.Saved, lastReturn()) // the real saved path, not the panel container
 
         // And the page button once the first dialog closes too.
+        forgetReturn()
         compose.runOnIdle { first = false }
         compose.waitForIdle()
         compose.onNodeWithTag("page").assertIsFocused()
+        assertEquals(FocusReturn.Saved, lastReturn())
         assertNothingStored()
     }
 
@@ -140,6 +154,7 @@ class OverlayFocusComposeTest {
         openAndCloseSecond()
         compose.onNodeWithText("Cancel").assertIsFocused()
         compose.onNodeWithText("Open second").assertIsNotFocused()
+        assertEquals(FocusReturn.Saved, lastReturn())
     }
 
     @Test
@@ -154,6 +169,7 @@ class OverlayFocusComposeTest {
         compose.onNodeWithTag("item2").assertIsFocused()
         openAndCloseSecond()
         compose.onNodeWithTag("item2").assertIsFocused()
+        assertEquals(FocusReturn.Saved, lastReturn())
     }
 
     @Test
@@ -173,6 +189,8 @@ class OverlayFocusComposeTest {
         compose.onNode(pane("First")).assertIsFocused()
         compose.onNodeWithTag("nested1").assertIsNotFocused()
         compose.onNodeWithTag("nested2").assertIsNotFocused()
+        // The real restore closure failed and the panel container took over: reported as such.
+        assertEquals(FocusReturn.Container, lastReturn())
     }
 
     @Test
@@ -185,9 +203,11 @@ class OverlayFocusComposeTest {
         compose.onNodeWithTag("row2").requestFocus()
         compose.runOnIdle { first = true }
         compose.onNode(pane("First")).assertIsFocused()
+        forgetReturn()
         compose.runOnIdle { first = false }
         compose.waitForIdle()
         compose.onNodeWithTag("row2").assertIsFocused()
+        assertEquals(FocusReturn.Saved, lastReturn())
         assertNothingStored()
     }
 
@@ -207,9 +227,11 @@ class OverlayFocusComposeTest {
         compose.onNodeWithText("More").requestFocus()
         compose.runOnIdle { menuOpen = true }
         compose.onNode(pane("Options")).assertIsFocused()
+        forgetReturn()
         compose.onNodeWithText("Rename").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("More").assertIsFocused()
+        assertEquals(FocusReturn.Anchor, lastReturn())
         assertNothingStored()
     }
 
@@ -226,6 +248,8 @@ class OverlayFocusComposeTest {
         compose.waitForIdle()
         compose.onNode(pane("First")).assertDoesNotExist()
         compose.onNodeWithText("Open").assertIsNotFocused()
+        // lastReturn() is not asserted: the always-focusable "page" box may hold the initial focus
+        // here, which makes the return Saved onto that box (the None path: OverlayHostLifecycleTest).
         assertNothingStored()
     }
 
@@ -262,6 +286,73 @@ class OverlayFocusComposeTest {
             assertFalse(focusLost)
         }
         compose.onNodeWithTag("watched").assertIsFocused()
+        assertNothingStored()
+        assertNull("no layer was ever stored, so no focus return ran", lastReturn())
+    }
+
+    // A caller-owned scroll area inside a *sheet / popover*: these overlays put their own focus
+    // level on the scroll column, so the leaf inside is restored (Saved), like in a dialog.
+
+    @Test
+    fun dialogOverBottomSheetReturnsToTheLeafInTheSheetsScrollArea() {
+        show(page = {
+            GlassBottomSheet(visible = sheetOpen, onDismissRequest = { sheetOpen = false }, title = "Sheet") {
+                Box(Modifier.size(48.dp).focusable().testTag("sheet1"))
+                Box(Modifier.size(48.dp).focusable().testTag("sheet2"))
+            }
+        })
+        compose.onNodeWithTag("page").requestFocus()
+        compose.runOnIdle { sheetOpen = true }
+        compose.onNode(pane("Sheet")).assertIsFocused()
+        compose.onNodeWithTag("sheet2").requestFocus()
+        compose.onNodeWithTag("sheet2").assertIsFocused()
+
+        openAndCloseSecond()
+        compose.onNodeWithTag("sheet2").assertIsFocused()
+        compose.onNodeWithTag("sheet1").assertIsNotFocused()
+        assertEquals(FocusReturn.Saved, lastReturn())
+
+        // Closing the sheet itself hands focus back to the page element that had it.
+        forgetReturn()
+        compose.runOnIdle { sheetOpen = false }
+        compose.waitForIdle()
+        compose.onNodeWithTag("page").assertIsFocused()
+        assertEquals(FocusReturn.Saved, lastReturn())
+        assertNothingStored()
+    }
+
+    @Test
+    fun dialogOverPopoverReturnsToTheLeafInThePopoversContent() {
+        show(page = {
+            val anchor = rememberGlassAnchor()
+            CapsuleButton(text = "More", onClick = { menuOpen = true }, modifier = Modifier.glassAnchor(anchor))
+            GlassPopover(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false },
+                anchor = anchor,
+                paneTitle = "Popover",
+            ) {
+                Box(Modifier.size(48.dp).focusable().testTag("pop1"))
+                Box(Modifier.size(48.dp).focusable().testTag("pop2"))
+            }
+        })
+        compose.onNodeWithText("More").requestFocus()
+        compose.runOnIdle { menuOpen = true }
+        compose.onNode(pane("Popover")).assertIsFocused()
+        compose.onNodeWithTag("pop2").requestFocus()
+        compose.onNodeWithTag("pop2").assertIsFocused()
+
+        openAndCloseSecond()
+        compose.onNodeWithTag("pop2").assertIsFocused()
+        compose.onNodeWithTag("pop1").assertIsNotFocused()
+        assertEquals(FocusReturn.Saved, lastReturn())
+
+        // Closing the popover returns to the button that opened it.
+        forgetReturn()
+        compose.runOnIdle { menuOpen = false }
+        compose.waitForIdle()
+        compose.onNodeWithText("More").assertIsFocused()
+        assertEquals(FocusReturn.Anchor, lastReturn())
         assertNothingStored()
     }
 }
