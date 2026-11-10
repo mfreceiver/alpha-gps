@@ -90,8 +90,8 @@ fun GlassBottomSheet(
         var sheetHeight by remember { mutableIntStateOf(0) }
         var dismissing by remember { mutableStateOf(false) }
         val closeLabel = stringResource(Res.string.m0_dialog_close)
-        // Keyboard focus enters the sheet (and returns to the page when the last overlay closes).
-        val panelFocus = rememberModalPanelFocus(host)
+        // Keyboard focus enters the sheet (and returns to the layer below when it closes).
+        val panelFocus = rememberModalPanelFocus()
         Box(
             Modifier
                 .fillMaxSize()
