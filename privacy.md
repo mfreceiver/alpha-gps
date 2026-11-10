@@ -58,7 +58,6 @@ commit history.
 
 ## Contact
 
-Questions or feedback: open an issue at either repository —
+Questions or feedback: open an issue at
 
 - https://github.com/mfreceiver/alpha-gps/issues
-- https://forge.example.com:443/owner/alphagps/issues

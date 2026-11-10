@@ -48,14 +48,12 @@
 **EN**
 
 > Source code (GPL-3.0):
-> - GitHub: https://github.com/mfreceiver/alpha-gps
-> - Primary forge: https://forge.example.com:443/owner/alphagps
+> - GitHub: https://github.com/mfreceiver/alpha-gps (issues: https://github.com/mfreceiver/alpha-gps/issues)
 
 **zh-CN**
 
 > 源码（GPL-3.0）：
-> - GitHub：https://github.com/mfreceiver/alpha-gps
-> - Primary forge：https://forge.example.com:443/owner/alphagps
+> - GitHub：https://github.com/mfreceiver/alpha-gps（反馈：https://github.com/mfreceiver/alpha-gps/issues）
 
 ## 5. 第三方组件许可清单
 

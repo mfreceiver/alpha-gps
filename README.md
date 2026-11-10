@@ -71,7 +71,7 @@ Then build the Android app:
 ```
 
 Other verification tasks are listed in [AGENTS.md](AGENTS.md). For releases (signed APKs, tags and
-Primary forge releases), see [`scripts/release_build.sh`](scripts/release_build.sh) — releasing is a manual,
+releases), see [`scripts/release_build.sh`](scripts/release_build.sh) — releasing is a manual,
 confirmed step.
 
 This fork ships only English (`values/`) and Simplified Chinese (`values-zh-rCN/`) — do not add
@@ -100,10 +100,9 @@ The upstream project itself built on:
 If you would like to support the **original upstream author (Saschl)**, see their
 [Buy Me A Coffee](https://buymeacoffee.com/wj8tism4dq) page.
 
-**Source code:** [GitHub](https://github.com/mfreceiver/alpha-gps) ·
-[Primary forge](https://forge.example.com:443/owner/alphagps)
+**Source code:** [GitHub](https://github.com/mfreceiver/alpha-gps)
 
-**Feedback:** open an issue at either repository above.
+**Feedback:** open an issue on [GitHub](https://github.com/mfreceiver/alpha-gps/issues).
 
 ## Trademark disclaimer
 
@@ -121,5 +120,4 @@ AlphaGPS 是 [Saschl/alpha-gps](https://github.com/Saschl/alpha-gps)（GPL-3.0�
 由 mfreceiver 自 2026-11 起维护：通过蓝牙向索尼 Alpha 相机写入 GPS 位置与时间，并通过相机 Wi-Fi
 浏览、下载照片（按日期分组、多选/拖选、仅下载 JPG 或原始文件）。仅支持 Android 12+（arm64），
 不通过任何应用市场分发。应用不收集、不上传任何数据，详见 [privacy.md](privacy.md)。源码：
-[GitHub](https://github.com/mfreceiver/alpha-gps) ·
-[Primary forge](https://forge.example.com:443/owner/alphagps)；反馈请到两处仓库的 Issues。
+[GitHub](https://github.com/mfreceiver/alpha-gps)；反馈请到 [GitHub Issues](https://github.com/mfreceiver/alpha-gps/issues)。
