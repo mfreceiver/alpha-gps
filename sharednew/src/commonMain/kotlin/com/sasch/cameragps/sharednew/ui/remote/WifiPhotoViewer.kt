@@ -650,7 +650,7 @@ private fun ViewerInfoStripBar(
             val format = info.formatText
             if (format != null) Text(
                 if (info.noJpeg) stringResource(Res.string.m7_viewer_only_format, format) else format,
-                color = if (info.noJpeg) AlphaTheme.colors.warningText else AlphaTheme.colors.onPhoto,
+                color = viewerFormatColor(info.noJpeg, AlphaTheme.colors),
                 style = AlphaType.Label, maxLines = 1,
             )
             if (format != null && info.sizeBytes > 0) {
@@ -933,7 +933,7 @@ private fun ViewerDownloadArea(parts: ViewerParts) {
         hint?.let {
             Text(
                 it, style = AlphaType.Caption,
-                color = if (download.phase == ViewerDownloadPhase.Ready) AlphaTheme.colors.danger else AlphaTheme.colors.onPhotoSecondary,
+                color = viewerDownloadHintColor(download.phase, AlphaTheme.colors),
             )
         }
         when (download.phase) {

@@ -23,6 +23,9 @@ import com.sasch.cameragps.sharednew.ui.components.glass.textFieldBorder
 import com.sasch.cameragps.sharednew.ui.device.LastWriteMetricTone
 import com.sasch.cameragps.sharednew.ui.device.WrittenMetricTone
 import com.sasch.cameragps.sharednew.ui.device.signalTone
+import com.sasch.cameragps.sharednew.ui.remote.ViewerDownloadPhase
+import com.sasch.cameragps.sharednew.ui.remote.viewerDownloadHintColor
+import com.sasch.cameragps.sharednew.ui.remote.viewerFormatColor
 import androidx.compose.ui.state.ToggleableState
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -107,6 +110,8 @@ class PaletteContrastTest {
         Role("onPhoto", c.onPhoto, null),
         Role("onPhotoSecondary", c.onPhotoSecondary, null),
         Role("onPhotoMuted", c.onPhotoMuted, Contrast.AA_LARGE),
+        Role("onPhotoWarning", c.onPhotoWarning, null),
+        Role("onPhotoDanger", c.onPhotoDanger, null),
     )
 
     private val tiers = listOf(
@@ -188,6 +193,67 @@ class PaletteContrastTest {
         assertTrue(minRatio(light.onPhotoMuted, glassBackgrounds(GlassLevel.Viewer, light)) >= Contrast.AA_LARGE)
         // Muted is visibly quieter than secondary, otherwise it is not a separate role.
         listOf(light, dark).forEach { c -> assertTrue(c.textMuted != c.textSecondary) }
+    }
+
+    /**
+     * Everything Viewer chrome can sit on, in either theme (the Viewer does not follow the theme):
+     * Viewer glass (70 %) over a white / black / grey photo with and without the sheen, the bare
+     * black viewer background (portrait download row, letterbox) and the solid Viewer fill (94 %)
+     * on black.
+     */
+    private fun viewerSurfaces(c: AlphaColors): List<Color> {
+        val solid = Contrast.over(GlassTokens.of(GlassLevel.Viewer, c.isDark).solidFill, Color.Black)
+        return glassBackgrounds(GlassLevel.Viewer, c) + Color.Black + solid
+    }
+
+    @Test
+    fun viewerForegroundsReadableOnEveryViewerSurface() {
+        val failures = mutableListOf<String>()
+        listOf(light, dark).forEach { c ->
+            val bgs = viewerSurfaces(c)
+            val text = listOf(
+                "onPhoto" to c.onPhoto, "onPhotoSecondary" to c.onPhotoSecondary,
+                "onPhotoWarning" to c.onPhotoWarning, "onPhotoDanger" to c.onPhotoDanger,
+            )
+            text.forEach { (name, fg) ->
+                val r = minRatio(fg, bgs)
+                if (r < Contrast.AA_TEXT) failures += "dark=${c.isDark} text $name: $r < ${Contrast.AA_TEXT}"
+            }
+            // Icons / marks: muted text role and the warning / danger glyphs, 3:1.
+            val icons = listOf(
+                "onPhotoMuted" to c.onPhotoMuted, "onPhotoWarning icon" to c.onPhotoWarning,
+                "onPhotoDanger icon" to c.onPhotoDanger,
+                "viewer IconEmphasis.Danger" to iconButtonTint(IconEmphasis.Danger, c, enabled = true, onViewer = true),
+            )
+            icons.forEach { (name, fg) ->
+                val r = minRatio(fg, bgs)
+                if (r < Contrast.AA_LARGE) failures += "dark=${c.isDark} icon $name: $r < ${Contrast.AA_LARGE}"
+            }
+        }
+        assertTrue(failures.isEmpty(), failures.joinToString("\n"))
+    }
+
+    @Test
+    fun viewerWarningAndErrorTextUseThePhotoRoles() {
+        // The Viewer call sites (info strip "only RAW", download failure hint): every state's
+        // colour must read on every Viewer surface in both themes — the theme warningText (#7A5200)
+        // and danger (#BA1A1A) were ≈ 1.0–3.3:1 here.
+        listOf(light, dark).forEach { c ->
+            val bgs = viewerSurfaces(c)
+            listOf(true, false).forEach { noJpeg ->
+                val r = minRatio(viewerFormatColor(noJpeg, c), bgs)
+                assertTrue(r >= Contrast.AA_TEXT, "info strip format noJpeg=$noJpeg dark=${c.isDark}: $r")
+            }
+            ViewerDownloadPhase.entries.forEach { phase ->
+                val r = minRatio(viewerDownloadHintColor(phase, c), bgs)
+                assertTrue(r >= Contrast.AA_TEXT, "download hint $phase dark=${c.isDark}: $r")
+            }
+            assertEquals(c.onPhotoWarning, viewerFormatColor(noJpeg = true, c))
+            assertEquals(c.onPhotoDanger, viewerDownloadHintColor(ViewerDownloadPhase.Ready, c))
+            assertEquals(c.onPhotoDanger, iconButtonTint(IconEmphasis.Danger, c, enabled = true, onViewer = true))
+            // Still distinguishable from plain onPhoto text (they carry the warning / error meaning).
+            assertTrue(c.onPhotoWarning != c.onPhoto && c.onPhotoDanger != c.onPhoto && c.onPhotoWarning != c.onPhotoDanger)
+        }
     }
 
     @Test
@@ -356,9 +422,11 @@ class PaletteContrastTest {
                 }
             }
         }
-        IconEmphasis.entries.filter { it != IconEmphasis.Danger }.forEach { e ->
-            val r = minRatio(iconButtonTint(e, dark, enabled = true, onViewer = true), glassBackgrounds(GlassLevel.Viewer, dark))
-            assertTrue(r >= Contrast.AA_LARGE, "viewer icon $e: $r")
+        listOf(light, dark).forEach { c ->
+            IconEmphasis.entries.forEach { e ->
+                val r = minRatio(iconButtonTint(e, c, enabled = true, onViewer = true), viewerSurfaces(c))
+                assertTrue(r >= Contrast.AA_LARGE, "viewer icon $e dark=${c.isDark}: $r")
+            }
         }
     }
 

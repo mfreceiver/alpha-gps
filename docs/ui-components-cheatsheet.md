@@ -38,6 +38,7 @@
 | 警告 | `warningText`（文字）/ `warningIcon`（图标/圆点/边条） | 警告 | 4.5 / 3 |
 | 危险 | `danger`（= error） | 错误、删除 | 4.5 |
 | 照片上 | `onPhoto` / `onPhotoSecondary`(.85) / `onPhotoMuted`(.72) | Viewer 与照片上的文字/图标 | 4.5 / 4.5 / 3 |
+| 照片上警示/错误 | `onPhotoWarning`(#FFE08A) / `onPhotoDanger`(#FFDAD6)，亮暗主题同值 | Viewer 与照片上的警示、错误文字与图标（如"仅 RAW"、下载失败提示、Viewer 上 Danger 图标按钮）；Viewer 上**不用** `warningText`/`danger`/`success` | 4.5（文字）/ 3（图标） |
 
 - `warning`（原浅琥珀 #F9A825）只作装饰，不能当文字或图标色。
 - Container 类颜色（primaryContainer、errorContainer…）不作为文字底色；需要色块用玻璃 tint（`GlassSurface(tint = …)`）。
