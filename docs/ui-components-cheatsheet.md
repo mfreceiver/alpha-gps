@@ -126,11 +126,12 @@ GlassIconButton(icon, "更多", onClick = { open = true }, modifier = Modifier.g
 GlassMenu(expanded = open, onDismissRequest = { open = false }, anchor = anchor,
           items = listOf(GlassMenuItem("网格", onClick = { … }, selected = true),
                          GlassMenuItem("删除全部", onClick = { … }, destructive = true)),
-          placement = PopoverPlacement.BelowEnd)
-GlassPopover(expanded, onDismissRequest, anchor, modifier, placement = PopoverPlacement.BelowEnd) { /* ColumnScope */ }
+          placement = PopoverPlacement.BelowEnd, paneTitle = "视图选项" /* 可选，读屏窗格名 */)
+GlassPopover(expanded, onDismissRequest, anchor, modifier, placement = PopoverPlacement.BelowEnd, paneTitle: String? = null) { /* ColumnScope */ }
 // GlassMenuItem(label, onClick, icon: Painter? = null, enabled = true, destructive = false, selected: Boolean? = null)
 // PopoverPlacement { BelowEnd, BelowStart, AboveEnd, AboveStart }；放不下自动翻转并夹在屏内
 ```
+- 焦点（替代 `Popup(focusable = true)`，`GlassOverlayFocus.kt`）：Popover/Menu/`CapsuleDialog`/`GlassBottomSheet` 打开时键盘/方向键焦点移入面板容器（Tab/方向键再到条目）；模态期间底页焦点组拒绝进入；最后一个模态关闭时焦点回到 `glassAnchor`（锚点不可用则回到打开前底页的焦点项）。打开前底页没有焦点（触屏使用）则关闭后不强加焦点。读屏隐藏底页由 `GlassBackground` 负责。`glassAnchor` 同时登记焦点返回目标，放在打开弹层的按钮上。
 
 ### 进度（N8）
 ```kotlin

@@ -1,13 +1,17 @@
 package com.sasch.cameragps.sharednew.ui.components.glass
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -50,11 +54,22 @@ fun GlassBackground(
             val sourceModifier =
                 if (contentIsBackdropSource) Modifier.glassSource(backdrop, zIndex = 1f) else Modifier
             // While a modal overlay is up, the page below is hidden from accessibility services.
-            val a11yModifier = if (overlayHost.hasOverlay) Modifier.clearAndSetSemantics { } else Modifier
+            val hasModal = overlayHost.hasOverlay
+            val a11yModifier = if (hasModal) Modifier.clearAndSetSemantics { } else Modifier
+            // …and from keyboard / D-pad focus: the page is one focus group that refuses entry while
+            // a modal overlay is up; the overlay panel takes focus (GlassOverlayFocus.kt).
+            val focusModifier = Modifier
+                .focusRequester(overlayHost.pageFocus)
+                .focusProperties { onEnter = { if (!pageAcceptsFocus(overlayHost.hasOverlay)) cancelFocusChange() } }
+                .focusGroup()
             Box(
-                modifier = Modifier.fillMaxSize().then(sourceModifier).then(a11yModifier),
+                modifier = Modifier.fillMaxSize().then(sourceModifier).then(a11yModifier).then(focusModifier),
                 content = content,
             )
+            // Last modal overlay closed: focus back to the anchor / the page child focused before.
+            LaunchedEffect(hasModal) {
+                if (!hasModal) overlayHost.focusMemory.onAllModalsClosed { tryFocus { overlayHost.pageFocus.restoreFocusedChild() } }
+            }
             GlassOverlayLayer(overlayHost)
         }
     }

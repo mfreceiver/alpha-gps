@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 
 /**
  * Registry of in-tree overlays (dialogs, popovers, sheets). Overlays are composed by
@@ -29,6 +30,12 @@ class GlassOverlayHost internal constructor() {
 
     /** True while at least one **modal** overlay (dialog, sheet, popover) is shown. */
     val hasOverlay: Boolean get() = entries.any { it.modal }
+
+    /** Focus group of the page content below the overlays (see GlassOverlayFocus.kt). */
+    internal val pageFocus = FocusRequester()
+
+    /** Where keyboard focus returns when the last modal overlay closes. */
+    internal val focusMemory = OverlayFocusMemory()
 }
 
 internal class GlassOverlayEntry(

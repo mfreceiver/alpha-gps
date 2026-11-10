@@ -255,6 +255,8 @@ private fun CapsuleDialogPanel(
     val enter = remember { Animatable(0f) }
     LaunchedEffect(Unit) { enter.animateTo(1f, tween(220)) }
     val horizontal = if (centered) Alignment.CenterHorizontally else Alignment.Start
+    // Keyboard focus enters the dialog (and returns to the page when the last overlay closes).
+    val panelFocus = rememberModalPanelFocus(LocalGlassOverlayHost.current)
     GlassSurface(
         modifier = modifier
             .widthIn(max = AlphaDimens.dialogWidth)
@@ -268,7 +270,8 @@ private fun CapsuleDialogPanel(
             .semantics {
                 isTraversalGroup = true
                 if (title != null) paneTitle = title
-            },
+            }
+            .modalPanelFocus(panelFocus),
         level = GlassLevel.Modal,
         shape = AlphaShapes.dialog,
     ) {
