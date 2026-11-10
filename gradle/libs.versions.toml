@@ -28,6 +28,9 @@ runner = "1.7.0"
 core = "1.7.0"
 sqlite = "2.7.1"
 kotlinxDatetime = "0.8.0"
+# Haze (Apache-2.0): backdrop blur for the glass components. 2.1.0 is built against
+# Compose Multiplatform 1.12.2 / Kotlin 2.4.21; re-verify when Compose is upgraded.
+haze = "2.1.0"
 
 
 
@@ -78,6 +81,8 @@ androidx-core = { group = "androidx.test", name = "core", version.ref = "core" }
 androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "sqlite" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
 androidx-lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
+haze-blur = { module = "dev.chrisbanes.haze:haze-blur", version.ref = "haze" }
 
 
 

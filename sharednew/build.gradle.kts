@@ -269,6 +269,10 @@ kotlin {
                 implementation(libs.kotlinx.datetime)
                 implementation(libs.androidx.lifecycle.viewmodel)
                 implementation(libs.lifecycle.runtime.compose)
+                // Glass components (ui/components/glass): backdrop blur. Kept internal to
+                // sharednew; callers only see GlassBackdrop / GlassSurface.
+                implementation(libs.haze)
+                implementation(libs.haze.blur)
 
 
             }
