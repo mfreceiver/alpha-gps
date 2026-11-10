@@ -14,9 +14,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 
 @Composable
 fun TransmissionDot(
@@ -28,12 +28,12 @@ fun TransmissionDot(
             .size(12.dp), // fixed layout size so nothing moves
         contentAlignment = Alignment.Center
     ) {
-        if (!isRunning) {  // Static red dot when disabled
+        if (!isRunning) {  // Static error-coloured dot when disabled
             Box(
                 modifier = Modifier
                     .size(8.dp)
                     .background(
-                        color = Color.Red,
+                        color = AlphaTheme.colors.error,
                         shape = CircleShape
                     )
             )
@@ -59,7 +59,7 @@ fun TransmissionDot(
                     scaleY = scale
                 }
                 .background(
-                    color = Color.Green,
+                    color = AlphaTheme.colors.success,
                     shape = CircleShape
                 )
         )
