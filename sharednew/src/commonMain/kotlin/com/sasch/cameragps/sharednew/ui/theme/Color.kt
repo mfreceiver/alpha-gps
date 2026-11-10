@@ -58,9 +58,15 @@ data class AlphaColors(
     val success: Color,
     val successContainer: Color,
     val onSuccessContainer: Color,
-    /** Attention accent (dots, icons). Use [warningText] for words — the light amber is too pale. */
+    /**
+     * Legacy pale amber (light #F9A825) — decorative only, fails 3:1 on light glass. Use
+     * [warningIcon] for icons / dots and [warningText] for words.
+     */
     val warning: Color,
+    /** Warning words (role `warning`, text): ≥ 4.5:1 on every glass level. */
     val warningText: Color,
+    /** Warning icons / dots (role `warning`, non-text): ≥ 3:1 on every glass level. */
+    val warningIcon: Color,
     val warningContainer: Color,
     val onWarningContainer: Color,
     /**
@@ -68,14 +74,20 @@ data class AlphaColors(
      * state — e.g. the "last write" metric of the device page. Text-safe on G1/G3 glass.
      */
     val accentTeal: Color,
+    // Text roles that have no Material slot
+    /** Role `textMuted`: disabled / placeholder / auxiliary counts. Opaque, ≥ 3:1 on every glass level. */
+    val textMuted: Color,
+    /** Role `onPhoto`: text / icons on Viewer glass or directly over a photo (always white). */
+    val onPhoto: Color,
+    /** Secondary text over a photo that must still meet 4.5:1 (white 85 %). */
+    val onPhotoSecondary: Color,
+    /** De-emphasised marks over a photo, ≥ 3:1 only (white 72 %). */
+    val onPhotoMuted: Color,
     // Backdrop G0
     /** Scrim behind G3 surfaces, alpha included (light 32 % / dark 52 %). */
     val scrim: Color,
-    val glowBlue: Color,
-    val glowViolet: Color,
-    val glowTeal: Color,
-    /** Opacity of the three backdrop glows: top-left blue, right violet, bottom-left teal. */
-    val glowAlphas: List<Float>,
+    /** Low-contrast coloured light orbs of the G0 backdrop (D1), drawn in order over [background]. */
+    val orbs: List<BackdropOrb>,
     // Thumbnails
     /**
      * Fill of a photo tile / filmstrip cell, visible around a fitted camera thumbnail. Deliberately
@@ -87,7 +99,26 @@ data class AlphaColors(
     val thumbnailBadgeScrim: Color,
     /** Stroke of an unselected corner badge and of the filmstrip's current frame (on dark frames). */
     val thumbnailBadgeStroke: Color,
-)
+) {
+    // The eight colour roles (audit §3.4). `success` and `warningText` / `warningIcon` (role
+    // `warning`) are constructor fields above; `textMuted` and `onPhoto` too.
+    /** Role `textPrimary`: main text, titles. */
+    val textPrimary: Color get() = onSurface
+    /** Role `textSecondary`: secondary text, descriptions, default icon tint. */
+    val textSecondary: Color get() = onSurfaceVariant
+    /** Role `accent`: emphasis, links, selection, primary buttons. */
+    val accent: Color get() = primary
+    /** Role `danger`: errors and destructive actions. */
+    val danger: Color get() = error
+}
+
+/**
+ * One soft radial light of the G0 backdrop: centre ([x], [y]) as fractions of the canvas width /
+ * height, [radius] as a fraction of the canvas' **shorter** side (so landscape does not blow the
+ * orbs up), peak [color] opacity [alpha] fading to transparent at the radius.
+ */
+@Immutable
+data class BackdropOrb(val x: Float, val y: Float, val radius: Float, val color: Color, val alpha: Float)
 
 val LightAlphaColors = AlphaColors(
     isDark = false,
@@ -128,14 +159,23 @@ val LightAlphaColors = AlphaColors(
     onSuccessContainer = Color(0xFF00210D),
     warning = Color(0xFFF9A825),
     warningText = Color(0xFF7A5200),
+    // #F9A825 is 1.7:1 on light glass; this deeper amber keeps the hue at ≥ 4.4:1.
+    warningIcon = Color(0xFFA15C00),
     warningContainer = Color(0xFFFFE9B3),
     onWarningContainer = Color(0xFF261900),
     accentTeal = Color(0xFF006A6A),
+    textMuted = Color(0xFF696E75),
+    onPhoto = Color.White,
+    onPhotoSecondary = Color.White.copy(alpha = 0.85f),
+    onPhotoMuted = Color.White.copy(alpha = 0.72f),
     scrim = Color.Black.copy(alpha = 0.32f),
-    glowBlue = Color(0xFFA8C7FA),
-    glowViolet = Color(0xFFCDBDF7),
-    glowTeal = Color(0xFFA6E6D6),
-    glowAlphas = listOf(0.60f, 0.42f, 0.36f),
+    orbs = listOf(
+        BackdropOrb(0.10f, 0.08f, 0.80f, Color(0xFFA8C7FA), 0.55f), // blue, top-left (main light)
+        BackdropOrb(1.00f, 0.42f, 0.66f, Color(0xFFCDBDF7), 0.40f), // violet, right
+        BackdropOrb(0.18f, 0.92f, 0.72f, Color(0xFFA6E6D6), 0.36f), // teal, bottom-left
+        BackdropOrb(0.86f, 0.04f, 0.42f, Color(0xFFBEE3FF), 0.38f), // sky, behind the top bar
+        BackdropOrb(0.72f, 0.80f, 0.46f, Color(0xFFF6D3E4), 0.24f), // faint rose, warm counterpoint
+    ),
     thumbnailFrame = Color(0xFF0E0E10),
     thumbnailBadgeScrim = Color.Black.copy(alpha = 0.25f),
     thumbnailBadgeStroke = Color.White,
@@ -180,14 +220,22 @@ val DarkAlphaColors = AlphaColors(
     onSuccessContainer = Color(0xFFC8F0D2),
     warning = Color(0xFFFFC857),
     warningText = Color(0xFFFFC857),
+    warningIcon = Color(0xFFFFC857),
     warningContainer = Color(0xFF5C4200),
     onWarningContainer = Color(0xFFFFE9B3),
     accentTeal = Color(0xFF6FD8D8),
+    textMuted = Color(0xFFA3A8B0),
+    onPhoto = Color.White,
+    onPhotoSecondary = Color.White.copy(alpha = 0.85f),
+    onPhotoMuted = Color.White.copy(alpha = 0.72f),
     scrim = Color.Black.copy(alpha = 0.52f),
-    glowBlue = Color(0xFF0B57D0),
-    glowViolet = Color(0xFF5B3FA8),
-    glowTeal = Color(0xFF0E6B5C),
-    glowAlphas = listOf(0.42f, 0.30f, 0.26f),
+    orbs = listOf(
+        BackdropOrb(0.10f, 0.08f, 0.80f, Color(0xFF0B57D0), 0.40f), // blue, top-left (main light)
+        BackdropOrb(1.00f, 0.42f, 0.66f, Color(0xFF5B3FA8), 0.30f), // violet, right
+        BackdropOrb(0.18f, 0.92f, 0.72f, Color(0xFF0E6B5C), 0.26f), // teal, bottom-left
+        BackdropOrb(0.86f, 0.04f, 0.42f, Color(0xFF1A6FA8), 0.26f), // sky, behind the top bar
+        BackdropOrb(0.72f, 0.80f, 0.46f, Color(0xFF7A3466), 0.18f), // faint plum, warm counterpoint
+    ),
     thumbnailFrame = Color(0xFF0E0E10),
     thumbnailBadgeScrim = Color.Black.copy(alpha = 0.25f),
     thumbnailBadgeStroke = Color.White,

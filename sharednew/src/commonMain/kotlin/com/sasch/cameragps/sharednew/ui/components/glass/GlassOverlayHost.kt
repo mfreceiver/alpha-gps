@@ -27,13 +27,14 @@ import androidx.compose.ui.Modifier
 class GlassOverlayHost internal constructor() {
     internal val entries = mutableStateListOf<GlassOverlayEntry>()
 
-    /** True while at least one overlay is shown. */
-    val hasOverlay: Boolean get() = entries.isNotEmpty()
+    /** True while at least one **modal** overlay (dialog, sheet, popover) is shown. */
+    val hasOverlay: Boolean get() = entries.any { it.modal }
 }
 
 internal class GlassOverlayEntry(
     content: @Composable () -> Unit,
     locals: CompositionLocalContext,
+    val modal: Boolean,
 ) {
     var content by mutableStateOf(content)
     var locals by mutableStateOf(locals)
@@ -44,12 +45,14 @@ val LocalGlassOverlayHost = staticCompositionLocalOf<GlassOverlayHost?> { null }
 
 /**
  * Shows [content] full-screen in [host]'s overlay layer for as long as this call stays in the
- * composition. CompositionLocals of the call site are carried over.
+ * composition. CompositionLocals of the call site are carried over. A [modal] overlay hides the
+ * page from accessibility services while shown; a non-modal one (snackbar, tooltip) does not.
+ * Never opens a platform window.
  */
 @Composable
-internal fun GlassOverlay(host: GlassOverlayHost, content: @Composable () -> Unit) {
+internal fun GlassOverlay(host: GlassOverlayHost, modal: Boolean = true, content: @Composable () -> Unit) {
     val locals = currentCompositionLocalContext
-    val entry = remember { GlassOverlayEntry(content, locals) }
+    val entry = remember { GlassOverlayEntry(content, locals, modal) }
     SideEffect {
         entry.content = content
         entry.locals = locals
@@ -68,7 +71,10 @@ internal fun GlassOverlayLayer(host: GlassOverlayHost, modifier: Modifier = Modi
         host.entries.forEach { entry ->
             key(entry) {
                 CompositionLocalProvider(entry.locals) {
-                    entry.content()
+                    // An overlay is top-level glass again even when shown from inside a card.
+                    CompositionLocalProvider(LocalGlassDepth provides 0) {
+                        entry.content()
+                    }
                 }
             }
         }

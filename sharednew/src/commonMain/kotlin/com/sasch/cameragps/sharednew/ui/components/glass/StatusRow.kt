@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -22,13 +21,12 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sasch.cameragps.sharednew.ui.theme.AlphaColors
-import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 
 /**
  * Semantic tone of a status (dot, icon, short status word). [Accent] is the secondary teal accent
@@ -36,21 +34,36 @@ import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
  */
 enum class StatusTone { Neutral, Active, Success, Warning, Error, Accent }
 
-/** Pure tone → colour (text-safe: warning uses the darker [AlphaColors.warningText]). */
+/**
+ * Pure tone → colour role. [forText] true = words (≥ 4.5:1: warning uses `warningText`); false =
+ * icons / dots (≥ 3:1: warning uses `warningIcon`).
+ */
 fun statusToneColor(tone: StatusTone, colors: AlphaColors, forText: Boolean = true): Color = when (tone) {
-    StatusTone.Neutral -> colors.onSurfaceVariant
-    StatusTone.Active -> colors.primary
+    StatusTone.Neutral -> colors.textSecondary
+    StatusTone.Active -> colors.accent
     StatusTone.Success -> colors.success
-    StatusTone.Warning -> if (forText) colors.warningText else colors.warning
-    StatusTone.Error -> colors.error
+    StatusTone.Warning -> if (forText) colors.warningText else colors.warningIcon
+    StatusTone.Error -> colors.danger
     StatusTone.Accent -> colors.accentTeal
 }
 
 /**
- * Tint of a [StatusItem] icon. Icons are small glyphs on glass, so they take the text-safe colour
- * (light-theme amber is too pale for a 20 dp glyph); [StatusTone.Neutral] stays grey.
+ * Tint of a status icon (N11): the icon / non-text colour of the semantic tone ([StatusTone.Warning]
+ * → `warningIcon`, ≥ 3:1 on glass); [StatusTone.Neutral] stays textSecondary.
  */
-fun statusIconColor(tone: StatusTone, colors: AlphaColors): Color = statusToneColor(tone, colors, forText = true)
+fun statusIconColor(tone: StatusTone, colors: AlphaColors): Color = statusToneColor(tone, colors, forText = false)
+
+/**
+ * Pure colour of a [StatusItem]'s value text (N11): its own [StatusItem.valueTone] if set, else
+ * [StatusItem.tone]; Neutral values read in textPrimary.
+ */
+fun statusValueColor(item: StatusItem, colors: AlphaColors): Color {
+    val tone = item.valueTone ?: item.tone
+    return if (tone == StatusTone.Neutral) colors.textPrimary else statusToneColor(tone, colors, forText = true)
+}
+
+/** Pure colour of a [StatusItem]'s icon (N11): [StatusItem.iconTone] if set, else [StatusItem.tone]. */
+fun statusItemIconColor(item: StatusItem, colors: AlphaColors): Color = statusIconColor(item.iconTone ?: item.tone, colors)
 
 /**
  * Status dot: 9 dp, with a 22 % halo for [StatusTone.Success] only (design `lib3.dot`). Decorative:
@@ -87,11 +100,11 @@ fun StatusLine(
         Column(Modifier.weight(1f)) {
             Text(
                 title,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = AlphaTheme.colors.onSurface,
+                style = AlphaType.Heading,
+                color = AlphaTheme.colors.textPrimary,
             )
             if (supportingText != null) {
-                Text(supportingText, style = MaterialTheme.typography.bodySmall, color = AlphaTheme.colors.onSurfaceVariant)
+                Text(supportingText, style = AlphaType.Caption, color = AlphaTheme.colors.textSecondary)
             }
         }
     }
@@ -99,8 +112,9 @@ fun StatusLine(
 
 /**
  * One cell of a [StatusRow]: optional icon, the changing [value], and a **fixed** item name
- * [label] (已写入 / 失败 / 最近 …). [tone] colours the value (and icon); [iconTone] colours only
- * the icon ("tinted metric" — the value stays in the normal text colour), null = follow [tone].
+ * [label] (已写入 / 失败 / 最近 …). [tone] is the semantic tone of the item; [valueTone] and
+ * [iconTone] override it for the value text and the icon separately (N11) — e.g. a "tinted metric"
+ * keeps a neutral value (`valueTone = Neutral`) under a green icon. null = follow [tone].
  */
 @Immutable
 data class StatusItem(
@@ -109,6 +123,7 @@ data class StatusItem(
     val icon: Painter? = null,
     val tone: StatusTone = StatusTone.Neutral,
     val iconTone: StatusTone? = null,
+    val valueTone: StatusTone? = null,
 )
 
 /**
@@ -121,7 +136,7 @@ fun StatusRow(items: List<StatusItem>, modifier: Modifier = Modifier) {
     val colors = AlphaTheme.colors
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         items.forEach { item ->
-            val valueColor = if (item.tone == StatusTone.Neutral) colors.onSurface else statusToneColor(item.tone, colors)
+            val valueColor = statusValueColor(item, colors)
             GlassInsetBlock(
                 modifier = Modifier
                     .weight(1f)
@@ -135,12 +150,12 @@ fun StatusRow(items: List<StatusItem>, modifier: Modifier = Modifier) {
                             item.icon,
                             contentDescription = null,
                             modifier = Modifier.size(20.dp),
-                            colorFilter = ColorFilter.tint(statusIconColor(item.iconTone ?: item.tone, colors)),
+                            colorFilter = ColorFilter.tint(statusItemIconColor(item, colors)),
                         )
                     }
                     Text(
                         item.value,
-                        style = AlphaTextStyles.statusValue,
+                        style = AlphaType.Label,
                         color = valueColor,
                         textAlign = TextAlign.Center,
                         // Two lines so a large font scale wraps instead of cutting the value.
@@ -149,8 +164,8 @@ fun StatusRow(items: List<StatusItem>, modifier: Modifier = Modifier) {
                     )
                     Text(
                         item.label,
-                        style = AlphaTextStyles.statusLabel,
-                        color = colors.onSurfaceVariant,
+                        style = AlphaType.Caption,
+                        color = colors.textSecondary,
                         textAlign = TextAlign.Center,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,

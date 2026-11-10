@@ -2,42 +2,206 @@ package com.sasch.cameragps.sharednew.ui.theme
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import com.sasch.cameragps.sharednew.bluetooth.status.SignalLevel
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.sasch.cameragps.sharednew.ui.components.glass.IconEmphasis
 import com.sasch.cameragps.sharednew.ui.components.glass.InfoTagStyle
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusTone
+import com.sasch.cameragps.sharednew.ui.components.glass.backdropColorAt
 import com.sasch.cameragps.sharednew.ui.components.glass.capsuleColors
+import com.sasch.cameragps.sharednew.ui.components.glass.glassCheckboxColors
+import com.sasch.cameragps.sharednew.ui.components.glass.glassProgressColors
+import com.sasch.cameragps.sharednew.ui.components.glass.glassRadioColors
 import com.sasch.cameragps.sharednew.ui.components.glass.glassSwitchColors
 import com.sasch.cameragps.sharednew.ui.components.glass.iconButtonTint
 import com.sasch.cameragps.sharednew.ui.components.glass.infoTagColors
 import com.sasch.cameragps.sharednew.ui.components.glass.statusIconColor
 import com.sasch.cameragps.sharednew.ui.components.glass.statusToneColor
+import com.sasch.cameragps.sharednew.ui.components.glass.textFieldBorder
 import com.sasch.cameragps.sharednew.ui.device.LastWriteMetricTone
 import com.sasch.cameragps.sharednew.ui.device.WrittenMetricTone
 import com.sasch.cameragps.sharednew.ui.device.signalTone
+import androidx.compose.ui.state.ToggleableState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Contrast cases of design v3 (content3a.py "对比度"): worst backdrop = the brightest glow blob,
- * glass composited on top, text on the glass. All must pass WCAG AA (4.5 text, 3.0 non-text).
+ * Contrast of the palette on glass (design v3 + audit §3.4 / D1). The backdrop is no longer one
+ * hard-coded blob: every case is checked over **all** candidate backdrop points derived from the
+ * theme's own [AlphaColors.orbs] (bare background, each orb's peak, all orbs stacked), with the glass
+ * fill composited on top, with and without the top sheen, and for glass nested in a card. Text must
+ * pass WCAG AA (4.5, large text 3.0), non-text 3.0. A failing cell is fixed in the token, never by
+ * lowering a threshold.
  */
 class PaletteContrastTest {
     private val light = LightAlphaColors
     private val dark = DarkAlphaColors
-
-    private val lightWorstBackdrop = Contrast.over(Color(0xFFA8C7FA).copy(alpha = 0.60f), light.background)
-    private val darkWorstBackdrop = Contrast.over(Color(0xFF0B57D0).copy(alpha = 0.42f), dark.background)
-
-    private fun glass(level: GlassLevel, dark: Boolean, backdrop: Color) =
-        Contrast.over(GlassTokens.of(level, dark).fill, backdrop)
+    private val photos = listOf(Color.White, Color.Black, Color(0xFF808080))
 
     private fun assertAa(fg: Color, bg: Color, min: Float = Contrast.AA_TEXT, what: String) {
         val ratio = Contrast.ratio(Contrast.over(fg, bg), bg)
         assertTrue(ratio >= min, "$what: contrast $ratio < $min")
     }
+
+    private fun minRatio(fg: Color, bgs: List<Color>): Double =
+        bgs.minOf { Contrast.ratio(Contrast.over(fg, it), it) }
+
+    /** Canvas sizes the backdrop is sampled on: phone portrait / square / landscape / tablet. */
+    private val canvases = listOf(1080f to 2400f, 1600f to 1600f, 2400f to 1080f, 1600f to 2560f)
+    private val sampled = mutableMapOf<Boolean, List<Color>>()
+
+    /**
+     * Every G0 backdrop point a glass surface can sit on: the real orb field ([backdropColorAt],
+     * same profile as the drawing) sampled on a 17 × 17 grid of each canvas. Blur only averages
+     * these, so the extremes bound what glass ever samples.
+     */
+    private fun backdrops(c: AlphaColors): List<Color> = sampled.getOrPut(c.isDark) {
+        canvases.flatMap { (w, h) ->
+            (0..16).flatMap { i -> (0..16).map { j -> backdropColorAt(c, w * i / 16f, h * j / 16f, w, h) } }
+        }.distinct()
+    }
+
+    /** What text sees on glass of [level]: fill over the backdrop, plus the sheen at the top, plus nesting. */
+    private fun glassBackgrounds(level: GlassLevel, c: AlphaColors, under: List<Color> = if (level == GlassLevel.Viewer) photos else backdrops(c)): List<Color> {
+        val t = GlassTokens.of(level, c.isDark)
+        val plain = under.map { Contrast.over(t.fill, it) }
+        val sheen = plain.map { Contrast.over(GlassHighlight.copy(alpha = t.sheen), it) }
+        val nested = if (level == GlassLevel.Viewer) emptyList() else {
+            // Glass nested in a card is a translucent layer over the card (no second blur).
+            val card = GlassTokens.of(GlassLevel.Card, c.isDark)
+            under.map { Contrast.over(t.fill, Contrast.over(card.fill, it)) }
+        }
+        return plain + sheen + nested
+    }
+
+    // ---- 6 tiers × 8 colour roles × 4 glass levels × light / dark -------------------------------
+
+    /** WCAG "large text": ≥ 18.66 sp bold or ≥ 24 sp. Only Title qualifies. */
+    private fun isLarge(style: TextStyle): Boolean {
+        val size = style.fontSize.value
+        val bold = (style.fontWeight ?: FontWeight.Normal) >= FontWeight.SemiBold
+        return size >= 24f || (bold && size >= 18.66f)
+    }
+
+    private data class Role(val name: String, val color: Color, val min: Float?)
+
+    /**
+     * Roles valid on theme glass (Card / Float / Modal) and on the photo viewer (GV). min = null:
+     * the tier decides (4.5 / 3.0 large). textMuted / onPhotoMuted are 3:1 roles (placeholders,
+     * disabled hints, timestamps on photos) — never for body copy that must be read.
+     */
+    private fun themeRoles(c: AlphaColors) = listOf(
+        Role("textPrimary", c.textPrimary, null),
+        Role("textSecondary", c.textSecondary, null),
+        Role("textMuted", c.textMuted, Contrast.AA_LARGE),
+        Role("accent", c.accent, null),
+        Role("success", c.success, null),
+        Role("warning", c.warningText, null),
+        Role("danger", c.danger, null),
+    )
+
+    private fun viewerRoles(c: AlphaColors) = listOf(
+        Role("onPhoto", c.onPhoto, null),
+        Role("onPhotoSecondary", c.onPhotoSecondary, null),
+        Role("onPhotoMuted", c.onPhotoMuted, Contrast.AA_LARGE),
+    )
+
+    private val tiers = listOf(
+        "Title" to AlphaType.Title, "Heading" to AlphaType.Heading, "Body" to AlphaType.Body,
+        "Label" to AlphaType.Label, "Caption" to AlphaType.Caption, "Tag" to AlphaType.Tag,
+    )
+
+    @Test
+    fun typeTiersAreTheSixAgreedSizes() {
+        assertEquals(listOf(22f, 18f, 15f, 15f, 13f, 11f), tiers.map { it.second.fontSize.value })
+        assertEquals(listOf(28f, 24f, 22f, 20f, 18f, 14f), tiers.map { it.second.lineHeight.value })
+        tiers.forEach { (name, s) -> assertEquals(0f, s.letterSpacing.value, "$name letterSpacing") }
+        assertEquals(12f, AlphaType.Mono.fontSize.value)
+        // Only Title is WCAG-large; Heading (18 sp semibold) is just below 18.66 sp → 4.5 applies.
+        assertEquals(listOf(true, false, false, false, false, false), tiers.map { isLarge(it.second) })
+    }
+
+    @Test
+    fun materialTypographySlotsUseTheSameTiers() {
+        val t = AlphaMaterialTypography
+        assertEquals(AlphaType.Title, t.titleLarge)
+        assertEquals(AlphaType.Title, t.headlineSmall)
+        assertEquals(AlphaType.Heading, t.titleMedium)
+        assertEquals(AlphaType.Label, t.titleSmall)
+        assertEquals(AlphaType.Body, t.bodyLarge)
+        assertEquals(AlphaType.Body, t.bodyMedium)
+        assertEquals(AlphaType.Caption, t.bodySmall)
+        assertEquals(AlphaType.Label, t.labelLarge)
+        assertEquals(AlphaType.Tag, t.labelSmall)
+        val allowed = AlphaType.tiers.map { it.fontSize }.toSet()
+        listOf(
+            t.displayLarge, t.displayMedium, t.displaySmall, t.headlineLarge, t.headlineMedium,
+            t.labelMedium,
+        ).forEach { assertTrue(it.fontSize in allowed, "M3 slot ${it.fontSize} is not one of the tiers") }
+    }
+
+    @Test
+    fun textContrastMatrix() {
+        val failures = mutableListOf<String>()
+        val report = StringBuilder("tier × role × level × theme — min contrast over all backdrop points\n")
+        listOf(light, dark).forEach { c ->
+            GlassLevel.entries.forEach { level ->
+                val bgs = glassBackgrounds(level, c)
+                val roles = if (level == GlassLevel.Viewer) viewerRoles(c) else themeRoles(c)
+                roles.forEach { role ->
+                    val ratio = minRatio(role.color, bgs)
+                    report.append("${if (c.isDark) "dark " else "light"} $level ${role.name}: ${(ratio * 100).toInt() / 100.0}\n")
+                    tiers.forEach { (tierName, style) ->
+                        val min = role.min ?: if (isLarge(style)) Contrast.AA_LARGE else Contrast.AA_TEXT
+                        if (ratio < min) failures += "${if (c.isDark) "dark" else "light"} $level $tierName ${role.name}: $ratio < $min"
+                    }
+                }
+            }
+        }
+        println(report)
+        assertTrue(failures.isEmpty(), failures.joinToString("\n"))
+    }
+
+    @Test
+    fun solidFallbackKeepsTextReadable() {
+        listOf(light, dark).forEach { c ->
+            listOf(GlassLevel.Card, GlassLevel.Float, GlassLevel.Modal).forEach { level ->
+                val bgs = backdrops(c).map { Contrast.over(GlassTokens.of(level, c.isDark).solidFill, it) }
+                themeRoles(c).forEach { role ->
+                    val min = role.min ?: Contrast.AA_TEXT
+                    assertTrue(minRatio(role.color, bgs) >= min, "solid $level dark=${c.isDark} ${role.name}")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun mutedRolesStayAtLeastThreeToOneEachTheme() {
+        listOf(light, dark).forEach { c ->
+            listOf(GlassLevel.Card, GlassLevel.Float, GlassLevel.Modal).forEach { level ->
+                assertTrue(minRatio(c.textMuted, glassBackgrounds(level, c)) >= Contrast.AA_LARGE, "textMuted $level dark=${c.isDark}")
+            }
+        }
+        assertTrue(minRatio(light.onPhotoMuted, glassBackgrounds(GlassLevel.Viewer, light)) >= Contrast.AA_LARGE)
+        // Muted is visibly quieter than secondary, otherwise it is not a separate role.
+        listOf(light, dark).forEach { c -> assertTrue(c.textMuted != c.textSecondary) }
+    }
+
+    @Test
+    fun warningIconMeetsNonTextContrastOnAllLevels() {
+        listOf(light, dark).forEach { c ->
+            listOf(GlassLevel.Card, GlassLevel.Float, GlassLevel.Modal).forEach { level ->
+                assertTrue(minRatio(c.warningIcon, glassBackgrounds(level, c)) >= Contrast.AA_LARGE, "warningIcon $level dark=${c.isDark}")
+            }
+        }
+        // The old pale amber is what failed (≈ 1.7:1 on light glass) — it must not be the icon colour.
+        assertTrue(light.warningIcon != light.warning)
+    }
+
+    // ---- palette -------------------------------------------------------------------------------
 
     @Test
     fun contrastMathMatchesWcagReference() {
@@ -72,79 +236,74 @@ class PaletteContrastTest {
     }
 
     @Test
-    fun lightCardGlassText() {
-        val bg = glass(GlassLevel.Card, false, lightWorstBackdrop)
-        assertAa(light.onSurface, bg, what = "light G1 onSurface")
-        assertAa(light.onSurfaceVariant, bg, what = "light G1 onSurfaceVariant")
-        assertAa(light.primary, bg, what = "light G1 primary")
-        assertAa(light.success, bg, what = "light G1 success")
-        assertAa(light.error, bg, what = "light G1 error")
-        assertAa(light.warningText, bg, what = "light G1 warning text")
+    fun roleAliasesPointAtTheSchemeColours() {
+        listOf(light, dark).forEach { c ->
+            assertEquals(c.onSurface, c.textPrimary)
+            assertEquals(c.onSurfaceVariant, c.textSecondary)
+            assertEquals(c.primary, c.accent)
+            assertEquals(c.error, c.danger)
+            assertEquals(Color.White, c.onPhoto)
+            assertTrue(c.onPhotoMuted.alpha < c.onPhotoSecondary.alpha && c.onPhotoSecondary.alpha < 1f)
+        }
     }
 
     @Test
-    fun lightModalGlassText() {
-        val bg = glass(GlassLevel.Modal, false, lightWorstBackdrop)
-        assertAa(light.onSurface, bg, what = "light G3 onSurface")
-        assertAa(light.onSurfaceVariant, bg, what = "light G3 onSurfaceVariant")
-        assertAa(light.error, bg, what = "light G3 error")
-        assertAa(light.primary, bg, what = "light G3 primary")
-    }
-
-    @Test
-    fun darkCardGlassText() {
-        val bg = glass(GlassLevel.Card, true, darkWorstBackdrop)
-        assertAa(dark.onSurface, bg, what = "dark G1 onSurface")
-        assertAa(dark.onSurfaceVariant, bg, what = "dark G1 onSurfaceVariant")
-        assertAa(dark.primary, bg, what = "dark G1 primary")
-        assertAa(dark.success, bg, what = "dark G1 success")
-        assertAa(dark.warningText, bg, what = "dark G1 warning text")
-    }
-
-    @Test
-    fun darkModalGlassText() {
-        val bg = glass(GlassLevel.Modal, true, darkWorstBackdrop)
-        assertAa(dark.onSurface, bg, what = "dark G3 onSurface")
-        assertAa(dark.onSurfaceVariant, bg, what = "dark G3 onSurfaceVariant")
-        assertAa(dark.error, bg, what = "dark G3 error")
-    }
-
-    @Test
-    fun solidFallbackKeepsTextReadable() {
-        listOf(light to false, dark to true).forEach { (c, isDark) ->
-            listOf(GlassLevel.Card, GlassLevel.Float, GlassLevel.Modal).forEach { level ->
-                val worst = if (isDark) darkWorstBackdrop else lightWorstBackdrop
-                val bg = Contrast.over(GlassTokens.of(level, isDark).solidFill, worst)
-                assertAa(c.onSurface, bg, what = "solid $level dark=$isDark onSurface")
-                assertAa(c.onSurfaceVariant, bg, what = "solid $level dark=$isDark onSurfaceVariant")
+    fun backdropOrbsAreLowContrast() {
+        // D1: coloured light, not blobs — no orb point may move the backdrop far from the background,
+        // or dark text on Card glass (the thinnest fill) would lose its margin.
+        listOf(light, dark).forEach { c ->
+            assertTrue(c.orbs.size >= 3)
+            // …but visible: the brightest point differs from the plain background.
+            assertTrue(backdrops(c).maxOf { Contrast.ratio(it, c.background) } > 1.1, "dark=${c.isDark} orbs invisible")
+            c.orbs.forEach { o ->
+                assertTrue(o.alpha in 0.05f..0.6f, "orb alpha ${o.alpha}")
+                assertTrue(o.radius in 0.3f..1f, "orb radius ${o.radius}")
+            }
+            backdrops(c).forEach { b ->
+                assertTrue(Contrast.ratio(b, c.background) < 1.5, "dark=${c.isDark} orb point $b too strong against the background")
             }
         }
     }
 
-    @Test
-    fun viewerGlassOverAnyPhoto() {
-        listOf(Color.White, Color.Black, Color(0xFF808080)).forEach { photo ->
-            val bg = glass(GlassLevel.Viewer, false, photo)
-            assertAa(Color.White, bg, what = "GV white over $photo")
-        }
-        // Secondary viewer text is specified over dark photos only (design: 11.7 over black).
-        assertAa(Color(0xFFC4C9D1), glass(GlassLevel.Viewer, false, Color.Black), what = "GV secondary over black")
-    }
+    // ---- components ----------------------------------------------------------------------------
 
     @Test
     fun capsuleButtonLabels() {
         listOf(light, dark).forEach { c ->
-            val modal = glass(GlassLevel.Modal, c.isDark, if (c.isDark) darkWorstBackdrop else lightWorstBackdrop)
-            CapsuleRole.entries.forEach { role ->
+            val modal = glassBackgrounds(GlassLevel.Modal, c)
+            CapsuleRole.entries.filter { it != CapsuleRole.GlassPrimary }.forEach { role ->
                 listOf(false, true).forEach { raised ->
                     val cc = capsuleColors(role, enabled = true, colors = c, raised = raised)
                     // The label sits in the vertical middle of the gradient.
-                    val middle = Contrast.over(lerp(cc.containerTop, cc.containerBottom, 0.5f), modal)
-                    assertAa(cc.content, middle, what = "$role raised=$raised dark=${c.isDark}")
+                    val middle = modal.map { Contrast.over(lerp(cc.containerTop, cc.containerBottom, 0.5f), it) }
+                    assertTrue(minRatio(cc.content, middle) >= Contrast.AA_TEXT, "$role raised=$raised dark=${c.isDark}")
                     if (!raised) assertEquals(cc.containerTop, cc.containerBottom, "flat $role must be solid")
+                    assertTrue(!cc.glass)
                 }
             }
         }
+    }
+
+    @Test
+    fun glassCapsulesAreTranslucentAndReadableEverywhere() {
+        listOf(light, dark).forEach { c ->
+            CapsuleRole.entries.forEach { role ->
+                val cc = capsuleColors(role, enabled = true, colors = c, glass = true)
+                assertTrue(cc.glass, "$role glass")
+                assertEquals(null, cc.glow, "glass capsules have no glow ring")
+                assertTrue(cc.containerTop.alpha < 1f, "$role glass tint must be translucent")
+                // The tint sits on floating glass, which sits on the page or on a photo.
+                val under = backdrops(c) + photos
+                val bgs = glassBackgrounds(GlassLevel.Float, c, under).map { Contrast.over(cc.containerTop, it) }
+                assertTrue(minRatio(cc.content, bgs) >= Contrast.AA_TEXT, "glass $role dark=${c.isDark}: ${minRatio(cc.content, bgs)}")
+            }
+            // GlassPrimary is always the glass variant.
+            assertTrue(capsuleColors(CapsuleRole.GlassPrimary, true, c).glass)
+        }
+        // On the viewer (always dark, Viewer glass) the label is onPhoto over any photo.
+        val viewer = capsuleColors(CapsuleRole.GlassPrimary, true, dark, glass = true)
+        val bgs = glassBackgrounds(GlassLevel.Viewer, dark).map { Contrast.over(viewer.containerTop, it) }
+        assertTrue(minRatio(dark.onPhoto, bgs) >= Contrast.AA_TEXT, "viewer download ${minRatio(dark.onPhoto, bgs)}")
     }
 
     @Test
@@ -158,58 +317,74 @@ class PaletteContrastTest {
     }
 
     @Test
-    fun raisedPrimaryHasGlowButDialogCapsuleDoesNot() {
-        assertTrue(capsuleColors(CapsuleRole.Primary, true, light, raised = true).glow != null)
-        assertEquals(null, capsuleColors(CapsuleRole.Primary, true, light, raised = false).glow)
+    fun raisedPrimaryGlowIsSoftAccentNeverDark() {
+        listOf(light, dark).forEach { c ->
+            val raised = capsuleColors(CapsuleRole.Primary, true, c, raised = true).glow
+            assertTrue(raised != null)
+            assertEquals(c.accent.copy(alpha = 1f), raised.copy(alpha = 1f), "glow is accent-tinted, not black")
+            assertTrue(raised.alpha <= 0.25f)
+            assertEquals(null, capsuleColors(CapsuleRole.Primary, true, c, raised = false).glow)
+        }
         assertEquals(light.error, capsuleColors(CapsuleRole.Danger, true, light).containerBottom)
         assertEquals(light.error, capsuleColors(CapsuleRole.DangerOutlined, true, light).border)
     }
 
     @Test
     fun infoTags() {
-        val (photoBg, photoFg) = infoTagColors(InfoTagStyle.OnPhoto, light, content = Color.Red)
-        assertEquals(Color.White, photoFg)
-        assertAa(photoFg, Contrast.over(photoBg, Color.White), what = "tag on white photo")
+        val photo = infoTagColors(InfoTagStyle.OnPhoto, light, content = Color.Red)
+        assertEquals(light.onPhoto, photo.content)
+        photos.forEach { p ->
+            assertAa(photo.content, Contrast.over(photo.background, p), what = "tag on photo $p")
+        }
         listOf(light, dark).forEach { c ->
-            val card = glass(GlassLevel.Card, c.isDark, if (c.isDark) darkWorstBackdrop else lightWorstBackdrop)
-            val (bg, fg) = infoTagColors(InfoTagStyle.OnSurface, c)
-            assertEquals(if (c.isDark) c.onSurface else c.onSurfaceVariant, fg)
-            assertAa(fg, Contrast.over(bg, card), what = "surface tag dark=${c.isDark}")
+            val tag = infoTagColors(InfoTagStyle.OnSurface, c)
+            assertEquals(Color.Transparent, tag.background, "tags on glass have no fill (N13)")
+            assertTrue(tag.stroke.alpha > 0f)
+            listOf(GlassLevel.Card, GlassLevel.Float, GlassLevel.Modal).forEach { level ->
+                assertTrue(minRatio(tag.content, glassBackgrounds(level, c)) >= Contrast.AA_TEXT, "surface tag $level dark=${c.isDark}")
+            }
         }
     }
 
     @Test
     fun iconsMeetNonTextContrast() {
         listOf(light, dark).forEach { c ->
-            val card = glass(GlassLevel.Card, c.isDark, if (c.isDark) darkWorstBackdrop else lightWorstBackdrop)
-            IconEmphasis.entries.forEach { e ->
-                assertAa(iconButtonTint(e, c, enabled = true), card, Contrast.AA_LARGE, "icon $e dark=${c.isDark}")
+            listOf(GlassLevel.Card, GlassLevel.Float, GlassLevel.Modal).forEach { level ->
+                IconEmphasis.entries.forEach { e ->
+                    val r = minRatio(iconButtonTint(e, c, enabled = true), glassBackgrounds(level, c))
+                    assertTrue(r >= Contrast.AA_LARGE, "icon $e $level dark=${c.isDark}: $r")
+                }
             }
+        }
+        IconEmphasis.entries.filter { it != IconEmphasis.Danger }.forEach { e ->
+            val r = minRatio(iconButtonTint(e, dark, enabled = true, onViewer = true), glassBackgrounds(GlassLevel.Viewer, dark))
+            assertTrue(r >= Contrast.AA_LARGE, "viewer icon $e: $r")
         }
     }
 
     @Test
     fun statusToneColors() {
         assertEquals(light.warningText, statusToneColor(StatusTone.Warning, light))
-        assertEquals(light.warning, statusToneColor(StatusTone.Warning, light, forText = false))
+        assertEquals(light.warningIcon, statusToneColor(StatusTone.Warning, light, forText = false))
+        assertEquals(light.warningIcon, statusIconColor(StatusTone.Warning, light))
         assertEquals(light.success, statusToneColor(StatusTone.Success, light))
         assertEquals(dark.error, statusToneColor(StatusTone.Error, dark))
         assertEquals(dark.primary, statusToneColor(StatusTone.Active, dark))
+        assertEquals(light.textSecondary, statusToneColor(StatusTone.Neutral, light))
     }
 
     @Test
     fun deviceMetricIconTonesReadableOnCardAndInsetGlass() {
         // Device page metric icons (signal by level, written, last write) sit on an inset block
-        // (onSurface 5–7 %) inside a G1 card; they use the text-safe tone colours, so they must
-        // pass AA text contrast, not only the 3.0 non-text minimum.
+        // (onSurface 5–7 %) inside a G1 card.
         val tones = SignalLevel.entries.map { signalTone(it) } + listOf(WrittenMetricTone, LastWriteMetricTone)
-        listOf(light to lightWorstBackdrop, dark to darkWorstBackdrop).forEach { (colors, backdrop) ->
-            val card = glass(GlassLevel.Card, colors.isDark, backdrop)
-            val inset = Contrast.over(colors.onSurface.copy(alpha = if (colors.isDark) 0.07f else 0.05f), card)
+        listOf(light, dark).forEach { colors ->
+            val card = glassBackgrounds(GlassLevel.Card, colors)
+            val inset = card.map { Contrast.over(colors.onSurface.copy(alpha = if (colors.isDark) 0.07f else 0.05f), it) }
             tones.forEach { tone ->
                 val fg = statusIconColor(tone, colors)
-                assertAa(fg, card, what = "${if (colors.isDark) "dark" else "light"} card $tone icon")
-                assertAa(fg, inset, what = "${if (colors.isDark) "dark" else "light"} inset $tone icon")
+                assertTrue(minRatio(fg, card) >= Contrast.AA_LARGE, "card $tone icon dark=${colors.isDark}")
+                assertTrue(minRatio(fg, inset) >= Contrast.AA_LARGE, "inset $tone icon dark=${colors.isDark}")
             }
         }
     }
@@ -223,38 +398,43 @@ class PaletteContrastTest {
     }
 
     @Test
-    fun glassPrimaryIsTranslucentWithoutAGlowRingAndStaysReadable() {
+    fun glassSwitchStatesAreDistinguishable() {
         listOf(light, dark).forEach { c ->
-            listOf(false, true).forEach { raised ->
-                val cc = capsuleColors(CapsuleRole.GlassPrimary, enabled = true, colors = c, raised = raised)
-                assertEquals(null, cc.glow, "no dark glow ring (the old floating download button had one)")
-                assertTrue(cc.containerTop.alpha < 1f && cc.containerBottom.alpha < 1f, "glass tint, not a solid fill")
-                assertTrue(cc.rimAlpha > 0f, "white glass rim")
-                // The tint sits on the floating glass base; that base sits on anything (photo grid, photo).
-                listOf(Color.Black, Color.White, if (c.isDark) darkWorstBackdrop else lightWorstBackdrop).forEach { back ->
-                    val base = glass(GlassLevel.Float, c.isDark, back)
-                    val middle = Contrast.over(lerp(cc.containerTop, cc.containerBottom, 0.5f), base)
-                    assertAa(cc.content, middle, what = "glass primary raised=$raised dark=${c.isDark} over $back")
-                }
-            }
+            val modal = glassBackgrounds(GlassLevel.Modal, c) + glassBackgrounds(GlassLevel.Card, c)
+            val on = glassSwitchColors(true, c)
+            val off = glassSwitchColors(false, c)
+            // Non-text contrast: the thumb against the "on" track, the "on" track against the glass,
+            // and the "off" outline against the glass (the off thumb is white on a pale veil — the
+            // outline carries the boundary).
+            assertAa(on.thumb, on.track, Contrast.AA_LARGE, "on thumb dark=${c.isDark}")
+            assertTrue(minRatio(on.track, modal) >= Contrast.AA_LARGE, "on track dark=${c.isDark}")
+            assertTrue(minRatio(off.rim, modal) >= Contrast.AA_LARGE, "off outline dark=${c.isDark}")
+            assertTrue(off.track.alpha < 1f, "the off track is a glass veil")
+            assertTrue(on.track != off.track)
         }
-        // The viewer is always dark-themed: its download capsule must read over a black photo too.
-        val viewerButton = capsuleColors(CapsuleRole.GlassPrimary, true, dark)
-        assertAa(viewerButton.content, Contrast.over(viewerButton.containerBottom, glass(GlassLevel.Float, true, Color.Black)), what = "viewer download")
     }
 
     @Test
-    fun glassSwitchStatesAreDistinguishable() {
+    fun selectionControlsMeetNonTextContrast() {
         listOf(light, dark).forEach { c ->
-            val modal = glass(GlassLevel.Modal, c.isDark, if (c.isDark) darkWorstBackdrop else lightWorstBackdrop)
-            val on = glassSwitchColors(true, c)
-            val off = glassSwitchColors(false, c)
-            assertEquals(c.primary, on.track)
-            // Non-text contrast: the thumb against its track, and the "on" track against the popover.
-            assertAa(on.thumb, on.track, Contrast.AA_LARGE, "on thumb dark=${c.isDark}")
-            assertAa(on.track, modal, Contrast.AA_LARGE, "on track dark=${c.isDark}")
-            assertAa(off.thumb, Contrast.over(off.track, modal), Contrast.AA_LARGE, "off thumb dark=${c.isDark}")
-            assertTrue(off.track.alpha < 1f, "the off track is a glass veil")
+            val glass = glassBackgrounds(GlassLevel.Card, c) + glassBackgrounds(GlassLevel.Modal, c)
+            val (ringOff, _) = glassRadioColors(false, c)
+            val (ringOn, dot) = glassRadioColors(true, c)
+            assertTrue(minRatio(ringOff, glass) >= Contrast.AA_LARGE, "radio ring dark=${c.isDark}")
+            assertTrue(minRatio(ringOn, glass) >= Contrast.AA_LARGE)
+            assertTrue(minRatio(dot, glass) >= Contrast.AA_LARGE)
+            val unchecked = glassCheckboxColors(ToggleableState.Off, c, onPhoto = false)
+            assertTrue(minRatio(unchecked.rim!!, glass) >= Contrast.AA_LARGE, "checkbox outline dark=${c.isDark}")
+            val checked = glassCheckboxColors(ToggleableState.On, c, onPhoto = false)
+            assertTrue(minRatio(checked.fill, glass) >= Contrast.AA_LARGE, "checkbox fill dark=${c.isDark}")
+            assertAa(checked.glyph, checked.fill, Contrast.AA_LARGE, "check glyph dark=${c.isDark}")
+            val (border, _) = textFieldBorder(focused = true, isError = false, enabled = true, colors = c)
+            assertTrue(minRatio(border, glass) >= Contrast.AA_LARGE, "focused field border dark=${c.isDark}")
+            val (track, indicator) = glassProgressColors(c, onPhoto = false)
+            assertTrue(minRatio(indicator, glass.map { Contrast.over(track, it) }) >= Contrast.AA_LARGE, "progress dark=${c.isDark}")
         }
+        // Thumbnail checkbox over any photo: the white rim on Viewer glass is the boundary.
+        val photoBox = glassCheckboxColors(ToggleableState.Off, dark, onPhoto = true)
+        photos.forEach { p -> assertAa(photoBox.rim!!, Contrast.over(photoBox.fill, p), Contrast.AA_LARGE, "photo checkbox over $p") }
     }
 }
