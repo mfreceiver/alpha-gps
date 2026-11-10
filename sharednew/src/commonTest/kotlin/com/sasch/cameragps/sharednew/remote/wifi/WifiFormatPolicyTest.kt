@@ -175,7 +175,9 @@ class WifiFormatPolicyTest {
         assertEquals("1.0 MB", formatByteSize(1024L * 1024))
         assertEquals("4.8 MB", formatByteSize((4.8 * 1024 * 1024).toLong() + 1024))
         assertEquals("48 MB", formatByteSize(48L * 1024 * 1024))
-        assertEquals("1.2 GB", formatByteSize((1.25 * 1024 * 1024 * 1024).toLong()))
+        assertEquals("1.3 GB", formatByteSize((1.25 * 1024 * 1024 * 1024).toLong()), "half up, not truncated")
+        assertEquals("25 MB", formatByteSize(245L * 1024 * 1024 / 10))
+        assertEquals("6.6 MB", formatByteSize(66L * 1024 * 1024 / 10))
     }
 
     @Test
@@ -187,25 +189,63 @@ class WifiFormatPolicyTest {
     @Test
     fun captureSizeIsWhatTheDefaultFormatWouldDownload() {
         // JPG only: just the JPEG of a JPG+RAW capture; Original: every file.
-        assertEquals(CaptureDownloadSize(2000, notDownloaded = false), captureDownloadSize(jpgRaw, jpegOnly))
-        assertEquals(CaptureDownloadSize(32000, notDownloaded = false), captureDownloadSize(jpgRaw, original))
-        assertEquals(CaptureDownloadSize(1500, notDownloaded = false), captureDownloadSize(jpgOnly, original))
+        assertEquals(CaptureDownloadSize(2000, null), captureDownloadSize(jpgRaw, jpegOnly))
+        assertEquals(CaptureDownloadSize(32000, null), captureDownloadSize(jpgRaw, original))
+        assertEquals(CaptureDownloadSize(1500, null), captureDownloadSize(jpgOnly, original))
     }
 
     @Test
-    fun rawOnlyUnderJpgOnlyShowsItsOwnSizeButIsMarkedNotDownloaded() {
-        assertEquals(CaptureDownloadSize(40000, notDownloaded = true), captureDownloadSize(rawOnly, jpegOnly))
-        assertEquals(CaptureDownloadSize(900, notDownloaded = true), captureDownloadSize(heifOnly, jpegOnly))
-        assertEquals(CaptureDownloadSize(40000, notDownloaded = false), captureDownloadSize(rawOnly, original))
+    fun anEmptyPlanCarriesItsAccurateSkipReason() {
+        // NoJpeg (JPG-only policy, no JPEG file): the confirmed exception — show the originals'
+        // size so the user sees what the RAW weighs.
+        assertEquals(CaptureDownloadSize(40000, WifiSkipReason.NoJpeg), captureDownloadSize(rawOnly, jpegOnly))
+        assertEquals(CaptureDownloadSize(900, WifiSkipReason.NoJpeg), captureDownloadSize(heifOnly, jpegOnly))
+        assertEquals(CaptureDownloadSize(40000, null), captureDownloadSize(rawOnly, original))
+        // TooLarge: nothing will be fetched — no size to show, the reason picks the text.
+        val bigRaw = file(40, rawMime, 600_000_000, downloadable = false)
+        assertEquals(
+            CaptureDownloadSize(0, WifiSkipReason.TooLarge),
+            captureDownloadSize(capture("big", bigRaw), original),
+        )
+        val bigJpg = file(41, jpegMime, 600_000_000, downloadable = false)
+        assertEquals(
+            CaptureDownloadSize(0, WifiSkipReason.TooLarge),
+            captureDownloadSize(capture("bigJpg", bigJpg), jpegOnly),
+        )
+        // AlreadySaved: every file of the capture is saved — the tag shows the saved state instead.
+        assertEquals(
+            CaptureDownloadSize(0, WifiSkipReason.AlreadySaved),
+            captureDownloadSize(jpgOnly, jpegOnly, saved = setOf(WifiPhotoDownload(6))),
+        )
+        assertEquals(
+            CaptureDownloadSize(0, WifiSkipReason.AlreadySaved),
+            captureDownloadSize(jpgRaw, original, saved = setOf(WifiPhotoDownload(1), WifiPhotoDownload(2))),
+        )
     }
 
     @Test
     fun tileSizesAddUpToTheBatchButton() {
-        // The floating "Download N JPG (x MB)" and the tile tags come from the same planner.
-        val selection = listOf(jpgRaw, rawJpg, jpgOnly, rawOnly, heifRaw)
+        // The floating "Download N JPG (x MB)" and the tile tags come from the same planner —
+        // including the saved-aware one, so the sum holds when files were downloaded earlier.
+        val big = file(50, jpegMime, 600_000_000, downloadable = false)
+        val selection = listOf(
+            jpgRaw, rawJpg, jpgOnly, rawOnly, heifRaw, capture("big", big, file(51, rawMime, 5)),
+        )
+        val savedCases = listOf(
+            "none saved" to emptySet<WifiPhotoDownload>(),
+            "some saved" to setOf(WifiPhotoDownload(6), WifiPhotoDownload(1)), // jpgOnly, one file of jpgRaw
+            "raw jpeg saved" to setOf(WifiPhotoDownload(4)),                   // JPG of rawJpg (Original mode too)
+        )
         for (policy in listOf(jpegOnly, original)) {
-            val tags = selection.map { captureDownloadSize(it, policy) }.filter { !it.notDownloaded }.sumOf { it.bytes }
-            assertEquals(planDownloads(selection, policy, emptySet()).totalBytes, tags, "policy $policy")
+            for ((name, saved) in savedCases) {
+                // What the tags count: a tile contributes its bytes only when something will be
+                // fetched (reason == null); saved/too-large tiles show a state instead of a size.
+                val tags = selection.sumOf { captureDownloadSize(it, policy, saved).takeIf { it.reason == null }?.bytes ?: 0L }
+                assertEquals(
+                    planDownloads(selection, policy, saved).totalBytes, tags,
+                    "policy $policy, $name",
+                )
+            }
         }
     }
 }

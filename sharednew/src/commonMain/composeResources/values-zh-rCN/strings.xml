@@ -592,4 +592,6 @@
     <string name="b1_exif_bias">曝光补偿</string>
     <string name="b1_exif_focal">焦距</string>
     <string name="b1_exif_camera">相机</string>
+    <string name="d1_tile_too_large">超过大小上限，将跳过</string>
+    <string name="d1_tile_saved">已保存</string>
 </resources>
