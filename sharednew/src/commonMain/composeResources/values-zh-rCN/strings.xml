@@ -425,4 +425,6 @@
     <string name="device_info_setting_unknown">未知（相机未连接）</string>
     <string name="device_info_mtu">蓝牙 MTU</string>
     <string name="device_info_mtu_value">%1$d 字节</string>
+    <string name="m0_dialog_close">关闭</string>
+    <string name="m0_button_loading">正在加载</string>
 </resources>

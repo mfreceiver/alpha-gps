@@ -73,7 +73,7 @@
 | AndroidX：core-ktx、activity-compose、lifecycle、navigation3、navigationevent、appcompat、room、sqlite、exifinterface、core-splashscreen | Apache-2.0 | |
 | Material Components for Android（com.google.android.material） | Apache-2.0 | |
 | Material Icons / Material Symbols | Apache-2.0 | 应用内功能图标 |
-| Haze | Apache-2.0 | 背景模糊（引入后接入，尚未在 libs.versions.toml 中） |
+| Haze（dev.chrisbanes.haze:haze / haze-blur 2.1.0，传递依赖 haze-utils 与 androidx.tracing 2.0.5，均为 Apache-2.0） | Apache-2.0 | 玻璃背景模糊，仅 sharednew 模块依赖（ui/components/glass） |
 | Timber | Apache-2.0 | 本机日志 |
 | Accompanist（permissions） | Apache-2.0 | |
 | diamondedge:logging | Apache-2.0（待核对） | 多平台日志门面 |
