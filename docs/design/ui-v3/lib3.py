@@ -375,6 +375,28 @@ def text_btn(cx, cy, label, col=None, size=14.5, anchor="middle"):
     return t(cx, cy + 5, label, size, 600, col or C["primary"], anchor)
 
 
+def pill_btn(x, y, w, label, kind="secondary", h=48, size=15):
+    """Dialog pill button. kind: secondary (pale glass) | primary (filled) | danger (filled red)."""
+    if kind == "secondary":
+        s = rect(x, y, w, h, C["onSurf"], h / 2, op=0.07 if mode() == "light" else 0.13)
+        s += rect(x + 0.5, y + 0.5, w - 1, h - 1, "none", h / 2, "#FFFFFF", 1, op=0.7 if mode() == "light" else 0.16)
+        col = C["onSurf"]
+    else:
+        fill, col = (C["error"], C["onError"]) if kind == "danger" else (C["primary"], C["onPrimary"])
+        s = rect(x, y, w, h, fill, h / 2)
+        s += rect(x + 0.6, y + 0.6, w - 1.2, h - 1.2, "none", h / 2, "#FFFFFF", 1, op=0.3)
+    return s + t(x + w / 2, y + h / 2 + size * 0.36, label, size, 600, col, "middle")
+
+
+def dlg_btns(x, y, w, left, right, kind="primary", h=48, gap=10):
+    """Bottom button row of every dialog: cancel (left, pale) + confirm (right, filled); one label = full width."""
+    if left is None or right is None:
+        lab = right or left
+        return pill_btn(x, y, w, lab, kind if right else "secondary", h)
+    bw = (w - gap) / 2
+    return pill_btn(x, y, bw, left, "secondary", h) + pill_btn(x + bw + gap, y, bw, right, kind, h)
+
+
 def info_tag(x, y, label, on_photo=True, size=10.5, pad=5, h=17, col=None, ic=None, anchor="start"):
     """INFORMATION tag: flat translucent fill, no stroke, no shadow, 4dp radius, not clickable."""
     w_ = sum(size * (1.0 if ord(ch) > 0x2E80 else (0.3 if ch == " " else 0.6)) for ch in label) + pad * 2 + (size + 2 if ic else 0)

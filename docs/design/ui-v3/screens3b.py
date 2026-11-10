@@ -47,14 +47,17 @@ def date_list_screen(state="normal", callouts=False):
         s += t(195, 437, "与相机的连接已断开", 13.5, 400, C["onSurfV"], "middle")
         s += tonal_btn(195 - 70, 466, 140, 48, "重新读取", "refresh")
         return s + end()
-    x = 20
-    for lab, ic_ in (("64 GB", "sd_card"), ("剩余 21.3 GB", None), ("固件 2.00", None)):
-        tg, tw = info_tag(x, 104, lab, on_photo=False, ic=ic_, size=11.5, h=22, pad=8)
-        s += tg
-        x += tw + 6
+    # one line per card (only cards that are present); firmware tag on the first line
+    for k, row in enumerate(((("卡 1", "sd_card"), ("64 GB · 剩余 21.3 GB", None), ("固件 2.00", None)),
+                             (("卡 2", "sd_card"), ("128 GB · 剩余 96.0 GB", None)))):
+        x = 20
+        for lab, ic_ in row:
+            tg, tw = info_tag(x, 102 + k * 27, lab, on_photo=False, ic=ic_, size=11.5, h=22, pad=8)
+            s += tg
+            x += tw + 6
     rows = [("11月9日", "周日 · 今天", 227), ("11月8日", "周六", 64), ("11月3日", "周一", 118),
             ("10月28日", "周二", 9), ("10月21日", "周二", 342), ("未知日期", "无拍摄时间", 3)]
-    y = 140
+    y = 164
     for i, (d, sub, n) in enumerate(rows):
         s += row_card(y, 80)
         if d == "未知日期":
@@ -67,7 +70,7 @@ def date_list_screen(state="normal", callouts=False):
         s += icon("chevron_right", 338, y + 28, 24, C["onSurfV"])
         y += 90
     if callouts:
-        s += callout(1, 14, 62) + callout(2, 362, 50) + callout(3, 14, 115) + callout(4, 30, 150)
+        s += callout(1, 14, 62) + callout(2, 362, 50) + callout(3, 14, 113) + callout(4, 30, 174)
     return s + end()
 
 
@@ -77,6 +80,9 @@ TILES = [("J+R", 0, 0, 54.6), ("JPG", 1, 3, 6.6), ("J+R", 0, 5, 51.2), ("RAW", 0
          ("JPG", 0, 0, 7.1), ("J+R", 1, 4, 55.0), ("HEIF", 0, 2, 4.2), ("JPG", 1, 0, 6.9),
          ("J+R", 0, 0, 53.3), ("JPG", 0, 1, 7.4), ("RAW", 1, 5, 48.8), ("J+R", 0, 0, 52.7),
          ("JPG", 0, 0, 6.2), ("J+R", 0, 3, 54.1), ("JPG", 0, 0, 7.7), ("HEIF", 1, 0, 4.0)]
+
+
+CARD2 = {3, 10, 11}  # tiles stored on card 2 (demo)
 
 
 def pr_label(prot, rating):
@@ -126,6 +132,9 @@ def tile(x, y, s_, i, opts, selecting=False, sel=False, r=8):
         bx += tw + 3
     if opts.get("size"):
         g += info_tag(bx, by, f"{mb} MB", size=fs, h=th, pad=4)[0]
+    if opts.get("card") and (i % len(TILES)) in CARD2:
+        # shown only when both cards hold photos; card 1 is never labelled
+        g += info_tag(ix + iw - pad, by, "2", size=fs, h=th, pad=4, ic="sd_card", anchor="end")[0]
     if selecting:
         cx, cy = x + 15, y + 15
         if sel:
@@ -188,7 +197,7 @@ def dl_pill(kind="idle", n=3, mb="67.8 MB", y=748):
 def grid_screen(mode_="S", fmt=False, size=False, pr=False, selecting=0, panel=False, callouts=False,
                 sel_set=(1, 2, 5), pill="idle", drag=False, scrolled=False):
     cols, pad, gap, s_ = grid_geom(mode_)
-    opts = dict(fmt=fmt, size=size, pr=pr)
+    opts = dict(fmt=fmt, size=size, pr=pr, card=True)
     s = tile_defs() + base()
     y0 = 100
     rows = int((H - y0) / (s_ + gap)) + 1
@@ -246,18 +255,19 @@ def histogram(x, y, w, h, seed=3, rgb=False):
     return s
 
 
-def filmstrip(y, cur=5, n=9, sw=48):
-    s = ""
+def filmstrip(y, cur=5, n=9, sw=38):
+    """Small translucent strip of neighbours, overlaid on the photo's bottom."""
     gap = 4
     x0 = W / 2 - sw / 2 - (n // 2) * (sw + gap)
+    s = rect(0, y - 6, W, sw + 12, "#000", 0, op=0.28)
     for k in range(n):
         i = cur - n // 2 + k
         x = x0 + k * (sw + gap)
         if k == n // 2:
-            s += photo_art(x - 4, y - 4, sw + 8, sw + 8, i, 10)
-            s += rect(x - 4, y - 4, sw + 8, sw + 8, "none", 10, "#fff", 2.2)
+            s += photo_art(x - 3, y - 3, sw + 6, sw + 6, i, 8)
+            s += rect(x - 3, y - 3, sw + 6, sw + 6, "none", 8, "#fff", 2)
         else:
-            s += f'<g opacity="{0.72 if abs(k - n // 2) < 3 else 0.4}">' + photo_art(x, y, sw, sw, i, 8) + "</g>"
+            s += f'<g opacity="{0.7 if abs(k - n // 2) < 3 else 0.42}">' + photo_art(x, y, sw, sw, i, 6) + "</g>"
     return s
 
 
@@ -271,7 +281,7 @@ def v_topbar(name="DSC03456.JPG", size_txt="6.6 MB", idx="6 / 227", locked=False
 
 
 def gps_chip(x, y, state="ok", w_=None):
-    """Location state chip (information; glass-v pill because it floats over black/photo)."""
+    """Location line of the details sheet (coordinates live here, not in the strip)."""
     spec = {"ok": ("location_on", "#7DDB93", "已定位", "31.2304° N, 121.4737° E"),
             "none": ("location_off", "#FFC857", "未含位置", "拍摄时没有写入 GPS"),
             "loading": ("location_on", VW3, "读取位置…", ""),
@@ -285,67 +295,110 @@ def gps_chip(x, y, state="ok", w_=None):
     return s, w_
 
 
-def params_card(x, y, w_, state="ok"):
-    """Shooting parameters (EXIF). 4 cells + lens line."""
-    s = glass(x, y, w_, 112, 20, "v", shadow=False)
-    cw = (w_ - 16) / 4
-    vals = [("f/2.8", "光圈"), ("1/250 s", "快门"), ("ISO 400", "感光度"), ("35 mm", "焦距")]
-    for i, (v, c) in enumerate(vals):
-        cx = x + 8 + cw * i + cw / 2
-        if state == "ok":
-            s += t(cx, y + 38, v, 17, 600, VW, "middle")
-        elif state == "loading":
-            s += rect(cx - 26, y + 22, 52, 18, "#fff", 6, op=0.12)
-        else:
-            s += t(cx, y + 38, "—", 17, 600, VW3, "middle")
-        s += t(cx, y + 58, c, 11, 400, VW3, "middle")
-    if state == "ok":
-        s += icon("camera", x + 16, y + 77, 16, VW2)
-        s += t(x + 38, y + 90, "FE 24-70mm F2.8 GM II", 12.5, 500, VW2)
-        s += t(x + w_ - 16, y + 90, "+0.3 EV", 12.5, 600, VW, "end")
-    elif state == "loading":
-        s += rect(x + 16, y + 78, 180, 14, "#fff", 6, op=0.1)
+def vtag(x, y, label, ic=None, size=11, h=20):
+    """Information tag on the dark viewer glass (flat, white 14%)."""
+    w_ = text_w(label, size) + 12 + (size + 3 if ic else 0)
+    s = rect(x, y, w_, h, "#fff", 4, op=0.14)
+    tx = x + 6
+    if ic:
+        s += icon(ic, tx - 1, y + (h - size - 1) / 2, size + 1, "#fff")
+        tx += size + 3
+    return s + t(tx, y + h / 2 + size * 0.36, label, size, 600, "#fff"), w_
+
+
+def info_strip(y_bottom, exif="ok", gps="ok", opts=(), card2=False, x=12, w_=366, prot=1, rating=4):
+    """ONE translucent strip for every photo shape. Default row: location icon + lock/star tag + format·resolution + size.
+    opts ⊆ {params, lens, hist}: optional compact extras (settings; all off by default). Grows upward."""
+    extra = [o for o in ("params", "lens") if o in opts]
+    eh = 24 * len(extra)
+    if "hist" in opts and not extra:
+        eh = 34
+    h_ = 40 + eh + (4 if eh else 0)
+    y = y_bottom - h_
+    s = glass(x, y, w_, h_, 20, "v", shadow=False)
+    # --- default row
+    cy = y + 20
+    icn, col, op = {"ok": ("location_on", "#7DDB93", None), "none": ("location_off", "#FFC857", None),
+                    "loading": ("location_on", VW3, 0.5), "fail": ("location_off", VW3, None)}[gps if exif != "loading" else "loading"]
+    s += icon(icn, x + 10, cy - 10, 20, col, op=op)
+    tx = x + 38
+    lab, lock = pr_label(prot, rating)
+    if lab is not None or lock:
+        tg, tw = vtag(tx, cy - 10, lab or "", "lock" if lock else None)
+        s += tg
+        tx += tw + 6
+    if card2:
+        tg, tw = vtag(tx, cy - 10, "卡 2", "sd_card")
+        s += tg
+        tx += tw + 6
+    tx += 2
+    if exif == "ok":
+        s += t(tx, cy + 4.5, "J+R · 7008×4672", 12.5, 600, VW)
+        tx += 118
+    elif exif == "loading":
+        s += t(tx, cy + 4.5, "J+R", 12.5, 600, VW) + rect(tx + 32, cy - 7, 74, 14, "#fff", 5, op=0.12)
+        tx += 116
     else:
-        s += t(x + 16, y + 90, "拍摄参数不可用（未能读取文件头）", 12.5, 400, VW3)
-    return s
+        s += t(tx, cy + 4.5, "J+R", 12.5, 600, VW)
+        tx += 34
+    s += t(tx, cy + 4.5, "54.6 MB", 12.5, 400, VW2)
+    s += icon("expand_less", x + w_ - 34, cy - 12, 24, VW2)
+    # --- optional extras (numbers only, no captions)
+    ey = y + 40
+    hx = x + w_ - 14 - 92
+    for o in extra:
+        if o == "params":
+            if exif == "ok":
+                for k, v in enumerate(("f/2.8", "1/250s", "ISO 400", "35mm", "+0.3EV")):
+                    s += t(x + 14 + (0, 48, 106, 172, 222)[k], ey + 15, v, 12.5, 600, VW)
+            elif exif == "loading":
+                s += rect(x + 14, ey + 3, 200, 14, "#fff", 5, op=0.12)
+            else:
+                s += t(x + 14, ey + 15, "—", 12.5, 600, VW3)
+        else:
+            if exif == "ok":
+                s += t(x + 14, ey + 15, "FE 24-70mm F2.8 GM II", 12, 400, VW2)
+            elif exif == "loading":
+                s += rect(x + 14, ey + 3, 140, 14, "#fff", 5, op=0.12)
+            else:
+                s += t(x + 14, ey + 15, "—", 12, 400, VW3)
+        ey += 24
+    if "hist" in opts:
+        if extra:
+            s += histogram(hx, y + 42, 92, eh - 2)
+        else:
+            s += histogram(x + 14, y + 40, w_ - 28, 30)
+    return s, y
 
 
-def file_card(x, y, w_, saved=False, hist=True):
-    s = glass(x, y, w_, 96, 20, "v", shadow=False)
-    s += rect(x + w_ / 2 - 16, y + 7, 32, 4, "#fff", 2, op=0.45)
-    if hist:
-        s += histogram(x + 14, y + 22, 132, 60)
-    tx = x + 160
-    s += info_tag(tx, y + 22, "JPG", size=10.5)[0] + t(tx + 34, y + 35, "6.6 MB", 12.5, 500, VW)
-    s += info_tag(tx + 92, y + 22, "RAW", size=10.5)[0] + t(tx + 128, y + 35, "48.0 MB", 12.5, 500, VW)
-    s += t(tx, y + 59, "7008 × 4672 · 32.7 MP", 12.5, 400, VW2)
-    s += icon("lock", tx - 1, y + 69, 14, VW2) + t(tx + 17, y + 81, "★★★★", 11.5, 600, RATING[4])
-    if saved:
-        s += icon("check_circle", tx + 86, y + 69, 14, "#7DDB93") + t(tx + 104, y + 81, "已保存 JPG", 11.5, 500, "#7DDB93")
-    return s
 
 
-def v_download(state="normal", y=740):
+
+
+
+
+def v_download(state="normal", y=730):
+    """Download control: 48dp pill floating over the photo (fixed colours — viewer chrome is always dark)."""
     if state == "saved":
-        return (rect(95, y, 200, 56, "#FFFFFF", 28, op=0.12) + icon("check", 152, y + 17, 22, "#9AA1AA")
-                + t(182, y + 34, "已保存", 16, 600, "#9AA1AA"))
+        return (rect(105, y, 180, 48, "#FFFFFF", 24, op=0.16) + icon("check", 156, y + 13, 22, "#B5BBC4")
+                + t(186, y + 30, "已保存", 15.5, 600, "#B5BBC4"))
     if state == "downloading":
         x, w_ = 45, 300
-        s = glass(x, y, w_, 56, 28, "v")
-        s += circle(x + 30, y + 28, 13, "none", "#555B63", 3) + arc(x + 30, y + 28, 13, 0, 155, "#A8C7FA", 3)
-        s += t(x + 54, y + 25, "正在下载 43%", 14.5, 600, VW)
-        s += t(x + 54, y + 43, "2.8 / 6.6 MB", 11.5, 400, VW2)
-        s += text_btn(x + w_ - 22, y + 28, "取消", "#A8C7FA", anchor="end")
+        s = glass(x, y, w_, 48, 24, "v")
+        s += circle(x + 28, y + 24, 12, "none", "#555B63", 3) + arc(x + 28, y + 24, 12, 0, 155, "#A8C7FA", 3)
+        s += t(x + 50, y + 21, "正在下载 43%", 14, 600, VW)
+        s += t(x + 50, y + 38, "2.8 / 6.6 MB", 11, 400, VW2)
+        s += text_btn(x + w_ - 22, y + 24, "取消", "#A8C7FA", anchor="end")
         return s
-    # fixed colours: the viewer chrome is always dark, whatever the app theme
-    s = rect(95, y, 200, 56, "#A8C7FA", 28, extra='filter="url(#shv)"')
-    s += rect(95.6, y + 0.6, 198.8, 54.8, "none", 28, "#FFFFFF", 1, op=0.55)
-    s += icon("download", 160, y + 17, 22, "#062E6F") + t(190, y + 34, "下载", 16, 600, "#062E6F")
+    s = rect(105, y, 180, 48, "#A8C7FA", 24, op=0.94, extra='filter="url(#shv)"')
+    s += rect(105.6, y + 0.6, 178.8, 46.8, "none", 24, "#FFFFFF", 1, op=0.55)
+    s += icon("download", 160, y + 13, 22, "#062E6F") + t(190, y + 30, "下载", 15.5, 600, "#062E6F")
     return s
 
 
-def viewer_screen(orient="land", state="normal", exif="ok", gps="ok", sheet=False, callouts=False, immersive=False):
-    """orient: land (3:2) | port (2:3). state: normal | downloading | saved."""
+def viewer_screen(orient="land", state="normal", exif="ok", gps="ok", sheet=False, callouts=False, opts=(), card2=False):
+    """One layout for every photo shape. orient only changes the demo photo (land 3:2 | port 2:3).
+    state: normal | downloading | saved. opts: info-strip extras enabled in settings."""
     was = mode()
     set_theme("dark")
     s = tile_defs() + rect(0, 0, W, H, "#000")
@@ -356,12 +409,10 @@ def viewer_screen(orient="land", state="normal", exif="ok", gps="ok", sheet=Fals
         y = 372
         s += glass(0, y, W, H - y + 30, 28, "v")
         s += rect(W / 2 - 18, y + 10, 36, 4, "#fff", 2, op=0.5)
-        # header: location
         gc, gw = gps_chip(16, y + 26, gps)
         s += gc
         s += circle(W - 40, y + 44, 20, "#A8C7FA") + icon("download", W - 51, y + 33, 22, "#062E6F")
         s += t(20, y + 82, "海拔 12 m · GPS 时间 06:32:07 UTC", 12, 400, VW3)
-        # params
         s += t(20, y + 112, "拍摄参数", 12.5, 600, "#A8C7FA")
         cells = [("f/2.8", "光圈"), ("1/250 s", "快门"), ("ISO 400", "感光度"), ("35 mm", "焦距"), ("+0.3 EV", "曝光补偿"),
                  ("A", "模式")]
@@ -371,11 +422,10 @@ def viewer_screen(orient="land", state="normal", exif="ok", gps="ok", sheet=Fals
             s += rect(cx, cy, 114, 48, "#fff", 12, op=0.06)
             s += t(cx + 12, cy + 22, v, 15, 600, VW) + t(cx + 12, cy + 39, c, 10.5, 400, VW3)
         s += icon("camera", 18, y + 240, 16, VW2) + t(40, y + 253, "FE 24-70mm F2.8 GM II", 12.5, 500, VW2)
-        # histogram
         s += t(20, y + 284, "直方图", 12.5, 600, "#A8C7FA")
         s += histogram(16, y + 294, 358, 62, rgb=True)
-        # file
         s += t(20, y + 384, "文件", 12.5, 600, "#A8C7FA")
+        s += t(W - 20, y + 384, "存储卡 2", 12, 500, VW2, "end")
         s += info_tag(20, y + 396, "JPG", size=10.5)[0] + t(54, y + 409, "6.6 MB", 12.5, 500, VW)
         s += info_tag(112, y + 396, "RAW", size=10.5)[0] + t(148, y + 409, "48.0 MB", 12.5, 500, VW)
         s += t(W - 20, y + 409, "7008 × 4672 · 32.7 MP", 12.5, 400, VW2, "end")
@@ -385,46 +435,24 @@ def viewer_screen(orient="land", state="normal", exif="ok", gps="ok", sheet=Fals
         s += nav_pill(VW)
         set_theme(was)
         return s
+    # photo: fit-centre in the whole window; chrome floats over it
     if orient == "land":
-        py, ph = 292, 260
-        s += photo_art(0, py, 390, ph, 5)
-        if not immersive:
-            s += sbar(VW) + v_topbar(locked=locked)
-            s += params_card(12, 104, 366, exif)
-            gc, gw = gps_chip(12, 228, gps if exif != "loading" else "loading")
-            s += gc
-            if exif == "ok":
-                s += pr_tag(378, 237, 1, 4, 11, 18)
-            s += file_card(12, 564, 366, saved=state == "saved")
-            s += filmstrip(676)
-            s += v_download(state)
+        s += photo_art(0, 292, 390, 260, 5)
     else:
-        pw, ph = 378.7, 568
-        px = (W - pw) / 2
-        s += photo_art(px, 96, pw, ph, 2)
-        if not immersive:
-            s += f'<rect x="0" y="0" width="{W}" height="130" fill="url(#vtop)"/>'
-            s += sbar(VW) + v_topbar("DSC03461.JPG", "7.1 MB", "11 / 227", locked=locked)
-            # compact one-line glass strip over the photo's bottom edge
-            s += glass(16, 612, 358, 40, 20, "v", shadow=False)
-            gcol = {"ok": "#7DDB93", "none": "#FFC857"}.get(gps, VW3)
-            s += icon("location_on" if gps == "ok" else "location_off", 26, 622, 20, gcol)
-            if exif == "ok":
-                s += t(54, 637, "f/1.8 · 1/500 s · ISO 100 · 85 mm", 13, 600, VW)
-            elif exif == "loading":
-                s += rect(54, 624, 190, 16, "#fff", 6, op=0.12)
-            else:
-                s += t(54, 637, "拍摄参数不可用", 13, 400, VW3)
-            s += icon("expand_less", 340, 620, 24, VW2)
-            s += filmstrip(676, cur=10)
-            s += v_download(state)
+        s += photo_art(0, 130, 390, 585, 2)
+    s += f'<rect x="0" y="0" width="{W}" height="130" fill="url(#vtop)"/>'
+    s += f'<rect x="0" y="{H - 290}" width="{W}" height="290" fill="url(#vbot)" opacity="0.9"/>'
+    name = ("DSC03456.JPG", "6.6 MB", "6 / 227") if orient == "land" else ("DSC03461.JPG", "7.1 MB", "11 / 227")
+    s += sbar(VW) + v_topbar(*name, locked=locked)
+    strip, sy = info_strip(658, exif, gps, opts, card2)
+    s += strip
+    s += filmstrip(674, cur=5 if orient == "land" else 10)
     if locked:
-        s += rect(0, 668, W, 64, "#000", op=0.55)
-    if callouts and orient == "land":
-        for n_, (cx, cy) in enumerate(((16, 46), (10, 112), (10, 236), (380, 300), (10, 572), (10, 684), (88, 746)), 1):
+        s += rect(0, 668, W, 50, "#000", op=0.5)
+    s += v_download(state)
+    if callouts:
+        for n_, (cx, cy) in enumerate(((16, 46), (10, sy + 4), (382, sy + 4), (10, 680), (98, 736)), 1):
             s += callout(n_, cx, cy)
-    if callouts and orient == "port":
-        s += callout(1, 12, 620) + callout(2, 372, 620)
     s += nav_pill(VW)
     set_theme(was)
     return s
@@ -432,6 +460,7 @@ def viewer_screen(orient="land", state="normal", exif="ok", gps="ok", sheet=Fals
 
 # ================================================================ settings / help / logs
 def list_row(y, title, value=None, ic=None, kind="nav", sub=None, h=60, on=True, x=16, w_=358):
+    """kind: nav (chevron) | link (opens outside) | copy (copy + open) | switch | none (static information)."""
     s = ""
     tx = x + 20
     if ic:
@@ -443,7 +472,10 @@ def list_row(y, title, value=None, ic=None, kind="nav", sub=None, h=60, on=True,
         s += t(tx, y + h / 2 + 5.5, title, 15.5, 500)
     if kind == "switch":
         s += switch(x + w_ - 66, y + h / 2 - 14, on)
-    else:
+    elif kind == "copy":
+        s += icon("content_copy", x + w_ - 74, y + h / 2 - 10, 20, C["onSurfV"])
+        s += icon("open_in_new", x + w_ - 38, y + h / 2 - 10, 20, C["onSurfV"])
+    elif kind != "none":
         if value:
             s += t(x + w_ - 42, y + h / 2 + 5, value, 13.5, 400, C["onSurfV"], "end")
         s += icon("chevron_right" if kind == "nav" else "open_in_new", x + w_ - 38, y + h / 2 - (12 if kind == "nav" else 10),
@@ -453,34 +485,44 @@ def list_row(y, title, value=None, ic=None, kind="nav", sub=None, h=60, on=True,
 
 def settings_screen():
     s = base() + top_bar("设置")
-    s += glass(16, 104, 358, 84, 24, 1)
-    s += list_row(104, "位置同步", ic="gps", kind="switch", sub="总开关：关闭后不连接任何相机", h=84)
-    s += section_label(28, 216, "连接与定位")
-    s += glass(16, 228, 358, 180, 24, 1)
-    s += list_row(228, "位置来源", "融合定位", "location_on")
-    s += list_row(288, "提示音", "连接 / 断开", "volume_up")
-    s += list_row(348, "电池优化", "未限制", "battery_full")
-    s += section_label(28, 436, "通用")
-    s += glass(16, 448, 358, 240, 24, 1)
-    s += list_row(448, "语言", "简体中文", "language")
-    s += list_row(508, "日志级别", "信息", "list")
-    s += list_row(568, "更新日志", "0.1.5", "info")
-    s += list_row(628, "崩溃报告", "已关闭", "warning")
-    s += t(195, 730, "alpha-gps 0.1.5 · cn.vectory.alphagps", 12, 400, C["onSurfV"], "middle")
+    s += glass(16, 104, 358, 76, 24, 1)
+    s += list_row(104, "位置同步", ic="gps", kind="switch", sub="总开关：关闭后不连接任何相机", h=76)
+    s += section_label(28, 206, "连接与定位")
+    s += glass(16, 216, 358, 162, 24, 1)
+    s += list_row(216, "位置来源", "融合定位", "location_on", h=54)
+    s += list_row(270, "提示音", "连接 / 断开", "volume_up", h=54)
+    s += list_row(324, "电池优化", "未限制", "battery_full", h=54)
+    s += section_label(28, 404, "照片")
+    s += glass(16, 414, 358, 54, 24, 1)
+    s += list_row(414, "预览信息条", "仅基础信息", "image", h=54)
+    s += section_label(28, 494, "通用")
+    s += glass(16, 504, 358, 216, 24, 1)
+    s += list_row(504, "语言", "简体中文", "language", h=54)
+    s += list_row(558, "日志级别", "信息", "list", h=54)
+    s += list_row(612, "更新日志", "0.1.5", "info", h=54)
+    s += list_row(666, "崩溃报告", "已关闭", "warning", h=54)
+    s += t(195, 752, "alpha-gps 0.1.5 · cn.vectory.alphagps", 12, 400, C["onSurfV"], "middle")
     return s + end()
 
 
 def settings_sub_screen():
-    """Example sub page: battery optimisation (status + one operation)."""
-    s = base() + top_bar("电池优化")
-    s += glass(16, 104, 358, 150, 24, 1)
-    s += icon_tile(52, 148, "check", 22, C["greenC"], C["green"])
-    s += t(88, 144, "未限制", 18, 600) + t(88, 166, "系统不会在后台停止位置同步", 12.5, 400, C["onSurfV"])
-    s += t(36, 208, "若后台同步经常中断，请确认此项为「未限制」，", 12.5, 400, C["onSurfV"])
-    s += t(36, 228, "并关闭厂商的自启动/后台冻结限制。", 12.5, 400, C["onSurfV"])
-    s += glass(16, 266, 358, 120, 24, 1)
-    s += list_row(266, "系统电池设置", kind="link", ic="battery_full")
-    s += list_row(326, "厂商后台管理说明", kind="link", ic="info")
+    """Sub page: what the viewer's info strip shows (three optional extras, all off by default)."""
+    s = tile_defs() + base() + top_bar("预览信息条")
+    # live preview of the strip with the current switches
+    s += rect(16, 104, 358, 150, "#000", 24)
+    s += f'<clipPath id="pvw"><rect x="16" y="104" width="358" height="150" rx="24"/></clipPath><g clip-path="url(#pvw)">'
+    s += photo_art(16, 104, 358, 150, 5) + "</g>"
+    s += info_strip(244, x=26, w_=338)[0]
+    s += t(28, 280, "始终显示：定位图标、保护与评分、格式 · 分辨率、文件大小", 12, 400, C["onSurfV"])
+    s += section_label(28, 318, "额外显示在信息条里")
+    s += glass(16, 330, 358, 216, 24, 1)
+    s += list_row(330, "拍摄参数", kind="switch", sub="光圈、快门、ISO、焦距、曝光补偿（仅数值）", h=72, on=False)
+    s += list_row(402, "镜头信息", kind="switch", sub="镜头型号", h=72, on=False)
+    s += list_row(474, "直方图", kind="switch", sub="亮度分布小图", h=72, on=False)
+    s += glass(16, 558, 358, 62, 20, 1, shadow=False)
+    s += icon("info", 30, 578, 20, C["primary"])
+    s += t(60, 584, "上滑打开的详情始终包含全部信息，", 12.5, 400, C["onSurfV"])
+    s += t(60, 603, "不受这里的开关影响。", 12.5, 400, C["onSurfV"])
     return s + end()
 
 
@@ -488,18 +530,18 @@ def help_screen(callouts=False):
     s = base() + top_bar("帮助")
     s += glass(16, 104, 358, 96, 24, 1, tint=C["primaryC"], a=0.62 if mode() == "light" else 0.4)
     s += t(36, 138, "关于 alpha-gps", 16.5, 600, C["onPrimaryC"])
-    s += t(36, 162, "通过蓝牙把手机定位写入 Sony 相机，", 12.5, 400, C["onPrimaryC"])
-    s += t(36, 181, "并可经 Wi‑Fi 浏览、下载相机照片。", 12.5, 400, C["onPrimaryC"])
+    s += t(36, 162, "版本、来源、许可证、源码与隐私", 12.5, 400, C["onPrimaryC"])
+    s += t(36, 181, "基于 Saschl/alpha-gps 修改 · GPL-3.0", 12.5, 400, C["onPrimaryC"])
+    s += icon("chevron_right", 338, 140, 24, C["onPrimaryC"])
     s += glass(16, 212, 358, 72, 24, 1)
     s += icon_tile(52, 248, "search", 22)
     s += t(88, 244, "排障指南", 15.5, 600) + t(88, 265, "连不上、找不到相机时先看这里", 12.5, 400, C["onSurfV"])
     s += icon("chevron_right", 338, 236, 24, C["onSurfV"])
     s += section_label(28, 312, "常见问题")
-    # expanded FAQ
     s += glass(16, 324, 358, 222, 24, 1)
     s += t(36, 356, "有文档或反馈渠道吗？", 15, 600) + icon("expand_less", 338, 338, 24, C["onSurfV"])
     s += t(36, 382, "源码与问题反馈在代码仓库；也可以写邮件。", 12.5, 400, C["onSurfV"])
-    for i, (lab, ic_) in enumerate((("代码仓库", "open_in_new"), ("发送邮件", "open_in_new"), ("请作者喝杯咖啡", "favorite"))):
+    for i, (lab, ic_) in enumerate((("代码仓库", "open_in_new"), ("发送邮件", "open_in_new"), ("请上游作者喝杯咖啡", "favorite"))):
         yy = 396 + i * 46
         s += rect(28, yy, 334, 40, C["onSurf"], 14, op=0.05 if mode() == "light" else 0.08)
         s += icon(ic_, 40, yy + 10, 20, C["primary"] if ic_ != "favorite" else C["tertiary"])
@@ -512,7 +554,53 @@ def help_screen(callouts=False):
         s += t(36, y + 33, q, 14.5, 500) + icon("expand_more", 338, y + 16, 24, C["onSurfV"])
         y += 64
     if callouts:
-        s += callout(1, 26, 222) + callout(2, 26, 494)
+        s += callout(1, 26, 222) + callout(2, 26, 494) + callout(3, 26, 112)
+    return s + end()
+
+
+def about_screen(callouts=False):
+    s = base() + top_bar("关于")
+    s += glass(16, 100, 358, 96, 24, 1)
+    s += icon_tile(58, 148, "gps", 26, C["primary"], C["onPrimary"], 28)
+    s += t(98, 136, "alpha-gps", 19, 600)
+    s += t(98, 158, "0.1.5 · cn.vectory.alphagps", 12.5, 400, C["onSurfV"])
+    s += t(98, 178, "基于 Saschl/alpha-gps 修改的分支版本", 12.5, 400, C["onSurfV"])
+    s += section_label(28, 220, "来源与许可")
+    s += glass(16, 230, 358, 232, 24, 1)
+    s += list_row(230, "上游项目", ic="code", kind="copy", sub="Saschl/alpha-gps · 作者 Saschl", h=58)
+    s += list_row(288, "修改声明", ic="edit", kind="none", sub="由 mfreceiver 修改，自 2026 年 11 月起", h=58)
+    s += list_row(346, "许可证", ic="gavel", sub="GPL-3.0，与上游项目相同", h=58)
+    s += list_row(404, "开源组件许可", ic="list", sub="libheif、libde265、Compose、Haze 等", h=58)
+    s += section_label(28, 486, "源码")
+    s += glass(16, 496, 358, 116, 24, 1)
+    s += list_row(496, "GitHub", ic="code", kind="copy", sub="github.com/mfreceiver/alpha-gps", h=58)
+    s += list_row(554, "Primary forge", ic="code", kind="copy", sub="forge.example.com:443/owner/alphagps", h=58)
+    s += section_label(28, 636, "其它")
+    s += glass(16, 646, 358, 116, 24, 1)
+    s += list_row(646, "隐私说明", ic="shield", sub="位置只在本机与相机之间传递", h=58)
+    s += list_row(704, "支持上游作者", ic="favorite", kind="link", sub="Buy Me a Coffee · 赞助归上游作者 Saschl", h=58)
+    s += t(195, 790, "本应用与 Sony 无关联；Sony、α 等为其各自所有者的商标。", 11, 400, C["onSurfV"], "middle")
+    if callouts:
+        s += callout(1, 26, 240) + callout(2, 26, 298) + callout(3, 26, 356) + callout(4, 26, 506)
+        s += callout(5, 26, 656) + callout(6, 26, 714) + callout(7, 300, 248)
+    return s + end()
+
+
+def licenses_screen():
+    s = base() + top_bar("开源组件许可")
+    rows = [("alpha-gps（本应用）", "GPL-3.0 · mfreceiver，基于 Saschl/alpha-gps"),
+            ("libheif 1.23.5", "LGPL-3.0-or-later · 源码构建，动态链接"),
+            ("libde265 1.1.3", "LGPL-3.0-or-later · 源码构建，动态链接"),
+            ("Kotlin · kotlinx", "Apache-2.0"),
+            ("Jetpack Compose · AndroidX · Room", "Apache-2.0"),
+            ("Compose Multiplatform", "Apache-2.0"),
+            ("Haze", "Apache-2.0 · 背景模糊"),
+            ("Timber · Accompanist", "Apache-2.0"),
+            ("Material Symbols", "Apache-2.0 · 图标")]
+    s += glass(16, 104, 358, len(rows) * 60 + 8, 24, 1)
+    for i, (a_, b_) in enumerate(rows):
+        s += list_row(108 + i * 60, a_, sub=b_, h=60)
+    s += t(28, 104 + len(rows) * 60 + 36, "轻触任一项查看许可全文；全文随应用内置，离线可读。", 12, 400, C["onSurfV"])
     return s + end()
 
 
@@ -536,14 +624,14 @@ def troubleshoot_screen():
 
 
 def logs_screen():
-    s = base() + top_bar("日志", acts=("download", "delete"))
+    s = base() + top_bar("日志", acts=("content_copy", "download", "delete"))
     x = 20
     for lab, on in (("全部", True), ("警告", False), ("错误", False)):
         w_ = 60
         s += rect(x, 104, w_, 34, C["primary"] if on else C["onSurf"], 17, op=None if on else 0.07)
         s += t(x + w_ / 2, 126, lab, 13.5, 600, C["onPrimary"] if on else C["onSurfV"], "middle")
         x += w_ + 8
-    s += glass(16, 150, 358, 640, 24, 1)
+    s += glass(16, 150, 358, 590, 24, 1)
     lines = [("14:32:08", "I", "GPS 写入成功 #1284 (31.2304,121.4737)"), ("14:32:05", "I", "GPS 写入成功 #1283"),
              ("14:31:50", "W", "RSSI -84 dBm 信号偏弱"), ("14:30:02", "I", "CC0E 校时 applied=1"),
              ("14:30:01", "I", "蓝牙已连接 MTU 517"), ("14:29:58", "I", "开始连接 ILCE-7M4"),
@@ -556,7 +644,12 @@ def logs_screen():
         s += info_tag(88, y - 13, lv, on_photo=False, size=10, h=17, pad=5, col=col)[0]
         s += t(112, y, msg, 12, 400, C["onSurf"] if lv != "E" else C["error"])
         y += 30
-    return s + end()
+    # snackbar after tapping 'copy'
+    dk = mode() == "dark"
+    s += rect(16, 756, 358, 48, "#E0E2E8" if dk else "#2E3135", 12)
+    s += icon("check", 30, 769, 22, "#191C20" if dk else "#FFFFFF")
+    s += t(62, 785, "已复制 10 条日志", 14, 500, "#191C20" if dk else "#FFFFFF")
+    return s + end().replace(nav_pill(), "")
 
 
 # ================================================================ notification shade (system-rendered)

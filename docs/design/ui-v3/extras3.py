@@ -166,7 +166,7 @@ def nav_diagram():
     # exits
     s += rect(30, 250, w_ - 60, 60, "#FFFFFF", 14, "#D9DEE7", 1)
     s += t(48, 275, "离开应用", 13, 700, INK)
-    items = [("Home / 切后台", "蓝牙+GPS 常驻；Wi‑Fi 见 Q17", 150), ("根页返回", "回桌面；蓝牙+GPS 常驻；Wi‑Fi 结束", 400),
+    items = [("Home / 切后台", "蓝牙+GPS 常驻；Wi‑Fi 30 秒后结束", 150), ("根页返回", "回桌面；蓝牙+GPS 常驻；Wi‑Fi 结束", 400),
              ("最近任务划掉", "蓝牙+GPS 常驻（前台服务续跑）；Wi‑Fi 结束", 690), ("设备页「断开蓝牙」并确认", "蓝牙断开、GPS 停；之后只能手动连接", 1010)]
     for a_, b_, x in items:
         s += t(x, 275, a_, 12.5, 700, RED if "断开蓝牙" in a_ else INK) + t(x, 295, b_, 11, 400, INK2)
@@ -219,4 +219,53 @@ def viewer_zones():
     z(564, 660, "#5B3A6B", "下空白区", "直方图 + 文件信息；上滑展开")
     z(672, 728, "#8A6D1B", "胶片条（常驻）", "±4 张，零通信")
     z(740, 796, "#0B57D0", "下载（常驻）", "操作按钮，位置固定")
+    return svg_wrap(w_, h_, s), w_, h_
+
+
+def aspect_diagram():
+    """Viewer layout at three window shapes (schematic)."""
+    w_, h_ = 700, 372
+    s = rect(0, 0, w_, h_, "#F7F9FD", 18, "#D9DEE7", 1)
+    STRIP, FILM, DL, PH = "#3B4250", "#6B7482", "#A8C7FA", "#5E88AC"
+
+    def dev(x, y, dw, dh, kind):
+        o = rect(x, y, dw, dh, "#0B0D10", 12, "#42474E", 1.4)
+        if kind == "A":
+            o += rect(x + 4, y + 78, dw - 8, 70, PH, 2)
+            o += rect(x + 6, y + dh - 62, dw - 12, 14, STRIP, 5, op=.92)
+            for k in range(7):
+                o += rect(x + 8 + k * 14, y + dh - 44, 11, 11, FILM, 2)
+            o += rect(x + dw / 2 - 26, y + dh - 26, 52, 14, DL, 7)
+        elif kind == "B":
+            o += rect(x + 6, y + 52, dw - 12, 126, PH, 2)
+            o += rect(x + 8, y + dh - 44, 112, 14, STRIP, 5, op=.92)
+            o += circle(x + dw - 18, y + dh - 37, 9, DL)
+            for k in range(11):
+                o += rect(x + 22 + k * 14, y + dh - 22, 11, 11, FILM, 2)
+            o += rect(x + dw - 72, y + 22, 66, dh - 74, "none", 6, BLUE, 1.2, extra='stroke-dasharray="4 3"')
+            o += t(x + dw - 39, y + 44, "详情", 9.5, 600, "#A8C7FA", "middle")
+        else:
+            o += rect(x + 40, y + 6, dw - 80, dh - 12, PH, 2)
+            o += rect(x + 8, y + dh - 22, 104, 14, STRIP, 5, op=.92)
+            for k in range(6):
+                o += rect(x + 118 + k * 14, y + dh - 20, 11, 11, FILM, 2)
+            o += circle(x + dw - 16, y + dh - 15, 9, DL)
+            o += rect(x + dw - 70, y + 6, 64, dh - 36, "none", 6, BLUE, 1.2, extra='stroke-dasharray="4 3"')
+            o += t(x + dw - 38, y + 26, "详情", 9.5, 600, "#A8C7FA", "middle")
+        return o
+
+    def cap(x, y, title, cond, lines):
+        o = t(x, y, title, 12.5, 700, INK) + t(x, y + 16, cond, 10.5, 600, BLUE)
+        for k, ln in enumerate(lines):
+            o += t(x, y + 32 + k * 14, ln, 10.5, 400, INK2)
+        return o
+
+    s += dev(24, 18, 112, 240, "A")
+    s += cap(20, 278, "A 竖长（手机竖屏）", "宽 < 600dp 且 高 ≥ 480dp", ["三层自下而上叠在照片上：", "下载 / 胶片条 / 信息条", "详情 = 底部上滑面板"])
+    s += dev(206, 18, 206, 240, "B")
+    s += cap(204, 278, "B 近方形（折叠屏内屏 / 小平板 / 分屏）", "宽 ≥ 600dp 且 高 ≥ 480dp", ["信息条靠左（最宽 420dp），下载缩为右侧圆钮", "胶片条独占最底一行、居中、张数随宽度增加", "详情 = 右侧面板（宽 360dp），照片让出该宽度"])
+    s += dev(452, 76, 232, 108, "C")
+    s += cap(452, 278, "C 横屏（手机横屏）", "高 < 480dp", ["一行排完：信息条 | 胶片条 | 圆形下载", "顶栏改为透明叠在照片上，单击照片全部隐藏", "详情 = 右侧面板（宽 360dp）"])
+    s += t(452, 40, "三种窗口形状 · 同一组三个部件", 12, 700, INK)
+    s += t(452, 58, "只换位置，不换样式；都半透明、可与照片交叠", 10.5, 400, INK2)
     return svg_wrap(w_, h_, s), w_, h_
