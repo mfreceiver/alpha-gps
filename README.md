@@ -1,126 +1,32 @@
-# Alpha GPS
+<p align="left"><img width="96" src="docs/brand/alpha-gps-icon.svg" alt="AlphaGPS icon" /></p>
 
-**Website: [alphagps.app](https://alphagps.app)** — features, supported cameras and FAQ.
+# AlphaGPS
 
-<p>
-  <a href="https://apps.apple.com/us/app/alpha-gps-camera-geotagging/id6760982303"><img width="144" height="48" alt="Download on the App Store" src="Download_on_the_App_Store_Badge_US-UK_RGB_blk_092917.svg" /></a>&nbsp;
-  <a href="https://play.google.com/store/apps/details?id=com.saschl.cameragps"><img width="162" height="48" alt="Get it on Google Play" src="https://github.com/user-attachments/assets/775cb6fc-a297-4208-9249-43291c52d045" /></a>&nbsp;
-  <a href="https://f-droid.org/packages/com.saschl.cameragps/"><img width="161" height="48" alt="Get it on F-Droid" src="website/public/branding/fdroid-badge.svg" /></a>
-</p>
+**Write GPS location and time from your phone to a Sony Alpha camera over Bluetooth, and browse /
+download photos from the camera over its Wi-Fi.**
 
-You can also get the Android APK
-from [GitHub Releases](https://github.com/Saschl/alpha-gps/releases) and install it directly on your
-phone, or add the repository URL to Obtainium.
+AlphaGPS is a personal, open-source customization of [Saschl/alpha-gps](https://github.com/Saschl/alpha-gps).
+It is not distributed through any app store — you build and install it yourself.
 
-<a href="https://hosted.weblate.org/engage/alpha-gps/">
-<img src="https://hosted.weblate.org/widget/alpha-gps/svg-badge.svg" alt="Übersetzungsstatus" />
-</a>
+## Features
 
+- **GPS location & time linking** — reads the phone's location (only with your permission) and
+  writes it to your paired Sony camera over Bluetooth Low Energy, so photos are geotagged on the
+  camera itself. Time and time-zone data is linked as well.
+- **Photo browse & download over camera Wi-Fi** — connect to the camera's Wi-Fi and browse its
+  photos:
+  - date-grouped gallery (newest first) with lazy thumbnails;
+  - multi-select and long-press drag range selection across days;
+  - download strategy per batch: **JPG only** (skip RAW/HEIF) or **original files** (JPG + RAW).
+- Companion-device based connection with a foreground service; optional “standby after the camera
+  leaves” mode keeps the service ready to reconnect automatically.
 
-## What is it?
+English and Simplified Chinese only. Android only (see [iOS](#ios-target-is-disabled) below).
 
-App for transmitting location data to sony cameras. I was fed up with the official app and found a python script (https://github.com/anoulis/sony_camera_bluetooth_external_gps) that got the protocol right, so I thought let's make a better app.
+## Supported cameras
 
-Also big thanks to https://github.com/mlapaglia/AlphaSync which provided insights into how to enable the functionality for devices that use the Sony creators's app instead of Imaging Edge.
-
-It makes use of the companion device manager APIs of Android which *should* provide a reliable way to launch the transmission even when the app is in the background and the screen is off. However, due to limited devices, there might be differences. I have tested Android 10, 12, 13, 15 and 16 up to now, but your mileage may wary
-
-> [!NOTE]
-> I will move and add documentation to the new webpage at https://alphagps.app in the future
-
-
-## Error monitoring with Sentry
-
-<a href="https://sentry.io/">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="website/public/branding/sentry-light.svg" />
-    <img src="website/public/branding/sentry-dark.svg" width="200" alt="Sentry" />
-  </picture>
-</a>
-
-Alpha GPS uses [Sentry](https://sentry.io/) for error monitoring. The iOS and Google Play versions
-use Sentry for crash reports and diagnostic logs to help find and fix bugs. Reporting is opt-in and
-can be disabled in settings at any time. The F-Droid version does not include Sentry.
-
-## Prepare a source checkout
-
-Before building Android, initialize the pinned libheif and libde265 source submodules:
-
-```bash
-git submodule update --init --recursive
-```
-
-Run this again after pulling changes that update the dependencies. Native builds use these local
-sources without downloading dependencies. F-Droid build recipes must enable `submodules: true`.
-
-## iOS target is disabled in this custom fork
-
-This personal customization no longer ships iOS builds, so the Gradle build does not register any
-Apple targets (`iosArm64`/`iosSimulatorArm64`), their source sets, KSP configurations or the Sentry
-Cocoa linking plugin. Android builds are therefore not slowed down or otherwise affected by iOS.
-The switch lives in `gradle.properties` (`alphagps.enableIos=false`).
-
-The remaining iOS sources (`sharednew/src/iosMain`, `sharednew/src/iosTest`, the `iosApp/` Xcode
-project) are kept for potential future use, but the iOS app currently has an English-only string
-baseline (`en` + `Base` regions in the Xcode project; the German region has been removed) and is
-not built or shipped.
-
-To build the iOS app again on a Mac with Xcode installed, pass the flag explicitly:
-
-```bash
-./gradlew -Palphagps.enableIos=true <tasks>
-```
-
-This restores the original behavior (Apple targets declared, `iosMain` Sentry dependency and the
-Sentry Cocoa linker plugin active).
-
-## How can I contribute?
-As the project is open source, contributions are welcome! Just check out the repo, open Android Studio and create a Pull Request.
-
-For a walkthrough of the connection layers, sessions, live view, photo transfer, and coroutine
-lifetimes, start with the [Wi-Fi architecture guide](docs/wifi-architecture.md).
-
-If you wish to improve the translations, the project is also available on Weblate. Check it
-out [here](https://hosted.weblate.org/engage/alpha-gps/)
-
-This fork ships only English (`values/`) and Simplified Chinese (`values-zh-rCN/`) — do not add
-other language directories. Android APKs are arm64-only (`arm64-v8a`); 32-bit and x86 devices are
-not supported. The iOS app is disabled by default and currently carries an English baseline only
-(see [the iOS localization bridge](tools/ios_localization/README.md) for the tooling itself).
-
-If you want to contribute financially, consider supporting my work via [Buy Me A Coffee](https://buymeacoffee.com/wj8tism4dq)
-
-<a href="https://buymeacoffee.com/wj8tism4dq"><img width="244" height="54" alt="bmc-brand-logo" src="https://github.com/user-attachments/assets/59ffdcd5-d287-479f-b067-d97b67519691" /></a>
-
-
-## How does it work?
-
-### Associate the device
-- Make sure you grant the app the needed permissions. Background location is important so that the app runs properly when the phone is not in use.
-- Select Start and follow the instructions. Make sure bluetooth is turned on and the camera is in coupling mode (if it was not coupled before already, then this step is not neccesary). The app should prompt you to bond the device if needed.
-- After selecting the device, it should appear on the list of associated devices and will start transmitting the location data.
-- When turning off the camera, the transmission will stop. Once android realizes the device is gone, the service will also be destroyed, releasing any resources the app uses.
-- Check the logs if any issues are found and post them here.
-
-## It doesn't work!
-
-As always with Android, not all devices are created equal. Different manufacturers might implement Android features differently or even produce bugs while doing the customizations. For troubleshooting you can try the following steps.
-
-- Turn off the camera - wait one minute - turn it on again
-- Remove the association and try again (tap on the device on the main screen to get to this option)
-- Check if any battery optimizations are active (those shouldn't hurt the app, but one never knows). Also see https://dontkillmyapp.com for instructions
-- Use the "Always On" mode. In the device details screen (accessible by tapping the device name on the main screen), enable the "Always on" toggle. This will start a Foreground Service which will stay active as long as the option is enabled. This might potentially use more battery, but I have optimized it that it more or less idles when the camera is not connected. That means:
-   - No location data will be accessed
-   - No transmission of data is performed
-until the device is connected again (this will happen automatically once the camera is turned on again, no action required from your side!
-
-### Still no luck?
- - Feel free to open an issue here on Github and paste the logs if possible (accessible from the main screen by clicking on the icon with the three lines). I will take a look then
-
-## Which cameras are supported?
-
-Sony cameras that support Bluetooth location linking with Imaging Edge Mobile or Creators' App
-should work. GPS geotagging has been confirmed on these models:
+Sony cameras that support Bluetooth location linking with Imaging Edge Mobile or the Creators'
+App should work. GPS geotagging has been confirmed (by upstream user reports) on these models:
 
 - A1
 - [A7 III](https://github.com/Saschl/alpha-gps/issues/260)
@@ -130,23 +36,90 @@ should work. GPS geotagging has been confirmed on these models:
 - [A7R III](https://github.com/Saschl/alpha-gps/issues/95#issuecomment-5609520240) — enable
   **Location Info. Link** in the camera menu.
 - [A7R V](https://github.com/Saschl/alpha-gps/issues/199)
-- [A99 II](https://github.com/Saschl/alpha-gps/issues/294) — GPS confirmed; remote control, time
-  correction and area adjustment were disabled in the report.
+- [A99 II](https://github.com/Saschl/alpha-gps/issues/294) — GPS confirmed; time correction and
+  area adjustment were disabled in the report.
 - [A6400](https://github.com/Saschl/alpha-gps/issues/195)
-- [A6500](https://github.com/Saschl/alpha-gps/issues/301) — geotagging confirmed; other features are
-  limited by the camera's capabilities.
+- [A6500](https://github.com/Saschl/alpha-gps/issues/301) — geotagging confirmed; other features
+  are limited by the camera's capabilities.
 - [A6700](https://github.com/Saschl/alpha-gps/issues/294)
 - [ZV-1](https://github.com/Saschl/alpha-gps/issues/100)
 - [ZV-E10](https://github.com/Saschl/alpha-gps/issues/67#issuecomment-3678222970)
 
-These are user reports of geotagging, not a guarantee that every model supports remote shutter or
-all time-sync options. Wi-Fi-only models such as the
-[A6000](https://github.com/Saschl/alpha-gps/issues/236) cannot use Bluetooth geotagging. Reports are
-welcome, as I do not own all
-cameras! [Share your results](https://github.com/Saschl/alpha-gps/issues).
+These are user reports, not a guarantee. Wi-Fi-only models such as the
+[A6000](https://github.com/Saschl/alpha-gps/issues/236) cannot use Bluetooth geotagging.
+Reports are welcome — [share your results](https://github.com/mfreceiver/alpha-gps/issues).
 
+## Requirements
 
-<img width="242" height="512" alt="unnamed (1)" src="https://github.com/user-attachments/assets/0ee0e403-70a1-431c-bb68-99ddf03b95c3" />
+- Android 12 (API 31) or newer, **arm64-only** (`arm64-v8a`; no 32-bit or x86 support).
+- A Sony camera with Bluetooth location linking (see above) for GPS writing; camera Wi-Fi for
+  photo browse/download.
 
-<img width="242" height="512" alt="unnamed (3)" src="https://github.com/user-attachments/assets/7acf30f5-3bbd-4d66-a5c0-bd779c47ccc8" />
-<img width="242" height="512" alt="unnamed (4)" src="https://github.com/user-attachments/assets/60c69256-10be-4422-8864-525b146d174f" />
+## Build
+
+Initialize the pinned libheif / libde265 source submodules first (native builds use these local
+sources):
+
+```bash
+git submodule update --init --recursive
+```
+
+Then build the Android app:
+
+```bash
+./gradlew :app:assembleFossDebug
+```
+
+Other verification tasks are listed in [AGENTS.md](AGENTS.md). For releases (signed APKs, tags and
+Primary forge releases), see [`scripts/release_build.sh`](scripts/release_build.sh) — releasing is a manual,
+confirmed step.
+
+This fork ships only English (`values/`) and Simplified Chinese (`values-zh-rCN/`) — do not add
+other language directories.
+
+## iOS target is disabled
+
+This customization no longer ships iOS builds. The Gradle build does not register Apple targets;
+the switch lives in `gradle.properties` (`alphagps.enableIos=false`). The remaining iOS sources
+(`sharednew/src/iosMain`, `iosApp/`) are kept for potential future use; the Xcode project uses
+English/`Base` regions only, and `iosApp/alphagps/InfoPlist.xcstrings` still contains historical
+German translations that have not been cleaned up.
+
+## Source & acknowledgements
+
+This project is a fork of [Saschl/alpha-gps](https://github.com/Saschl/alpha-gps) (GPL-3.0),
+modified by **mfreceiver** since 2026-11. The license remains GPL-3.0.
+
+The upstream project itself built on:
+
+- [anoulis/sony_camera_bluetooth_external_gps](https://github.com/anoulis/sony_camera_bluetooth_external_gps) —
+  a Python script that got the Sony Bluetooth GPS protocol right.
+- [mlapaglia/AlphaSync](https://github.com/mlapaglia/AlphaSync) — insights into enabling the
+  functionality for devices that use the Sony Creators' App instead of Imaging Edge.
+
+If you would like to support the **original upstream author (Saschl)**, see their
+[Buy Me A Coffee](https://buymeacoffee.com/wj8tism4dq) page.
+
+**Source code:** [GitHub](https://github.com/mfreceiver/alpha-gps) ·
+[Primary forge](https://forge.example.com:443/owner/alphagps)
+
+**Feedback:** open an issue at either repository above.
+
+## Trademark disclaimer
+
+AlphaGPS is not affiliated with, endorsed by, or sponsored by Sony. “Sony” and “Alpha” are
+trademarks of Sony Group Corporation. This project is an independent tool that interoperates with
+Sony cameras.
+
+## Privacy
+
+AlphaGPS does not collect or upload any data. See [privacy.md](privacy.md).
+
+## 中文摘要
+
+AlphaGPS 是 [Saschl/alpha-gps](https://github.com/Saschl/alpha-gps)（GPL-3.0）的个人定制分支，
+由 mfreceiver 自 2026-11 起维护：通过蓝牙向索尼 Alpha 相机写入 GPS 位置与时间，并通过相机 Wi-Fi
+浏览、下载照片（按日期分组、多选/拖选、仅下载 JPG 或原始文件）。仅支持 Android 12+（arm64），
+不通过任何应用市场分发。应用不收集、不上传任何数据，详见 [privacy.md](privacy.md)。源码：
+[GitHub](https://github.com/mfreceiver/alpha-gps) ·
+[Primary forge](https://forge.example.com:443/owner/alphagps)；反馈请到两处仓库的 Issues。
