@@ -150,7 +150,7 @@ fun GlassBottomSheet(
                         )
                     }
                     Column(
-                        Modifier.verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
+                        Modifier.overlayFocusLevel().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
                         content = content,
                     )
                 }

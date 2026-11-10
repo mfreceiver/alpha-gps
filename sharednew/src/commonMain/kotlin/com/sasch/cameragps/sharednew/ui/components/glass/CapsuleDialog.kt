@@ -301,7 +301,8 @@ private fun CapsuleDialogPanel(
                 Spacer(Modifier.height(8.dp))
             }
             Column(
-                modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                // Own focus level: a focus return reaches the element inside the scrolling content.
+                modifier = Modifier.weight(1f, fill = false).overlayFocusLevel().verticalScroll(rememberScrollState()),
                 horizontalAlignment = horizontal,
             ) {
                 if (icon != null) {

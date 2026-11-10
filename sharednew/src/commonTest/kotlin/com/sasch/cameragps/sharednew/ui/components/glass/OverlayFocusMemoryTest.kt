@@ -283,6 +283,30 @@ class OverlayFocusMemoryTest {
         }
     }
 
+    // ---- orphans ----------------------------------------------------------------------------------
+
+    @Test
+    fun aStoredLayerThatIsNoLongerLiveIsClosedAtTheNextSettle() {
+        // A layer stored without a matching close (it left before its show was reported): the
+        // settle drops it and performs its return instead of keeping it until the host goes.
+        showOverPage("dialog")
+        assertEquals(FocusReturn.Saved, m.settle(emptyList()))
+        assertEquals(listOf("save page", "page"), r.calls)
+        assertEmpty()
+    }
+
+    @Test
+    fun orphansAboveALiveLayerHandTheirReturnDownTheStack() {
+        showOverPage("dialog")
+        showOver("dialog", "menu", anchor = r.anchor("dialog button", true))
+        showOver("menu", "confirm")
+        // menu and confirm are gone without closes; dialog is still up.
+        assertEquals(FocusReturn.Anchor, m.settle(listOf("dialog")))
+        assertEquals(1, m.depth)
+        assertFalse(m.hasPendingReturn)
+        assertEquals("dialog button", r.calls.last())
+    }
+
     // ---- which layers may take focus ------------------------------------------------------------
 
     @Test

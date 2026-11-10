@@ -35,8 +35,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
@@ -114,7 +112,7 @@ class GlassAnchorState {
     var bounds: Rect? by mutableStateOf(null)
         internal set
 
-    internal val focusRequester = FocusRequester()
+    internal val focusHandle = OverlayFocusHandle()
 }
 
 @Composable
@@ -125,7 +123,7 @@ fun rememberGlassAnchor(): GlassAnchorState = remember { GlassAnchorState() }
  * the focus return target — put it on the button that opens the popover.
  */
 fun Modifier.glassAnchor(state: GlassAnchorState): Modifier =
-    onGloballyPositioned { state.bounds = it.boundsInRoot() }.focusRequester(state.focusRequester)
+    onGloballyPositioned { state.bounds = it.boundsInRoot() }.overlayFocusTarget(state.focusHandle)
 
 /**
  * Full-size overlay box that places its single child next to [anchor] via [popoverPosition]. It
@@ -201,7 +199,7 @@ fun GlassPopover(
 ) {
     val host = LocalGlassOverlayHost.current ?: return
     if (!expanded) return
-    GlassOverlay(host, returnFocus = anchor.focusRequester) {
+    GlassOverlay(host, returnFocus = anchor.focusHandle) {
         NavigationBackHandler(
             state = rememberNavigationEventState(NavigationEventInfo.None),
             isBackEnabled = true,
@@ -232,7 +230,7 @@ fun GlassPopover(
                     shape = AlphaShapes.popover,
                 ) {
                     Column(
-                        Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()).padding(vertical = 8.dp),
+                        Modifier.heightIn(max = 420.dp).overlayFocusLevel().verticalScroll(rememberScrollState()).padding(vertical = 8.dp),
                         content = content,
                     )
                 }
