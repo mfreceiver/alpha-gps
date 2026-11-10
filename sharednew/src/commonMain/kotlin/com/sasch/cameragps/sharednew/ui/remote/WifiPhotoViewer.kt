@@ -1,292 +1,328 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
-import com.sasch.cameragps.sharednew.remote.wifi.formatLabel
-import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.draw.alpha
-import androidx.compose.foundation.clickable
-import androidx.compose.material3.Button
-import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
-import cameragps.sharednew.generated.resources.wifi_remote_photo_captured
-import cameragps.sharednew.generated.resources.wifi_remote_photo_close
-import cameragps.sharednew.generated.resources.wifi_remote_download_too_large
-import cameragps.sharednew.generated.resources.wifi_remote_download_saved
-import cameragps.sharednew.generated.resources.wifi_remote_download
-import cameragps.sharednew.generated.resources.wifi_remote_viewer_next_photo
-import cameragps.sharednew.generated.resources.wifi_remote_viewer_previous_photo
-import cameragps.sharednew.generated.resources.chevron_right_24px
-import cameragps.sharednew.generated.resources.chevron_left_24px
 import cameragps.sharednew.generated.resources.arrow_back_24px
+import cameragps.sharednew.generated.resources.check_24px
+import cameragps.sharednew.generated.resources.download_24px
+import cameragps.sharednew.generated.resources.m7_viewer_download_format
+import cameragps.sharednew.generated.resources.m7_viewer_downloading
+import cameragps.sharednew.generated.resources.m7_viewer_file_size
+import cameragps.sharednew.generated.resources.m7_viewer_filmstrip_item
+import cameragps.sharednew.generated.resources.m7_viewer_histogram
+import cameragps.sharednew.generated.resources.m7_viewer_lens
+import cameragps.sharednew.generated.resources.m7_viewer_metadata_loading
+import cameragps.sharednew.generated.resources.m7_viewer_only_format
+import cameragps.sharednew.generated.resources.m7_viewer_other_transfer
+import cameragps.sharednew.generated.resources.m7_viewer_selected_count
+import cameragps.sharednew.generated.resources.m7_viewer_shooting_params
+import cameragps.sharednew.generated.resources.mw_lock_24px
+import cameragps.sharednew.generated.resources.mw_protected
+import cameragps.sharednew.generated.resources.wifi_remote_batch_progress
 import cameragps.sharednew.generated.resources.wifi_remote_browser_empty
 import cameragps.sharednew.generated.resources.wifi_remote_browser_failed
 import cameragps.sharednew.generated.resources.wifi_remote_browser_loading
 import cameragps.sharednew.generated.resources.wifi_remote_browser_title
+import cameragps.sharednew.generated.resources.wifi_remote_conversion_failed
+import cameragps.sharednew.generated.resources.wifi_remote_converting_jpeg
+import cameragps.sharednew.generated.resources.wifi_remote_download
+import cameragps.sharednew.generated.resources.wifi_remote_download_saved
+import cameragps.sharednew.generated.resources.wifi_remote_download_too_large
+import cameragps.sharednew.generated.resources.wifi_remote_photo_no_jpg
 import cameragps.sharednew.generated.resources.wifi_remote_preview_unavailable
+import cameragps.sharednew.generated.resources.wifi_remote_storage_permission
 import cameragps.sharednew.generated.resources.wifi_remote_transfer_cancel
+import cameragps.sharednew.generated.resources.wifi_remote_transfer_cancelled
+import cameragps.sharednew.generated.resources.wifi_remote_transfer_failed
+import cameragps.sharednew.generated.resources.wifi_remote_transfer_failed_catalog_changed
+import cameragps.sharednew.generated.resources.wifi_remote_transfer_failed_protocol
+import cameragps.sharednew.generated.resources.wifi_remote_transfer_failed_storage
+import cameragps.sharednew.generated.resources.wifi_remote_transfer_failed_timeout
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_back
-import cameragps.sharednew.generated.resources.wifi_remote_viewer_position
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_deselect
+import cameragps.sharednew.generated.resources.wifi_remote_viewer_position
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_retry
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_select
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_transfer_wait
+import com.sasch.cameragps.sharednew.remote.wifi.PhotoMetadataState
+import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
-import com.sasch.cameragps.sharednew.remote.wifi.planDownloads
+import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferState
+import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
+import com.sasch.cameragps.sharednew.remote.wifi.WifiTransferFailureReason
+import com.sasch.cameragps.sharednew.remote.wifi.formatByteSize
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassFloatingBar
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSurface
+import com.sasch.cameragps.sharednew.ui.components.glass.InfoTag
+import com.sasch.cameragps.sharednew.ui.components.glass.InfoTagStyle
+import com.sasch.cameragps.sharednew.ui.components.glass.LocalGlassBackdrop
+import com.sasch.cameragps.sharednew.ui.components.glass.glassSource
+import com.sasch.cameragps.sharednew.ui.components.glass.rememberGlassBackdrop
+import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.CameraGpsTheme
+import com.sasch.cameragps.sharednew.ui.theme.GlassLevel
+import com.sasch.cameragps.sharednew.ui.theme.LocalGlassRenderMode
+import com.sasch.cameragps.sharednew.ui.theme.WindowClass
+import com.sasch.cameragps.sharednew.ui.theme.currentWindowClass
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
+/** Width of the details panel of the near-square (B) and landscape (C) layouts (design page 21). */
+private val DetailsPanelWidth = 360.dp
+
+/** Info strip width caps: portrait / foldable never stretches it across a wide window. */
+private val PortraitStripMaxWidth = 560.dp
+private val WideStripMaxWidth = 420.dp
+
+private val StripShape = RoundedCornerShape(20.dp)
+private val FilmstripCell = 40.dp
+private val FilmstripShape = RoundedCornerShape(6.dp)
+private val WhiteSoft = Color.White.copy(alpha = 0.72f)
+
+/**
+ * Full-screen viewer of the open day (design v3 pages 20–21): top bar (name, capture time, k / N),
+ * status tags, the photo pager, the translucent info strip (format · resolution · the one file size,
+ * plus the optional parameter / lens / histogram blocks of [infoOptions]), the filmstrip, the single
+ * download button and the selection check box. Always dark. Layout follows [currentWindowClass]:
+ * A portrait = chrome above / below the photo; B near-square and C landscape = photo left and a
+ * details panel on the right carrying the optional blocks and the download button.
+ */
 @Composable
 internal fun WifiPhotoViewer(
     state: WifiRemoteState,
     viewModel: WifiRemoteViewModel,
     onDownload: (List<WifiPhotoDownload>) -> Unit,
     defaultDownloadFormatJpeg: Boolean = false,
+    infoOptions: ViewerInfoOptions = ViewerInfoOptions(),
 ) {
     val browser = state.photoBrowser
+    val transfer = state.imageTransfer
     val policy = WifiFormatPolicy.of(defaultDownloadFormatJpeg)
     val captures = remember(browser.photos) { groupCameraPhotos(browser.photos) }
     val controller = viewModel.controller
     val thumbnails by controller.thumbnails.collectAsState()
-    val preview by viewModel.controller.photoPreview.collectAsState()
+    val preview by controller.photoPreview.collectAsState()
+    val metadataState by controller.metadata.collectAsState()
     DisposableEffect(viewModel) {
-        onDispose { viewModel.controller.clearPhotoPreview(viewModel.identifier) }
-    }
-    key(browser.offset) {
-        val preceding = if (browser.offset > 0) 1 else 0
-        val count = captures.size + preceding + if (browser.hasMore) 1 else 0
-        val initialPage =
-            ((viewModel.viewedPhotoIndex ?: browser.offset) - browser.offset + preceding)
-                .coerceIn(0, maxOf(0, count - 1))
-        val pager = rememberPagerState(initialPage = initialPage) { count }
-        val scope = rememberCoroutineScope()
-        val current = captures.getOrNull(pager.currentPage - preceding)
-        val index = browser.offset + pager.currentPage - preceding
-        val changingPage = browser.loading && (viewModel.viewedPhotoIndex ?: browser.offset) !in
-                browser.offset until browser.offset + captures.size
-
-        // Date pages fetch thumbnails on demand only: the viewer wants the one on screen (the
-        // placeholder behind its preview) and its neighbours ready for the next swipe.
-        if (browser.grouped) LaunchedEffect(pager.currentPage, browser.pageRevision, captures) {
-            val shown = pager.currentPage - preceding
-            controller.requestThumbnails(
-                viewModel.identifier, browser.pageRevision,
-                listOfNotNull(captures.getOrNull(shown)?.id),
-                listOfNotNull(captures.getOrNull(shown + 1)?.id, captures.getOrNull(shown - 1)?.id)
-            )
+        onDispose {
+            controller.clearPhotoPreview(viewModel.identifier)
+            // Closing (Back, the back arrow, disconnect) stops any pending EXIF read.
+            viewModel.stopViewerMetadata()
         }
-        LaunchedEffect(
-            pager.settledPage,
-            browser.loading,
-            browser.failed,
-            state.imageTransfer.busy
-        ) {
-            if (captures.isNotEmpty()) {
-                val settledIndex = pager.settledPage - preceding
-                if (settledIndex in captures.indices || !browser.failed) {
-                    viewModel.viewPhotoAt(browser.offset + settledIndex)
+    }
+    // Basic metadata is free; the extended read only runs for the parameter / lens blocks. Re-asked
+    // after every settled swipe (the controller cancels the previous read) and after a download,
+    // which interrupts a pending read.
+    val needsExtended = viewerNeedsExtendedMetadata(infoOptions)
+    LaunchedEffect(viewModel.viewedPhotoIndex, needsExtended, browser.pageRevision, transfer.busy) {
+        if (!transfer.busy) viewModel.showViewerMetadata(infoOptions)
+    }
+    CameraGpsTheme(darkTheme = true, glassRenderMode = LocalGlassRenderMode.current) {
+        key(browser.offset) {
+            val preceding = if (browser.offset > 0) 1 else 0
+            val count = captures.size + preceding + if (browser.hasMore) 1 else 0
+            val initialPage =
+                ((viewModel.viewedPhotoIndex ?: browser.offset) - browser.offset + preceding)
+                    .coerceIn(0, maxOf(0, count - 1))
+            val pager = rememberPagerState(initialPage = initialPage) { count }
+            val filmstrip = rememberLazyListState(
+                initialFirstVisibleItemIndex = (initialPage - preceding - 2).coerceAtLeast(0)
+            )
+            val scope = rememberCoroutineScope()
+            val currentIndex = pager.currentPage - preceding
+            val current = captures.getOrNull(currentIndex)
+            val changingPage = browser.loading && (viewModel.viewedPhotoIndex ?: browser.offset) !in
+                    browser.offset until browser.offset + captures.size
+            // Swiping and the filmstrip are locked while a download runs (design page 21 ⑥).
+            val navigationEnabled = !changingPage && !transfer.busy
+
+            // Thumbnails on demand: the shown capture, the visible filmstrip and a small margin —
+            // never the whole day (the grid's loader and LRU cache serve them).
+            if (browser.grouped) LaunchedEffect(captures, browser.pageRevision) {
+                snapshotFlow {
+                    val visible = filmstrip.layoutInfo.visibleItemsInfo
+                    (pager.currentPage - preceding) to
+                            if (visible.isEmpty()) IntRange.EMPTY else visible.first().index..visible.last().index
+                }.distinctUntilChanged().collect { (shown, visible) ->
+                    val (now, margin) = filmstripThumbnailDemand(shown, visible, captures.size)
+                    controller.requestThumbnails(
+                        viewModel.identifier, browser.pageRevision,
+                        now.map { captures[it].id }, margin.map { captures[it].id },
+                    )
                 }
             }
-        }
-        PhotoViewerTheme {
-            Column(
-                Modifier.fillMaxSize().background(Color.Black)
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    IconButton(onClick = viewModel::closePhoto) {
-                        Icon(
-                            painterResource(Res.drawable.arrow_back_24px),
-                            contentDescription = stringResource(Res.string.wifi_remote_viewer_back),
-                            tint = Color.White
-                        )
+            LaunchedEffect(pager.settledPage, browser.loading, browser.failed, transfer.busy) {
+                if (captures.isNotEmpty()) {
+                    val settledIndex = pager.settledPage - preceding
+                    if (settledIndex in captures.indices || !browser.failed) {
+                        viewModel.viewPhotoAt(browser.offset + settledIndex)
                     }
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            current?.name ?: stringResource(Res.string.wifi_remote_browser_title),
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        // The capture time that used to sit in the details sheet.
-                        val capturedAt = current?.preview?.capturedAt.orEmpty()
-                        if (capturedAt.isNotBlank()) Text(
-                            stringResource(
-                                Res.string.wifi_remote_photo_captured,
-                                capturedAt.replace('T', ' ')
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    if (current != null) Text(
-                        stringResource(
-                            Res.string.wifi_remote_viewer_position,
-                            index + 1, browser.totalObjects
-                        ), style = MaterialTheme.typography.labelLarge
+                }
+            }
+            LaunchedEffect(currentIndex) {
+                if (currentIndex in captures.indices) {
+                    val visible = filmstrip.layoutInfo.visibleItemsInfo
+                    val inView = visible.isNotEmpty() &&
+                            currentIndex in (visible.first().index + 1) until visible.last().index
+                    if (!inView) filmstrip.animateScrollToItem((currentIndex - 2).coerceAtLeast(0))
+                }
+            }
+
+            val shownPreview = preview?.takeIf { it.handle == current?.preview?.handle }
+            val shownImage = shownPreview?.image ?: current?.let { thumbnails[it.thumbnail.handle] }
+            var histogram by remember { mutableStateOf<FloatArray?>(null) }
+            LaunchedEffect(shownImage, infoOptions.showHistogram) {
+                histogram = null
+                val image = shownImage
+                if (infoOptions.showHistogram && image != null) {
+                    // Down-sampled and off the main thread: a preview can be several megapixels.
+                    histogram = withContext(Dispatchers.Default) { image.luminanceHistogram() }
+                }
+            }
+            val info = current?.let { viewerInfoStrip(it, policy, metadataState, infoOptions) }
+            val download = current?.let {
+                viewerDownloadState(it, policy, browser.savedDownloads, transfer, browser.loading)
+            }
+            val selected = current != null && viewModel.isPhotoSelected(current.id)
+            val parts = ViewerParts(
+                title = current?.name ?: stringResource(Res.string.wifi_remote_browser_title),
+                capturedAt = current?.let { viewerCaptureTimeText(it.preview.capturedAt) },
+                position = current?.let {
+                    stringResource(
+                        Res.string.wifi_remote_viewer_position,
+                        browser.offset + currentIndex + 1,
+                        viewerPositionTotal(browser.grouped, captures.size, browser.totalObjects),
                     )
-                    if (current != null) {
-                        // Select/deselect without leaving the viewer; the grid sees the same
-                        // selection set when the viewer closes. Same gating as the grid tiles.
-                        val isSelected = current.id in viewModel.selectedPhotoIds
-                        val toggleLabel = stringResource(
-                            if (isSelected) Res.string.wifi_remote_viewer_deselect
-                            else Res.string.wifi_remote_viewer_select
-                        )
-                        IconButton(
-                            onClick = { viewModel.togglePhotoSelection(current.id) },
-                            enabled = !browser.loading && !state.imageTransfer.busy,
-                            modifier = Modifier.semantics {
-                                contentDescription = toggleLabel
-                                selected = isSelected
-                            },
-                        ) {
-                            SelectionCheck(isSelected)
-                        }
-                    }
-                }
-                if (captures.isEmpty()) {
-                    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text(stringResource(Res.string.wifi_remote_browser_empty))
-                    }
-                } else HorizontalPager(
-                    state = pager, modifier = Modifier.weight(1f).fillMaxWidth(),
-                    userScrollEnabled = !changingPage,
-                    key = { page -> captures.getOrNull(page - preceding)?.id ?: "boundary:$page" },
-                ) { page ->
-                    val capture = captures.getOrNull(page - preceding)
-                    val screenPreview = preview?.takeIf { it.handle == capture?.preview?.handle }
-                    val image =
-                        screenPreview?.image ?: capture?.let { thumbnails[it.thumbnail.handle] }
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        when {
-                            capture == null -> Column(
-                                Modifier.padding(24.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                when {
-                                    browser.failed -> {
-                                        Text(stringResource(Res.string.wifi_remote_browser_failed))
-                                        TextButton(
-                                            onClick = { viewModel.viewPhotoAt(browser.offset + page - preceding) },
-                                            enabled = !browser.loading && !state.imageTransfer.busy
-                                        ) {
-                                            Text(stringResource(Res.string.wifi_remote_viewer_retry))
-                                        }
-                                    }
-
-                                    state.imageTransfer.busy -> Text(stringResource(Res.string.wifi_remote_viewer_transfer_wait))
-                                    else -> {
-                                        CircularProgressIndicator(color = Color.White)
-                                        Text(stringResource(Res.string.wifi_remote_browser_loading))
-                                    }
-                                }
-                            }
-
-                            image != null -> Image(
-                                image, contentDescription = capture.name,
-                                modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit
-                            )
-
-                            browser.loading || screenPreview?.loading == true -> CircularProgressIndicator(
-                                color = Color.White
-                            )
-                            else -> Text(stringResource(Res.string.wifi_remote_preview_unavailable))
-                        }
-                    }
-                }
-                Column(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    PhotoTransferStatus(state.imageTransfer)
-                    if (state.imageTransfer.busy || browser.loading) {
-                        TextButton(onClick = { viewModel.controller.cancelPhotoOperation(viewModel.identifier) }) {
-                            Text(stringResource(Res.string.wifi_remote_transfer_cancel))
-                        }
-                    }
-                }
-                Row(
-                    Modifier.fillMaxWidth().padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    IconButton(
-                        onClick = { scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } },
-                        enabled = pager.currentPage > 0 && !changingPage && !pager.isScrollInProgress
-                    ) {
-                        Icon(
-                            painterResource(Res.drawable.chevron_left_24px),
-                            contentDescription = stringResource(Res.string.wifi_remote_viewer_previous_photo)
-                        )
-                    }
-                    // The download is right here — no details page in between.
-                    PhotoDownloadAction(
-                        plan = current?.let { planDownloads(listOf(it), policy, browser.savedDownloads) },
-                        state = state,
-                        onDownload = { downloads -> viewModel.downloadSingleCapture(downloads, onDownload) },
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(
-                        onClick = { scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } },
-                        enabled = pager.currentPage < count - 1 && !changingPage && !pager.isScrollInProgress
-                    ) {
-                        Icon(
-                            painterResource(Res.drawable.chevron_right_24px),
-                            contentDescription = stringResource(Res.string.wifi_remote_viewer_next_photo)
-                        )
+                },
+                isProtected = info?.isProtected == true,
+                selectedCount = viewModel.selectedPhotoIds.size,
+                info = info,
+                histogram = histogram,
+                download = download,
+                transfer = transfer,
+                selected = selected,
+                selectEnabled = current != null && !browser.loading && !transfer.busy,
+                onBack = viewModel::closePhoto,
+                onToggleSelected = { value -> current?.let { viewModel.setPhotoSelected(it.id, value) } },
+                onDownload = { downloads -> viewModel.downloadSingleCapture(downloads, onDownload) },
+                onCancel = { controller.cancelPhotoOperation(viewModel.identifier) },
+            )
+            val backdrop = rememberGlassBackdrop()
+            val photo: @Composable (Modifier) -> Unit = { modifier ->
+                ViewerPager(
+                    pager = pager,
+                    captures = captures,
+                    preceding = preceding,
+                    state = state,
+                    previewImage = { capture ->
+                        preview?.takeIf { it.handle == capture.preview.handle }?.image
+                            ?: thumbnails[capture.thumbnail.handle]
+                    },
+                    previewLoading = { capture ->
+                        preview?.takeIf { it.handle == capture.preview.handle }?.loading == true
+                    },
+                    userScrollEnabled = navigationEnabled,
+                    onRetry = { page -> viewModel.viewPhotoAt(browser.offset + page - preceding) },
+                    modifier = modifier.glassSource(backdrop),
+                )
+            }
+            val strip: @Composable (Modifier, Boolean) -> Unit = { modifier, extras ->
+                parts.info?.let { ViewerInfoStripBar(it, parts.histogram, extras, modifier) }
+            }
+            val film: @Composable (Modifier) -> Unit = { modifier ->
+                ViewerFilmstrip(
+                    captures = captures,
+                    thumbnails = thumbnails,
+                    current = currentIndex,
+                    enabled = navigationEnabled,
+                    state = filmstrip,
+                    onSelect = { index -> scope.launch { pager.animateScrollToPage(index + preceding) } },
+                    modifier = modifier,
+                )
+            }
+            CompositionLocalProvider(LocalGlassBackdrop provides backdrop) {
+                Box(Modifier.fillMaxSize().background(Color.Black)) {
+                    when (currentWindowClass()) {
+                        WindowClass.Portrait -> PortraitViewer(parts, photo, strip, film)
+                        WindowClass.NearSquare -> WideViewer(parts, photo, strip, film, landscape = false)
+                        WindowClass.Landscape -> WideViewer(parts, photo, strip, film, landscape = true)
                     }
                 }
             }
@@ -294,21 +330,551 @@ internal fun WifiPhotoViewer(
     }
 }
 
-private val PhotoViewerColors = darkColorScheme(
-    primary = Color.White,
-    onPrimary = Color.Black,
-    background = Color.Black,
-    onBackground = Color.White,
-    surface = Color.Black,
-    onSurface = Color.White,
+/** Everything the three layouts place; built once per composition by [WifiPhotoViewer]. */
+private class ViewerParts(
+    val title: String,
+    val capturedAt: String?,
+    val position: String?,
+    val isProtected: Boolean,
+    val selectedCount: Int,
+    val info: ViewerInfoStrip?,
+    val histogram: FloatArray?,
+    val download: ViewerDownloadState?,
+    val transfer: WifiImageTransferState,
+    val selected: Boolean,
+    val selectEnabled: Boolean,
+    val onBack: () -> Unit,
+    val onToggleSelected: (Boolean) -> Unit,
+    val onDownload: (List<WifiPhotoDownload>) -> Unit,
+    val onCancel: () -> Unit,
 )
 
+/** A — tall portrait: top bar + status tags, photo with the strip over its bottom, filmstrip, actions. */
 @Composable
-private fun PhotoViewerTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = PhotoViewerColors) {
-        CompositionLocalProvider(
-            LocalContentColor provides PhotoViewerColors.onSurface,
-            content = content
+private fun PortraitViewer(
+    parts: ViewerParts,
+    photo: @Composable (Modifier) -> Unit,
+    strip: @Composable (Modifier, Boolean) -> Unit,
+    film: @Composable (Modifier) -> Unit,
+) {
+    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+        ViewerTopBar(parts)
+        ViewerStatusTags(parts, Modifier.padding(start = 16.dp, bottom = 4.dp))
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            photo(Modifier.fillMaxSize())
+            strip(
+                Modifier.align(Alignment.BottomCenter).padding(horizontal = 12.dp, vertical = 8.dp)
+                    .widthIn(max = PortraitStripMaxWidth).fillMaxWidth(),
+                true,
+            )
+        }
+        film(Modifier.fillMaxWidth().padding(top = 4.dp))
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Spacer(Modifier.size(48.dp))
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { ViewerDownloadArea(parts) }
+            ViewerSelectionToggle(parts)
+        }
+    }
+}
+
+/**
+ * B near-square (photo yields width to a 360 dp details panel; strip bottom-left, filmstrip its own
+ * row) and C landscape (top bar over the photo with the tags merged into it; strip and filmstrip
+ * share the bottom row). The panel carries the optional blocks, the download button and the check box.
+ */
+@Composable
+private fun WideViewer(
+    parts: ViewerParts,
+    photo: @Composable (Modifier) -> Unit,
+    strip: @Composable (Modifier, Boolean) -> Unit,
+    film: @Composable (Modifier) -> Unit,
+    landscape: Boolean,
+) {
+    BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+        val panelWidth: Dp = minOf(DetailsPanelWidth, maxWidth * 0.45f)
+        Row(Modifier.fillMaxSize()) {
+            Column(Modifier.weight(1f).fillMaxHeight()) {
+                if (landscape) {
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        photo(Modifier.fillMaxSize())
+                        ViewerTopBar(parts, Modifier.align(Alignment.TopStart)) {
+                            ViewerStatusTags(parts)
+                        }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        strip(Modifier.weight(1f).widthIn(max = WideStripMaxWidth), false)
+                        film(Modifier.weight(1f))
+                    }
+                } else {
+                    ViewerTopBar(parts)
+                    ViewerStatusTags(parts, Modifier.padding(start = 16.dp, bottom = 4.dp))
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        photo(Modifier.fillMaxSize())
+                        strip(
+                            Modifier.align(Alignment.BottomStart).padding(12.dp)
+                                .widthIn(max = WideStripMaxWidth).fillMaxWidth(),
+                            false,
+                        )
+                    }
+                    film(Modifier.fillMaxWidth().padding(vertical = 6.dp))
+                }
+            }
+            ViewerDetailsPanel(parts, Modifier.width(panelWidth).fillMaxHeight().padding(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun ViewerTopBar(
+    parts: ViewerParts,
+    modifier: Modifier = Modifier,
+    trailing: @Composable () -> Unit = {},
+) {
+    Row(
+        modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        GlassIconButton(
+            painterResource(Res.drawable.arrow_back_24px),
+            contentDescription = stringResource(Res.string.wifi_remote_viewer_back),
+            onClick = parts.onBack,
+            // Round GV glass keeps the arrow legible where the bar lies over the photo (layout C).
+            container = GlassLevel.Viewer,
         )
+        Column(Modifier.weight(1f)) {
+            Text(
+                parts.title, color = Color.White, style = MaterialTheme.typography.titleMedium,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            parts.capturedAt?.let {
+                Text(
+                    it, color = WhiteSoft, style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        trailing()
+        parts.position?.let { Text(it, color = WhiteSoft, style = MaterialTheme.typography.labelLarge) }
+    }
+}
+
+/** Status tags: protection (lock) and the shared selection count. Informational, not clickable. */
+@Composable
+private fun ViewerStatusTags(parts: ViewerParts, modifier: Modifier = Modifier) {
+    if (!parts.isProtected && parts.selectedCount == 0) return
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (parts.isProtected) InfoTag(
+            stringResource(Res.string.mw_protected), style = InfoTagStyle.OnPhoto,
+            icon = painterResource(Res.drawable.mw_lock_24px),
+        )
+        if (parts.selectedCount > 0) InfoTag(
+            stringResource(Res.string.m7_viewer_selected_count, parts.selectedCount), style = InfoTagStyle.OnPhoto,
+        )
+    }
+}
+
+@Composable
+private fun ViewerPager(
+    pager: PagerState,
+    captures: List<WifiCameraCapture>,
+    preceding: Int,
+    state: WifiRemoteState,
+    previewImage: (WifiCameraCapture) -> ImageBitmap?,
+    previewLoading: (WifiCameraCapture) -> Boolean,
+    userScrollEnabled: Boolean,
+    onRetry: (Int) -> Unit,
+    modifier: Modifier,
+) {
+    val browser = state.photoBrowser
+    if (captures.isEmpty()) {
+        Box(modifier, contentAlignment = Alignment.Center) {
+            Text(stringResource(Res.string.wifi_remote_browser_empty), color = Color.White)
+        }
+        return
+    }
+    HorizontalPager(
+        state = pager, modifier = modifier,
+        userScrollEnabled = userScrollEnabled,
+        key = { page -> captures.getOrNull(page - preceding)?.id ?: "boundary:$page" },
+    ) { page ->
+        val capture = captures.getOrNull(page - preceding)
+        val image = capture?.let(previewImage)
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            when {
+                // Page boundaries of the legacy flat browser only; a day is complete.
+                capture == null -> Column(
+                    Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    when {
+                        browser.failed -> {
+                            Text(stringResource(Res.string.wifi_remote_browser_failed), color = Color.White)
+                            CapsuleButton(
+                                text = stringResource(Res.string.wifi_remote_viewer_retry),
+                                onClick = { onRetry(page) },
+                                role = CapsuleRole.Secondary,
+                                enabled = !browser.loading && !state.imageTransfer.busy,
+                            )
+                        }
+                        state.imageTransfer.busy ->
+                            Text(stringResource(Res.string.wifi_remote_viewer_transfer_wait), color = Color.White)
+                        else -> {
+                            CircularProgressIndicator(color = Color.White)
+                            Text(stringResource(Res.string.wifi_remote_browser_loading), color = Color.White)
+                        }
+                    }
+                }
+                // Bitmaps arrive already upright (EXIF orientation applied at decode).
+                image != null -> Image(
+                    image, contentDescription = capture.name,
+                    modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit,
+                )
+                browser.loading || previewLoading(capture) -> CircularProgressIndicator(color = Color.White)
+                else -> Text(stringResource(Res.string.wifi_remote_preview_unavailable), color = Color.White)
+            }
+        }
+    }
+}
+
+/** Translucent info strip: format · resolution · size, plus the optional blocks when [showExtras]. */
+@Composable
+private fun ViewerInfoStripBar(
+    info: ViewerInfoStrip,
+    histogram: FloatArray?,
+    showExtras: Boolean,
+    modifier: Modifier,
+) {
+    GlassSurface(
+        modifier = modifier, level = GlassLevel.Viewer, shape = StripShape,
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            ViewerBasicLine(info)
+            if (showExtras) ViewerCompactExtras(info, histogram)
+        }
+    }
+}
+
+@Composable
+private fun ViewerBasicLine(info: ViewerInfoStrip) {
+    val sizeLabel = stringResource(Res.string.m7_viewer_file_size)
+    val size = formatByteSize(info.sizeBytes)
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        val format = info.formatText
+        if (format != null) InfoTag(
+            if (info.noJpeg) stringResource(Res.string.m7_viewer_only_format, format) else format,
+            style = InfoTagStyle.OnPhoto,
+            contentColor = if (info.noJpeg) AlphaTheme.colors.warning else Color.Unspecified,
+        )
+        info.resolutionText?.let {
+            Text(it, color = WhiteSoft, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+        }
+        Spacer(Modifier.weight(1f))
+        Text(
+            size, color = Color.White, style = MaterialTheme.typography.labelLarge, maxLines = 1,
+            modifier = Modifier.semantics { contentDescription = "$sizeLabel $size" },
+        )
+    }
+}
+
+/** Parameter / lens rows with the histogram on their right (full width when it is alone). */
+@Composable
+private fun ViewerCompactExtras(info: ViewerInfoStrip, histogram: FloatArray?) {
+    val hasText = info.extras != ViewerExtrasState.None
+    val graph = histogram?.takeIf { info.showHistogram }
+    if (!hasText && graph == null) return
+    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (hasText) Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            ViewerExtrasText(info)
+        }
+        if (graph != null) HistogramGraph(
+            graph,
+            if (hasText) Modifier.width(92.dp).height(36.dp) else Modifier.weight(1f).height(30.dp),
+        )
+    }
+}
+
+@Composable
+private fun ViewerExtrasText(info: ViewerInfoStrip) {
+    when (info.extras) {
+        ViewerExtrasState.Loading -> {
+            val loading = stringResource(Res.string.m7_viewer_metadata_loading)
+            Column(
+                Modifier.semantics { contentDescription = loading },
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                PlaceholderBar(Modifier.fillMaxWidth(0.8f))
+                PlaceholderBar(Modifier.fillMaxWidth(0.5f))
+            }
+        }
+        ViewerExtrasState.Ready -> {
+            info.exifParams?.let {
+                Text(it, color = Color.White, style = MaterialTheme.typography.labelMedium, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis)
+            }
+            info.lens?.let {
+                Text(it, color = WhiteSoft, style = MaterialTheme.typography.labelSmall, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis)
+            }
+        }
+        ViewerExtrasState.None -> Unit
+    }
+}
+
+@Composable
+private fun PlaceholderBar(modifier: Modifier) {
+    Box(modifier.height(10.dp).clip(RoundedCornerShape(5.dp)).background(Color.White.copy(alpha = 0.14f)))
+}
+
+@Composable
+private fun HistogramGraph(bins: FloatArray, modifier: Modifier) {
+    val label = stringResource(Res.string.m7_viewer_histogram)
+    Canvas(modifier.semantics { contentDescription = label }) {
+        if (bins.isEmpty()) return@Canvas
+        val barWidth = size.width / bins.size
+        bins.forEachIndexed { index, value ->
+            val h = value.coerceIn(0f, 1f) * size.height
+            if (h > 0f) drawRect(
+                color = Color.White.copy(alpha = 0.7f),
+                topLeft = Offset(index * barWidth, size.height - h),
+                size = Size(barWidth, h),
+            )
+        }
+    }
+}
+
+/** Right-hand panel of the B / C layouts: optional blocks on top, download and check box below. */
+@Composable
+private fun ViewerDetailsPanel(parts: ViewerParts, modifier: Modifier) {
+    GlassSurface(
+        modifier = modifier, level = GlassLevel.Viewer, shape = AlphaShapes.card,
+        contentPadding = PaddingValues(16.dp),
+    ) {
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                val info = parts.info
+                if (info != null) ViewerPanelExtras(info, parts.histogram)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { ViewerDownloadArea(parts) }
+                ViewerSelectionToggle(parts)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.ViewerPanelExtras(info: ViewerInfoStrip, histogram: FloatArray?) {
+    when (info.extras) {
+        ViewerExtrasState.Loading -> PanelBlock(stringResource(Res.string.m7_viewer_shooting_params)) {
+            ViewerExtrasText(info)
+        }
+        ViewerExtrasState.Ready -> {
+            info.exifParams?.let { params ->
+                PanelBlock(stringResource(Res.string.m7_viewer_shooting_params)) {
+                    Text(params, color = Color.White, style = AlphaTextStyles.statusValue)
+                }
+            }
+            info.lens?.let { lens ->
+                PanelBlock(stringResource(Res.string.m7_viewer_lens)) {
+                    Text(lens, color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+        ViewerExtrasState.None -> Unit
+    }
+    val graph = histogram?.takeIf { info.showHistogram }
+    if (graph != null) PanelBlock(stringResource(Res.string.m7_viewer_histogram)) {
+        HistogramGraph(graph, Modifier.fillMaxWidth().height(72.dp))
+    }
+}
+
+@Composable
+private fun PanelBlock(label: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, color = WhiteSoft, style = AlphaTextStyles.statusLabel)
+        content()
+    }
+}
+
+/** The one download button and what it needs around it (hint, last result, progress capsule). */
+@Composable
+private fun ViewerDownloadArea(parts: ViewerParts) {
+    val download = parts.download ?: return
+    val transfer = parts.transfer
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        val hint = when (download.phase) {
+            ViewerDownloadPhase.NoJpeg -> stringResource(Res.string.wifi_remote_photo_no_jpg)
+            ViewerDownloadPhase.OtherTransfer -> stringResource(Res.string.m7_viewer_other_transfer)
+            ViewerDownloadPhase.TooLarge -> stringResource(Res.string.wifi_remote_download_too_large)
+            else -> viewerTransferNotice(transfer)
+        }
+        hint?.let {
+            Text(
+                it, style = MaterialTheme.typography.bodySmall,
+                color = if (download.phase == ViewerDownloadPhase.Ready) AlphaTheme.colors.error else WhiteSoft,
+            )
+        }
+        when (download.phase) {
+            ViewerDownloadPhase.Downloading -> DownloadProgressCapsule(transfer, parts.onCancel)
+            ViewerDownloadPhase.Saved -> CapsuleButton(
+                text = stringResource(Res.string.wifi_remote_download_saved), onClick = {},
+                icon = painterResource(Res.drawable.check_24px), enabled = false,
+            )
+            ViewerDownloadPhase.NoJpeg -> CapsuleButton(
+                text = stringResource(Res.string.m7_viewer_download_format, download.manualFormat.orEmpty()),
+                onClick = { parts.onDownload(download.downloads) },
+                role = CapsuleRole.Secondary,
+                icon = painterResource(Res.drawable.download_24px),
+                enabled = download.enabled,
+            )
+            else -> CapsuleButton(
+                text = stringResource(Res.string.wifi_remote_download),
+                onClick = { parts.onDownload(download.downloads) },
+                icon = painterResource(Res.drawable.download_24px),
+                enabled = download.enabled,
+            )
+        }
+    }
+}
+
+/** Last finished transfer result worth a line (a save shows as the greyed "Saved" button instead). */
+@Composable
+private fun viewerTransferNotice(transfer: WifiImageTransferState): String? = when (transfer.status) {
+    WifiImageTransferStatus.Failed -> stringResource(
+        when (transfer.failureReason) {
+            WifiTransferFailureReason.CatalogChanged -> Res.string.wifi_remote_transfer_failed_catalog_changed
+            WifiTransferFailureReason.Timeout -> Res.string.wifi_remote_transfer_failed_timeout
+            WifiTransferFailureReason.Storage -> Res.string.wifi_remote_transfer_failed_storage
+            WifiTransferFailureReason.Protocol -> Res.string.wifi_remote_transfer_failed_protocol
+            null, WifiTransferFailureReason.Unknown -> Res.string.wifi_remote_transfer_failed
+        }
+    )
+    WifiImageTransferStatus.ConversionFailed -> stringResource(Res.string.wifi_remote_conversion_failed)
+    WifiImageTransferStatus.Cancelled -> stringResource(Res.string.wifi_remote_transfer_cancelled)
+    WifiImageTransferStatus.PermissionDenied -> stringResource(Res.string.wifi_remote_storage_permission)
+    else -> null
+}
+
+/** Glass progress capsule: ring + "Downloading 43%" + bytes (and files of a two-file capture) + Cancel. */
+@Composable
+private fun DownloadProgressCapsule(transfer: WifiImageTransferState, onCancel: () -> Unit) {
+    val fraction = viewerTransferFraction(transfer)
+    GlassFloatingBar(
+        level = GlassLevel.Viewer,
+        contentPadding = PaddingValues(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        val ring = AlphaTheme.colors.primary
+        if (fraction != null && transfer.status == WifiImageTransferStatus.Downloading) {
+            CircularProgressIndicator(
+                progress = { fraction }, modifier = Modifier.size(24.dp), strokeWidth = 3.dp,
+                color = ring, trackColor = Color.White.copy(alpha = 0.2f),
+            )
+        } else {
+            CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp, color = ring)
+        }
+        Column {
+            Text(
+                if (transfer.status == WifiImageTransferStatus.Converting) {
+                    stringResource(Res.string.wifi_remote_converting_jpeg)
+                } else {
+                    stringResource(Res.string.m7_viewer_downloading, "${((fraction ?: 0f) * 100).toInt()}%")
+                },
+                color = Color.White, style = MaterialTheme.typography.labelLarge, maxLines = 1,
+            )
+            val bytes = if (transfer.totalBytes > 0) {
+                formatByteSize(transfer.bytesReceived) + " / " + formatByteSize(transfer.totalBytes)
+            } else null
+            val files = if (transfer.totalFiles > 1) {
+                stringResource(Res.string.wifi_remote_batch_progress, transfer.completedFiles, transfer.totalFiles)
+            } else null
+            listOfNotNull(bytes, files).takeIf { it.isNotEmpty() }?.let {
+                Text(it.joinToString(" · "), color = WhiteSoft, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+            }
+        }
+        CapsuleButton(
+            text = stringResource(Res.string.wifi_remote_transfer_cancel),
+            onClick = onCancel,
+            role = CapsuleRole.Secondary,
+        )
+    }
+}
+
+/** Square check box (the grid's), always shown; shares the grid's selection set. */
+@Composable
+private fun ViewerSelectionToggle(parts: ViewerParts) {
+    val label = stringResource(
+        if (parts.selected) Res.string.wifi_remote_viewer_deselect else Res.string.wifi_remote_viewer_select
+    )
+    Box(
+        Modifier.size(48.dp).clip(RoundedCornerShape(8.dp))
+            .toggleable(
+                value = parts.selected, enabled = parts.selectEnabled, role = Role.Checkbox,
+                onValueChange = parts.onToggleSelected,
+            )
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        SelectionCheck(parts.selected, Modifier.alpha(if (parts.selectEnabled) 1f else 0.5f))
+    }
+}
+
+/** Small translucent thumbnails of the whole day; the current one framed, a tap jumps to it. */
+@Composable
+private fun ViewerFilmstrip(
+    captures: List<WifiCameraCapture>,
+    thumbnails: Map<Long, ImageBitmap>,
+    current: Int,
+    enabled: Boolean,
+    state: LazyListState,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier,
+) {
+    if (captures.size < 2) return
+    LazyRow(
+        state = state,
+        modifier = modifier.height(FilmstripCell + 8.dp).alpha(if (enabled) 1f else 0.5f),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        itemsIndexed(captures, key = { _, capture -> capture.id }) { index, capture ->
+            val isCurrent = index == current
+            val label = stringResource(Res.string.m7_viewer_filmstrip_item, index + 1, captures.size)
+            Box(
+                Modifier.size(FilmstripCell).clip(FilmstripShape)
+                    .background(Color.White.copy(alpha = 0.08f))
+                    .then(if (isCurrent) Modifier.border(2.dp, Color.White, FilmstripShape) else Modifier)
+                    .clickable(enabled = enabled && !isCurrent, role = Role.Button) { onSelect(index) }
+                    .semantics {
+                        contentDescription = label
+                        selected = isCurrent
+                    },
+            ) {
+                thumbnails[capture.thumbnail.handle]?.let {
+                    Image(
+                        it, contentDescription = null, contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().alpha(if (isCurrent) 1f else 0.62f),
+                    )
+                }
+            }
+        }
     }
 }
