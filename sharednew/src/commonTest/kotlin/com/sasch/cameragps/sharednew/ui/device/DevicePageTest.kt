@@ -160,6 +160,71 @@ class DevicePageTest {
     }
 
     @Test
+    fun aLateTransmittingAfterTheTimeoutDoesNotResurrectAFailedEntry() = withMain {
+        val calls = mutableListOf<String>()
+        val controls = Controls(emptyMap())
+        val model = model(calls, controls)
+
+        model.requestPhotoTransfer("AA:BB")
+        calls.clear() // drop the initial connect; a late event must not issue a new one
+        advanceTimeBy(31.seconds)
+        assertEquals(PhotoTransferEntry.Failed, model.photoTransfer.value)
+
+        // The camera answers after the wait already gave up: the retired attempt's job is gone,
+        // so the late Transmitting must not turn the entry into Ready (which would open Wi-Fi).
+        controls.set(session(BleSessionPhase.Transmitting))
+        advanceTimeBy(1.seconds)
+        assertEquals(PhotoTransferEntry.Failed, model.photoTransfer.value)
+        assertFalse(calls.any { it.startsWith("connect") }, "no fresh connect from a late event")
+    }
+
+    @Test
+    fun aLateTransmittingAfterCancellingWhileConnectingNeitherReconnectsNorOpensWiFi() = withMain {
+        val calls = mutableListOf<String>()
+        val controls = Controls(emptyMap())
+        val model = model(calls, controls)
+
+        model.requestPhotoTransfer("AA:BB")
+        assertEquals(PhotoTransferEntry.ConnectingBluetooth, model.photoTransfer.value)
+        controls.set(session(BleSessionPhase.Connecting))
+        calls.clear()
+
+        model.cancelConnecting("AA:BB")
+        assertEquals(PhotoTransferEntry.Idle, model.photoTransfer.value)
+        assertEquals(listOf("enabled=false", "observe AA:BB false", "disconnect AA:BB"), calls)
+
+        // A late Transmitting from the cancelled attempt must neither re-open Wi-Fi (Ready) nor
+        // start connecting again.
+        controls.set(session(BleSessionPhase.Transmitting))
+        advanceTimeBy(31.seconds)
+        assertEquals(PhotoTransferEntry.Idle, model.photoTransfer.value)
+        assertFalse(calls.any { it.startsWith("connect") })
+    }
+
+    @Test
+    fun aTransmittingDuringARetrySatisfiesTheNewAttempt() = withMain {
+        val calls = mutableListOf<String>()
+        val controls = Controls(emptyMap())
+        val model = model(calls, controls)
+
+        model.requestPhotoTransfer("AA:BB")
+        advanceTimeBy(31.seconds)
+        assertEquals(PhotoTransferEntry.Failed, model.photoTransfer.value)
+
+        // Immediate retry. The session registry exposes only the current phase per camera id —
+        // there is no attempt/generation identity at this layer, so a Transmitting emission during
+        // the new wait cannot be attributed to the old attempt. That is sound here: Transmitting
+        // truthfully reports the link carrying location data, which is exactly the precondition
+        // the new request waits for; a stale Error/Disconnected is already excluded by the
+        // attemptSeen rule (see requestPhotoTransfer).
+        model.requestPhotoTransfer("AA:BB")
+        assertEquals(PhotoTransferEntry.ConnectingBluetooth, model.photoTransfer.value)
+        controls.set(session(BleSessionPhase.Connecting))
+        controls.set(session(BleSessionPhase.Transmitting))
+        assertEquals(PhotoTransferEntry.Ready, model.photoTransfer.value)
+    }
+
+    @Test
     fun leavingThePageDropsAPendingEntrySoWiFiNeverOpensLater() = withMain {
         val calls = mutableListOf<String>()
         val controls = Controls(emptyMap())
