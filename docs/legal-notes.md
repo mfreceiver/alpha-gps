@@ -85,8 +85,12 @@
 
 | 组件 | 许可证 | 说明 |
 |---|---|---|
-| Robolectric 4.14.1（及其传递依赖、android-all-instrumented 运行时） | MIT（传递依赖各自许可） | 在 JVM 上运行 Compose UI 测试（弹层焦点 `OverlayFocusComposeTest`） |
-| Compose UI Test（ui-test-junit4 / ui-test-manifest，随 Compose BOM）、AndroidX Test（core、ext-junit、runner、espresso-core） | Apache-2.0 | 同上 |
+| Robolectric 4.14.1 主体（`org.robolectric:robolectric` 等） | MIT（上游 LICENSE；POM 同） | 在 JVM 上运行 Compose UI 测试（弹层焦点 `OverlayFocusComposeTest`）；Robolectric 项目内部分从 Android 源码复制的文件带 Apache-2.0 头，为 Apache-2.0 |
+| `org.robolectric:android-all-instrumented`（SDK 35：`15-robolectric-12650502-i7`，Robolectric 运行时的 Android 框架 jar） | Apache-2.0（POM：Android 源码按 Apache-2.0 授权；Android SDK 二进制的 EULA 限制其再分发，本项目不分发） | 同上 |
+| Compose UI Test（`ui-test` / `ui-test-junit4` / `ui-test-manifest`，随 Compose BOM） | Apache-2.0 | 同上 |
+| AndroidX Test（core、ext-junit、runner、espresso-core）及 Robolectric 的其余传递依赖 | 各自许可（AndroidX 为 Apache-2.0；其余以各自 POM / LICENSE 为准） | 同上 |
+
+以上均为仅测试依赖，只在测试类路径，不随应用分发。
 
 ## 6. 商标免责声明
 
