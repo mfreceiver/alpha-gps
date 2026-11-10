@@ -251,14 +251,6 @@
     <string name="rename_camera_label">相机名称</string>
     <string name="rename_camera_save">保存</string>
     <string name="location_linking_disabled_by_camera">相机已禁用位置关联。请在相机设置中启用“位置信息链接”以恢复。</string>
-    <string name="pairing_preparation_title">将您的相机设置为配对模式</string>
-    <string name="pairing_preparation_step_bluetooth">开启相机并在其设置中启用蓝牙。</string>
-    <string name="pairing_preparation_step_pairing">打开相机的蓝牙配对画面并开始配对。</string>
-    <string name="pairing_preparation_step_ready">保持该画面打开，将相机放在附近，然后点击“搜索相机”。</string>
-    <string name="pairing_preparation_search">搜索相机</string>
-    <string name="pairing_preparation_note">仅启用蓝牙还不够。相机必须处于配对模式，您的手机才能找到它。菜单名称因相机型号而异。</string>
-    <string name="pairing_preparation_searching">正在搜索相机……</string>
-    <string name="pairing_preparation_help">需要帮助？</string>
     <string name="rename_camera_hint">此名称仅在 AlphaGPS 内使用。</string>
     <string name="guide_startup_title">相机启动缓慢或屏幕保持黑屏</string>
     <string name="guide_startup_description">在某些相机上，若开启关机时连接智能手机功能，当启用 AlphaGPS 时可能会导致开机变慢。</string>
