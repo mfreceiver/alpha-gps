@@ -63,6 +63,11 @@ data class AlphaColors(
     val warningText: Color,
     val warningContainer: Color,
     val onWarningContainer: Color,
+    /**
+     * Secondary accent (teal / cyan) for informational icons that should read as "data", not as a
+     * state — e.g. the "last write" metric of the device page. Text-safe on G1/G3 glass.
+     */
+    val accentTeal: Color,
     // Backdrop G0
     /** Scrim behind G3 surfaces, alpha included (light 32 % / dark 52 %). */
     val scrim: Color,
@@ -114,6 +119,7 @@ val LightAlphaColors = AlphaColors(
     warningText = Color(0xFF7A5200),
     warningContainer = Color(0xFFFFE9B3),
     onWarningContainer = Color(0xFF261900),
+    accentTeal = Color(0xFF006A6A),
     scrim = Color.Black.copy(alpha = 0.32f),
     glowBlue = Color(0xFFA8C7FA),
     glowViolet = Color(0xFFCDBDF7),
@@ -162,6 +168,7 @@ val DarkAlphaColors = AlphaColors(
     warningText = Color(0xFFFFC857),
     warningContainer = Color(0xFF5C4200),
     onWarningContainer = Color(0xFFFFE9B3),
+    accentTeal = Color(0xFF6FD8D8),
     scrim = Color.Black.copy(alpha = 0.52f),
     glowBlue = Color(0xFF0B57D0),
     glowViolet = Color(0xFF5B3FA8),

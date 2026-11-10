@@ -40,6 +40,8 @@ object AlphaTextStyles {
     val dialogBody = TextStyle(fontSize = 13.5.sp, lineHeight = 20.sp, fontWeight = FontWeight.Normal)
     /** Capsule button label (48 dp); larger buttons use [buttonLarge]. */
     val button = TextStyle(fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold)
+    /** Compact in-row capsule (32 dp chip, e.g. 断开 / 显示 inside a dialog row). */
+    val buttonSmall = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold)
     val buttonLarge = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold)
     val buttonHero = TextStyle(fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold)
     /** Status cell value / label. */

@@ -2,6 +2,7 @@ package com.sasch.cameragps.sharednew.ui.theme
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import com.sasch.cameragps.sharednew.bluetooth.status.SignalLevel
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.sasch.cameragps.sharednew.ui.components.glass.IconEmphasis
 import com.sasch.cameragps.sharednew.ui.components.glass.InfoTagStyle
@@ -9,7 +10,11 @@ import com.sasch.cameragps.sharednew.ui.components.glass.StatusTone
 import com.sasch.cameragps.sharednew.ui.components.glass.capsuleColors
 import com.sasch.cameragps.sharednew.ui.components.glass.iconButtonTint
 import com.sasch.cameragps.sharednew.ui.components.glass.infoTagColors
+import com.sasch.cameragps.sharednew.ui.components.glass.statusIconColor
 import com.sasch.cameragps.sharednew.ui.components.glass.statusToneColor
+import com.sasch.cameragps.sharednew.ui.device.LastWriteMetricTone
+import com.sasch.cameragps.sharednew.ui.device.WrittenMetricTone
+import com.sasch.cameragps.sharednew.ui.device.signalTone
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -198,5 +203,30 @@ class PaletteContrastTest {
         assertEquals(RatingColors.star3, RatingColors.forRating(3))
         assertEquals(RatingColors.star5, RatingColors.forRating(5))
         assertEquals(RatingColors.star1, RatingColors.forRating(9))
+    }
+
+    @Test
+    fun deviceMetricIconTonesReadableOnCardAndInsetGlass() {
+        // Device page metric icons (signal by level, written, last write) sit on an inset block
+        // (onSurface 5–7 %) inside a G1 card; they use the text-safe tone colours, so they must
+        // pass AA text contrast, not only the 3.0 non-text minimum.
+        val tones = SignalLevel.entries.map { signalTone(it) } + listOf(WrittenMetricTone, LastWriteMetricTone)
+        listOf(light to lightWorstBackdrop, dark to darkWorstBackdrop).forEach { (colors, backdrop) ->
+            val card = glass(GlassLevel.Card, colors.isDark, backdrop)
+            val inset = Contrast.over(colors.onSurface.copy(alpha = if (colors.isDark) 0.07f else 0.05f), card)
+            tones.forEach { tone ->
+                val fg = statusIconColor(tone, colors)
+                assertAa(fg, card, what = "${if (colors.isDark) "dark" else "light"} card $tone icon")
+                assertAa(fg, inset, what = "${if (colors.isDark) "dark" else "light"} inset $tone icon")
+            }
+        }
+    }
+
+    @Test
+    fun accentToneIsTheThemeTealAndDistinctFromPrimary() {
+        listOf(light, dark).forEach { c ->
+            assertEquals(c.accentTeal, statusToneColor(StatusTone.Accent, c))
+            assertTrue(c.accentTeal != c.primary && c.accentTeal != c.success, "teal must be its own colour")
+        }
     }
 }

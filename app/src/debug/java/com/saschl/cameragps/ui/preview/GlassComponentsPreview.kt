@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.saschl.cameragps.R
@@ -58,9 +59,10 @@ private fun ComponentGallery() {
                 StatusLine("GPS fixed", StatusTone.Success, supportingText = "31.2304° N, 121.4737° E")
                 StatusRow(
                     listOf(
-                        StatusItem("Written", "128", tone = StatusTone.Active),
-                        StatusItem("Failed", "0"),
-                        StatusItem("Latest", "12:04"),
+                        // Value stays neutral, the icon carries the colour (device page metrics).
+                        StatusItem("Signal", "Strong", painterResource(R.drawable.ic_gps_fixed), iconTone = StatusTone.Success),
+                        StatusItem("Written", "128", painterResource(R.drawable.ic_gps_fixed), iconTone = StatusTone.Active),
+                        StatusItem("Latest", "12:04", painterResource(R.drawable.ic_gps_fixed), iconTone = StatusTone.Accent),
                     ),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -80,6 +82,17 @@ private fun ComponentGallery() {
                 CapsuleButton("Disabled", onClick = {}, enabled = false)
                 CapsuleButton("Reading", onClick = {}, role = CapsuleRole.Tonal, loading = true)
             }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Row-level chips (Ⓘ dialog): 32 dp visual height, 48 dp touch target.
+                CapsuleButton("Disconnect", onClick = {}, role = CapsuleRole.DangerOutlined, size = CapsuleSize.Small)
+                CapsuleButton("Show", onClick = {}, role = CapsuleRole.Secondary, size = CapsuleSize.Small)
+            }
+            CapsuleButton(
+                "Photo transfer",
+                onClick = {},
+                modifier = Modifier.fillMaxWidth(),
+                size = CapsuleSize.Medium,
+            )
             CapsuleButton(
                 "Search cameras",
                 onClick = {},
@@ -161,6 +174,30 @@ private fun FormDialogPreview() = CameraGpsTheme(darkTheme = false) {
             onClose = {},
         ) {
             Text("Name shown in AlphaGPS only.", color = AlphaTheme.colors.onSurfaceVariant)
+        }
+    }
+}
+
+@Preview(name = "Info dialog – close button in the header", widthDp = 380, heightDp = 640)
+@Composable
+private fun InfoDialogPreview() = CameraGpsTheme(darkTheme = true) {
+    GlassBackground {
+        ComponentGalleryBackdropText()
+        CapsuleDialog(
+            onDismissRequest = {},
+            title = "Camera info",
+            confirm = null,
+            dismiss = null,
+            onClose = {},
+        ) {
+            Text(
+                "A camera with a very long name that must be shortened",
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.titleMedium,
+                color = AlphaTheme.colors.onSurface,
+            )
+            StatusLine("Connected", StatusTone.Success)
         }
     }
 }

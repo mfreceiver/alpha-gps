@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -60,11 +61,17 @@ import org.jetbrains.compose.resources.stringResource
  */
 enum class CapsuleRole { Primary, Secondary, Tonal, Danger, DangerOutlined }
 
-/** Height of a capsule: 48 dp (dialogs, inline), 56 dp (screen primary), 68 dp (device page hero). */
-enum class CapsuleSize(val height: Dp, val iconSize: Dp, val horizontalPadding: Dp) {
-    Regular(48.dp, 20.dp, 20.dp),
-    Large(56.dp, 22.dp, 24.dp),
-    Hero(68.dp, 24.dp, 28.dp),
+/**
+ * Height of a capsule: 32 dp chip inside a dense row ([Small] — the touch target is still padded
+ * to 48 dp), 48 dp (dialogs, inline), 52 dp (bottom action of the device page), 56 dp (screen
+ * primary), 68 dp (hero). [raised] sizes give a primary capsule its gradient glow.
+ */
+enum class CapsuleSize(val height: Dp, val iconSize: Dp, val horizontalPadding: Dp, val raised: Boolean) {
+    Small(32.dp, 16.dp, 14.dp, raised = false),
+    Regular(48.dp, 20.dp, 20.dp, raised = false),
+    Medium(52.dp, 22.dp, 22.dp, raised = true),
+    Large(56.dp, 22.dp, 24.dp, raised = true),
+    Hero(68.dp, 24.dp, 28.dp, raised = true),
 }
 
 /**
@@ -143,7 +150,7 @@ fun CapsuleButton(
     loading: Boolean = false,
 ) {
     val alpha = AlphaTheme.colors
-    val raised = role == CapsuleRole.Primary && size != CapsuleSize.Regular
+    val raised = role == CapsuleRole.Primary && size.raised
     val c = capsuleColors(role, enabled, alpha, raised)
     val shape = AlphaShapes.capsule
     val interaction = remember { MutableInteractionSource() }
@@ -159,12 +166,15 @@ fun CapsuleButton(
         else -> Modifier
     }
     val textStyle = when (size) {
+        CapsuleSize.Small -> AlphaTextStyles.buttonSmall
         CapsuleSize.Regular -> AlphaTextStyles.button
-        CapsuleSize.Large -> AlphaTextStyles.buttonLarge
+        CapsuleSize.Medium, CapsuleSize.Large -> AlphaTextStyles.buttonLarge
         CapsuleSize.Hero -> AlphaTextStyles.buttonHero
     }
     Row(
         modifier = modifier
+            // A chip keeps a 48 dp touch target around its 32 dp capsule.
+            .then(if (size == CapsuleSize.Small) Modifier.minimumInteractiveComponentSize() else Modifier)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale

@@ -30,8 +30,11 @@ import com.sasch.cameragps.sharednew.ui.theme.AlphaColors
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 
-/** Semantic tone of a status (dot, icon, short status word). */
-enum class StatusTone { Neutral, Active, Success, Warning, Error }
+/**
+ * Semantic tone of a status (dot, icon, short status word). [Accent] is the secondary teal accent
+ * for informational data (not a state).
+ */
+enum class StatusTone { Neutral, Active, Success, Warning, Error, Accent }
 
 /** Pure tone → colour (text-safe: warning uses the darker [AlphaColors.warningText]). */
 fun statusToneColor(tone: StatusTone, colors: AlphaColors, forText: Boolean = true): Color = when (tone) {
@@ -40,7 +43,14 @@ fun statusToneColor(tone: StatusTone, colors: AlphaColors, forText: Boolean = tr
     StatusTone.Success -> colors.success
     StatusTone.Warning -> if (forText) colors.warningText else colors.warning
     StatusTone.Error -> colors.error
+    StatusTone.Accent -> colors.accentTeal
 }
+
+/**
+ * Tint of a [StatusItem] icon. Icons are small glyphs on glass, so they take the text-safe colour
+ * (light-theme amber is too pale for a 20 dp glyph); [StatusTone.Neutral] stays grey.
+ */
+fun statusIconColor(tone: StatusTone, colors: AlphaColors): Color = statusToneColor(tone, colors, forText = true)
 
 /**
  * Status dot: 9 dp, with a 22 % halo for [StatusTone.Success] only (design `lib3.dot`). Decorative:
@@ -89,7 +99,8 @@ fun StatusLine(
 
 /**
  * One cell of a [StatusRow]: optional icon, the changing [value], and a **fixed** item name
- * [label] (已写入 / 失败 / 最近 …). [tone] colours the value (and icon).
+ * [label] (已写入 / 失败 / 最近 …). [tone] colours the value (and icon); [iconTone] colours only
+ * the icon ("tinted metric" — the value stays in the normal text colour), null = follow [tone].
  */
 @Immutable
 data class StatusItem(
@@ -97,11 +108,13 @@ data class StatusItem(
     val value: String,
     val icon: Painter? = null,
     val tone: StatusTone = StatusTone.Neutral,
+    val iconTone: StatusTone? = null,
 )
 
 /**
  * Status row: equal-width inset cells (normally three) — icon / value / fixed item name. Each cell
- * is announced as "label: value". No dividers between cells.
+ * is announced as "label: value". No dividers between cells. Value and label wrap to at most two
+ * lines (narrow screens, large font scale) before they ellipsize.
  */
 @Composable
 fun StatusRow(items: List<StatusItem>, modifier: Modifier = Modifier) {
@@ -122,9 +135,7 @@ fun StatusRow(items: List<StatusItem>, modifier: Modifier = Modifier) {
                             item.icon,
                             contentDescription = null,
                             modifier = Modifier.size(20.dp),
-                            colorFilter = ColorFilter.tint(
-                                if (item.tone == StatusTone.Neutral) colors.onSurfaceVariant else statusToneColor(item.tone, colors, false),
-                            ),
+                            colorFilter = ColorFilter.tint(statusIconColor(item.iconTone ?: item.tone, colors)),
                         )
                     }
                     Text(
@@ -132,7 +143,8 @@ fun StatusRow(items: List<StatusItem>, modifier: Modifier = Modifier) {
                         style = AlphaTextStyles.statusValue,
                         color = valueColor,
                         textAlign = TextAlign.Center,
-                        maxLines = 1,
+                        // Two lines so a large font scale wraps instead of cutting the value.
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
@@ -140,7 +152,7 @@ fun StatusRow(items: List<StatusItem>, modifier: Modifier = Modifier) {
                         style = AlphaTextStyles.statusLabel,
                         color = colors.onSurfaceVariant,
                         textAlign = TextAlign.Center,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
