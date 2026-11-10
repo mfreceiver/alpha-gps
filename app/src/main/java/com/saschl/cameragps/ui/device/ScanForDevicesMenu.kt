@@ -12,9 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.getSystemService
 import cameragps.sharednew.generated.resources.Res
@@ -36,7 +35,11 @@ import cameragps.sharednew.generated.resources.scan_timeout_creators_app_hint
 import cameragps.sharednew.generated.resources.the_request_was_canceled
 import cameragps.sharednew.generated.resources.the_user_explicitly_declined_the_request
 import cameragps.sharednew.generated.resources.unknown_error
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.sasch.cameragps.sharednew.ui.devicelist.AddCameraButton
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import com.saschl.cameragps.service.AssociatedDeviceCompat
 import com.saschl.cameragps.ui.BluetoothWarningCard
 import com.saschl.cameragps.ui.LocationWarningCard
@@ -168,19 +171,24 @@ fun ScanForDevicesMenu(
         if (errorMessage.isNotBlank()) {
             Text(
                 text = errorMessage,
-                color = MaterialTheme.colorScheme.error,
+                style = AlphaType.Body,
+                color = AlphaTheme.colors.danger,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
             if (showTroubleshootingHint) {
                 Text(
                     text = stringResource(Res.string.scan_timeout_creators_app_hint),
                     modifier = Modifier.padding(horizontal = 16.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = AlphaType.Caption,
+                    color = AlphaTheme.colors.textSecondary,
+                    textAlign = TextAlign.Center,
                 )
-                TextButton(onClick = onTroubleshootingClick) {
-                    Text(text = stringResource(Res.string.guide_open_button))
-                }
+                CapsuleButton(
+                    text = stringResource(Res.string.guide_open_button),
+                    onClick = onTroubleshootingClick,
+                    role = CapsuleRole.Tonal,
+                )
             }
         }
     }

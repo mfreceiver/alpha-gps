@@ -5,8 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -37,8 +35,10 @@ import cameragps.sharednew.generated.resources.to_pair_with_your_camera_please
 import cameragps.sharednew.generated.resources.try_again
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
 import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
-import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressCircle
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressSize
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -86,10 +86,11 @@ fun PairingConfirmationDialogWithLoading(
                         .fillMaxWidth()
                         .padding(vertical = 16.dp)
                 ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.padding(end = 16.dp).size(32.dp),
-                        color = colors.primary,
-                        strokeWidth = 3.dp
+                    GlassProgressCircle(
+                        modifier = Modifier.padding(end = 16.dp),
+                        color = colors.accent,
+                        size = GlassProgressSize.Large,
+                        strokeWidth = 3.dp,
                     )
                     PairingText(
                         stringResource(Res.string.pairing_with_device_please_wait, deviceName),
@@ -103,7 +104,7 @@ fun PairingConfirmationDialogWithLoading(
                 // Show success state
                 PairingText(
                     stringResource(Res.string.successfully_paired_with_device, deviceName),
-                    color = colors.primary,
+                    color = colors.success,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -113,7 +114,7 @@ fun PairingConfirmationDialogWithLoading(
                 // Show failure state with camera-side troubleshooting steps (the dialog scrolls)
                 PairingText(
                     stringResource(Res.string.failed_to_pair_with_device, deviceName),
-                    color = colors.error,
+                    color = colors.danger,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 PairingText(stringResource(Res.string.pairing_failed_hint_intro), secondary = true)
@@ -130,7 +131,7 @@ fun PairingConfirmationDialogWithLoading(
                 PairingText(stringResource(Res.string._3_make_sure_the_camera_is_discoverable))
                 PairingText(
                     stringResource(Res.string.once_your_camera_is_ready_tap_continue_to_start_pairing),
-                    color = colors.primary,
+                    color = colors.accent,
                 )
             }
         } }
@@ -149,11 +150,11 @@ private fun PairingText(
     Text(
         text = text,
         modifier = modifier,
-        style = AlphaTextStyles.dialogBody,
+        style = AlphaType.Body,
         color = when {
             color != Color.Unspecified -> color
-            secondary -> colors.onSurfaceVariant
-            else -> colors.onSurface
+            secondary -> colors.textSecondary
+            else -> colors.textPrimary
         },
         textAlign = textAlign,
     )
