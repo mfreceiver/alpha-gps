@@ -63,8 +63,22 @@ internal data class WifiDownloadPlan(
     val totalBytes: Long get() = files.sumOf { it.size }
     val skippedCount: Int get() = skipped.values.sum()
 
-    /** The biggest reason something was skipped, i.e. why an empty plan is empty. */
-    val mainSkipReason: WifiSkipReason? get() = skipped.entries.filter { it.value > 0 }.maxByOrNull { it.value }?.key
+    /**
+     * Why an empty plan is empty, by a fixed priority that never depends on counts or file order:
+     * [WifiSkipReason.AlreadySaved] only when *every* skipped candidate was already saved; otherwise
+     * [WifiSkipReason.TooLarge] wins (something is over the limit and nothing can be fetched), then
+     * [WifiSkipReason.NoJpeg]. Null when nothing was skipped.
+     */
+    val mainSkipReason: WifiSkipReason? get() {
+        val reasons = skipped.filterValues { it > 0 }.keys
+        return when {
+            reasons.isEmpty() -> null
+            reasons == setOf(WifiSkipReason.AlreadySaved) -> WifiSkipReason.AlreadySaved
+            WifiSkipReason.TooLarge in reasons -> WifiSkipReason.TooLarge
+            WifiSkipReason.NoJpeg in reasons -> WifiSkipReason.NoJpeg
+            else -> reasons.first()
+        }
+    }
 }
 
 /**
@@ -111,8 +125,9 @@ internal fun planDownloads(
 /**
  * The size shown for one capture (grid size tag, viewer info strip): what a download of it under
  * [policy] fetches, planned exactly like the batch button's plan — including [saved], so a tag never
- * counts a file that is already on the phone and the tile tags of a selection add up to the floating
- * button ("Download N (x MB)") in every case.
+ * counts a file that is already on the phone. The byte counts of the tiles of a selection therefore
+ * agree with the floating button's plan; the rounded numbers on screen are each rounded on their own
+ * and need not add up to the rounded total.
  *
  * [CaptureDownloadSize.reason] says why nothing would be fetched (null = the bytes will download):
  * - [WifiSkipReason.NoJpeg] — JPG-only policy over a RAW/HEIF-only capture: the size of the original
@@ -132,7 +147,15 @@ internal fun captureDownloadSize(
     val plan = planDownloads(listOf(capture), policy, saved)
     if (plan.files.isNotEmpty()) return CaptureDownloadSize(plan.totalBytes)
     return when (plan.mainSkipReason) {
-        WifiSkipReason.NoJpeg -> CaptureDownloadSize(capture.files.sumOf { it.size }, WifiSkipReason.NoJpeg)
+        WifiSkipReason.NoJpeg ->
+            // The RAW/HEIF-only exception shows the originals' size as a warning — unless the user
+            // already saved every original file by hand (the viewer's "Download RAW"): then it is
+            // saved, exactly like the viewer's button says.
+            planDownloads(listOf(capture), WifiFormatPolicy.Original, saved).let { originals ->
+                if (originals.files.isEmpty() && originals.mainSkipReason == WifiSkipReason.AlreadySaved)
+                    CaptureDownloadSize(0, WifiSkipReason.AlreadySaved)
+                else CaptureDownloadSize(capture.files.sumOf { it.size }, WifiSkipReason.NoJpeg)
+            }
         WifiSkipReason.TooLarge -> CaptureDownloadSize(0, WifiSkipReason.TooLarge)
         WifiSkipReason.AlreadySaved -> CaptureDownloadSize(0, WifiSkipReason.AlreadySaved)
         null -> CaptureDownloadSize(0)
@@ -166,13 +189,14 @@ internal fun shouldShowBatchSummary(summarySettled: Boolean, transfer: WifiImage
             transfer.status == WifiImageTransferStatus.Idle)
 
 /**
- * One shared number formatting for every size label (P3-1): binary units, one decimal, rounded
- * half up; from 10 units up the decimal is dropped and the integer itself rounds half up. The unit
- * is added by the caller ("MB" / "GB").
+ * One shared number formatting for every size label: binary units, rounded half up exactly once
+ * from the raw byte count (never rounded twice). Below 10 units one decimal; a value that reaches
+ * 10 units (including 9.95..9.99, which would round to "10.0") shows the integer, itself rounded
+ * half up from the raw bytes. The unit is added by the caller ("MB" / "GB").
  */
 private fun tenths(bytes: Long, unit: Long): String {
     val t = (bytes * 10 + unit / 2) / unit
-    return if (t >= 100) "${(t + 5) / 10}" else "${t / 10}.${t % 10}"
+    return if (t >= 100) "${(bytes + unit / 2) / unit}" else "${t / 10}.${t % 10}"
 }
 
 /** "512 KB", "4.8 MB", "48 MB", "1.3 GB" — binary units, no locale-specific formatting. */

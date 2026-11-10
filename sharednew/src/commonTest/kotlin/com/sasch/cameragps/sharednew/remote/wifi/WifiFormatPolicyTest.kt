@@ -181,6 +181,29 @@ class WifiFormatPolicyTest {
     }
 
     @Test
+    fun sizeNumbersRoundOnceFromTheRawBytes() {
+        val mb = 1024L * 1024L
+        // 25,648,168 B = 24.4599 MiB: the old tenths-then-integer path gave 24.5 -> "25".
+        assertEquals("24 MB", formatByteSize(25_648_168))
+        assertEquals("24", formatSizeNumber(25_648_168))
+        assertEquals("25", formatSizeNumber(mb * 49 / 2), "24.5 MiB exactly rounds half up")
+        assertEquals("24", formatSizeNumber(mb * 49 / 2 - 1), "one byte below 24.5 MiB")
+        // 9.95 MiB is the first value that would round to "10.0": it shows the integer "10" by rule.
+        assertEquals("10", formatSizeNumber(mb * 199 / 20 + 1), "9.95 MiB (first byte at/after it) carries into 10")
+        assertEquals("9.9", formatSizeNumber(mb * 199 / 20 - 1), "truncated 9.95 MiB is a hair below it: stays one decimal")
+        assertEquals("10", formatSizeNumber(10 * mb))
+        assertEquals("6.6", formatSizeNumber(mb * 66 / 10))
+        assertEquals("1.3", formatSizeNumber((1.25 * mb).toLong()), "1.25 half up")
+        assertEquals("1.3 GB", formatByteSize((1.25 * 1024 * mb).toLong()), "1.25 GiB half up")
+        assertEquals("10 GB", formatByteSize(mb * 1024 * 996 / 100), "9.96 GiB carries into 10")
+        assertEquals("24 GB", formatByteSize(1024 * mb * 2446 / 100), "24.46 GiB rounds once")
+        assertNull(formatSizeNumber(0))
+        assertNull(formatSizeNumber(-5))
+        assertEquals("0 KB", formatByteSize(0))
+        assertEquals("0 KB", formatByteSize(-1))
+    }
+
+    @Test
     fun policyFollowsTheSetting() {
         assertEquals(WifiFormatPolicy.JpegOnly, WifiFormatPolicy.of(true))
         assertEquals(WifiFormatPolicy.Original, WifiFormatPolicy.of(false))
@@ -224,9 +247,11 @@ class WifiFormatPolicyTest {
     }
 
     @Test
-    fun tileSizesAddUpToTheBatchButton() {
+    fun tileSizeBytesAgreeWithTheBatchButtonBytes() {
         // The floating "Download N JPG (x MB)" and the tile tags come from the same planner —
-        // including the saved-aware one, so the sum holds when files were downloaded earlier.
+        // including the saved-aware one, so the *byte* sums agree when files were downloaded earlier.
+        // (The visible numbers are rounded one by one: they are not guaranteed to add up to the
+        // rounded total; only the unrounded byte counts are asserted here.)
         val big = file(50, jpegMime, 600_000_000, downloadable = false)
         val selection = listOf(
             jpgRaw, rawJpg, jpgOnly, rawOnly, heifRaw, capture("big", big, file(51, rawMime, 5)),
@@ -247,5 +272,64 @@ class WifiFormatPolicyTest {
                 )
             }
         }
+    }
+
+    // --- skip-reason priority and the saved RAW-only exception -----------------------
+
+    @Test
+    fun anEmptyPlanPrefersTooLargeOverAlreadySavedWhateverTheFileOrder() {
+        val savedJpeg = file(60, jpegMime, 2000)
+        val bigRaw = file(61, rawMime, 40_000_000, downloadable = false)
+        val saved = setOf(WifiPhotoDownload(60))
+        for (files in listOf(listOf(savedJpeg, bigRaw), listOf(bigRaw, savedJpeg))) {
+            val c = capture("mixed", *files.toTypedArray())
+            val plan = planDownloads(listOf(c), original, saved)
+            assertTrue(plan.files.isEmpty())
+            assertEquals(mapOf(WifiSkipReason.AlreadySaved to 1, WifiSkipReason.TooLarge to 1), plan.skipped)
+            assertEquals(WifiSkipReason.TooLarge, plan.mainSkipReason, "order ${files.map { it.handle }}")
+            assertEquals(
+                CaptureDownloadSize(0, WifiSkipReason.TooLarge), captureDownloadSize(c, original, saved),
+                "order ${files.map { it.handle }}",
+            )
+        }
+    }
+
+    @Test
+    fun savedIsOnlyShownWhenEveryCandidateFileIsSaved() {
+        val a = file(62, jpegMime, 100)
+        val b = file(63, rawMime, 200)
+        val both = setOf(WifiPhotoDownload(62), WifiPhotoDownload(63))
+        assertEquals(WifiSkipReason.AlreadySaved, planDownloads(listOf(capture("x", a, b)), original, both).mainSkipReason)
+        // One file saved, the other still downloadable: the plan is not empty, nothing is "saved".
+        val half = planDownloads(listOf(capture("x", a, b)), original, setOf(WifiPhotoDownload(62)))
+        assertEquals(listOf(63L), handles(half))
+        assertEquals(
+            CaptureDownloadSize(200, null),
+            captureDownloadSize(capture("x", a, b), original, setOf(WifiPhotoDownload(62))),
+        )
+        // Only an oversized file: too large, whatever else is absent.
+        val big = file(64, rawMime, 600_000_000, downloadable = false)
+        assertEquals(WifiSkipReason.TooLarge, planDownloads(listOf(capture("y", big)), original, emptySet()).mainSkipReason)
+    }
+
+    @Test
+    fun aRawOnlyCaptureTheUserSavedByHandShowsSavedUnderJpegOnlyAndNoSizeWarning() {
+        val saved = setOf(WifiPhotoDownload(5)) // rawOnly's RAW, downloaded from the viewer
+        // Unsaved: the confirmed NoJpeg exception (size + warning) stays.
+        assertEquals(CaptureDownloadSize(40000, WifiSkipReason.NoJpeg), captureDownloadSize(rawOnly, jpegOnly))
+        // Saved: same wording as the viewer's already-saved button, no size, no warning.
+        assertEquals(
+            CaptureDownloadSize(0, WifiSkipReason.AlreadySaved),
+            captureDownloadSize(rawOnly, jpegOnly, saved),
+        )
+        // HEIF+RAW: one file saved is not "saved" (the other would still download manually).
+        assertEquals(
+            CaptureDownloadSize(900 + 1000, WifiSkipReason.NoJpeg),
+            captureDownloadSize(heifRaw, jpegOnly, setOf(WifiPhotoDownload(9))),
+        )
+        assertEquals(
+            CaptureDownloadSize(0, WifiSkipReason.AlreadySaved),
+            captureDownloadSize(heifRaw, jpegOnly, setOf(WifiPhotoDownload(8), WifiPhotoDownload(9))),
+        )
     }
 }

@@ -101,6 +101,7 @@ class WifiBrowserModelTest {
         assertEquals("1.0", formatSizeTag(mb))
         assertEquals("6.6", formatSizeTag(mb * 66 / 10))
         assertEquals("25", formatSizeTag(mb * 49 / 2), "24.5 MB drops the decimal, rounded half up")
+        assertEquals("24", formatSizeTag(25_648_168), "24.4599 MB: one rounding from the raw bytes, not 24.5 -> 25")
         assertEquals("1.1", formatSizeTag(mb + 52_429), "1.05 MB rounds half up")
         assertEquals("1.0", formatSizeTag(mb + 52_428), "just below 1.05 MB rounds down")
     }
