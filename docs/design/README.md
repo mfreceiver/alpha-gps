@@ -1,0 +1,38 @@
+# 界面设计（docs/design）
+
+alpha-gps 的 UI/UX 设计方案。**纯设计交付**：这里的内容不改动应用代码，只描述“要做成什么样”和“与现有实现差在哪”。
+
+## 当前生效版本：v3
+
+| 版本 | PDF | 页数 | 范围 | 状态 |
+|---|---|---|---|---|
+| **v3** | [`ui-v3/ui-design-v3.pdf`](ui-v3/ui-design-v3.pdf) | 27 | 全应用界面重设计（玻璃风格、固定蓝色、亮/暗） | **当前生效** |
+| v2 | [`history/ui-status-enhancement-v2.pdf`](history/ui-status-enhancement-v2.pdf) | 17 | 相机/照片界面改版 | 历史，已被 v3 取代 |
+| v1 | [`history/ui-status-enhancement.pdf`](history/ui-status-enhancement.pdf) | 14 | 状态信息增强 | 历史；其数据层规格仍有效 |
+
+- v3 说明与每页摘要：[`ui-v3/README.md`](ui-v3/README.md)
+- v1/v2 说明：[`history/ui-status-enhancement/README.md`](history/ui-status-enhancement/README.md)；v1 数据层规格（字段、阈值、写入位置）：[`history/ui-status-enhancement/SPEC.md`](history/ui-status-enhancement/SPEC.md)，v3 第 25 页沿用。
+
+## 重建
+
+需要 `python3`、`google-chrome`（无头打印 PDF）与中文字体（Noto / 思源黑体）；装有 `pymupdf` 时会顺带做一次无损压缩。
+
+```bash
+cd docs/design/ui-v3 && python3 pages3.py                          # v3 → ui-design-v3.pdf
+cd docs/design/history/ui-status-enhancement && python3 pages2.py  # v2 → ../ui-status-enhancement-v2.pdf
+cd docs/design/history/ui-status-enhancement && python3 pages.py   # v1 → ../ui-status-enhancement.pdf
+```
+
+脚本生成 `mockups*/*.svg` 与 `index*.html`，再打印成 PDF；这些中间产物一并入库，便于不重建就查看单张 mockup。
+入库的 v1/v2 PDF 经过无损结构压缩，重建出的文件会更大，内容相同。
+
+## 与 docs/todo.md 的关系
+
+- 设计里的“待确认问题”（Q 编号）和“开发拆分”（M 编号）**不复制进** `docs/todo.md`。
+- 决定开发某个里程碑时，再按 `AGENTS.md` 的待办纪律把当期条目写入 `docs/todo.md`（要做什么 / 验收标准 / 依据位置），完成即删。
+- 设计与代码不一致时，以“v3 PDF 第 26 页：与现有实现的差异”为对照清单；行号基于 HEAD `587f510`（v0.1.5）。
+
+## 约定
+
+- 新版本新建目录（如 `ui-v4/`），把被取代的版本移入 `history/`，并更新本页表格。
+- mockup 为手机竖屏 390×844；文档为横版 1400×1000。

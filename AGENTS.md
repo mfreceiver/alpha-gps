@@ -6,6 +6,9 @@
 - 新发现的事项当天写入（要做什么 / 验收标准 / 依据位置），按 P1>P2>P3 排序。
 - 开始一次工作前先读 `docs/todo.md`；结束时核对其中是否有已完成或已过期的条目。
 
+## 文档目录
+- `docs/todo.md` 待办；`docs/wifi-architecture.md` Wi-Fi 架构；`docs/design/` 界面设计方案（索引 `docs/design/README.md`，当前生效版本 v3）。设计里的待开发拆分不复制进 todo，开发时再按上面的纪律入 todo。
+
 ## 构建与发版要点
 - 开发分支 `feature/browse-only-download`，远端 `primary`（`https://forge.example.com:443/owner/alphagps.git`）；`origin` 是上游 Saschl/alpha-gps，仅用于 fetch，同步方式：fetch → main 快进 → merge（不 rebase）进功能分支。
 - 包名 `cn.vectory.alphagps`（与上游 `com.saschl.cameragps` 共存），签名复用统一密钥，证书 SHA256 `18ff24c5...97d7`。
