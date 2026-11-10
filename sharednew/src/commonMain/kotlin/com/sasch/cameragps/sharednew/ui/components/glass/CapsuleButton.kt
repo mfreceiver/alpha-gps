@@ -48,6 +48,7 @@ import com.sasch.cameragps.sharednew.ui.theme.AlphaColors
 import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.GlassLevel
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -58,8 +59,11 @@ import org.jetbrains.compose.resources.stringResource
  * - [Tonal]: secondary operations in a card (连接 / 配对 / 重新读取 / 去授权).
  * - [Danger]: filled red — confirm of a destructive dialog (移除 / 断开 / 删除).
  * - [DangerOutlined]: red outline — the destructive entry point on a page (移除相机).
+ * - [GlassPrimary]: the primary action floating over photos or the photo grid (下载 N 张 / 下载): a
+ *   frosted glass capsule (same blur / sheen / rim / soft shadow as [GlassFloatingBar]) tinted with a
+ *   translucent primary — no opaque fill and no dark glow ring.
  */
-enum class CapsuleRole { Primary, Secondary, Tonal, Danger, DangerOutlined }
+enum class CapsuleRole { Primary, Secondary, Tonal, Danger, DangerOutlined, GlassPrimary }
 
 /**
  * Height of a capsule: 32 dp chip inside a dense row ([Small] — the touch target is still padded
@@ -88,6 +92,10 @@ data class CapsuleColors(
     val glow: Color?,
     val border: Color?,
 )
+
+/** Tint alpha of [CapsuleRole.GlassPrimary] over its glass base (light / dark theme). */
+const val GLASS_PRIMARY_ALPHA_LIGHT = 0.90f
+const val GLASS_PRIMARY_ALPHA_DARK = 0.80f
 
 /**
  * Pure colour resolution for [role] (design `lib3.primary_btn` / `pill_btn` / `tonal_btn`).
@@ -130,6 +138,15 @@ fun capsuleColors(role: CapsuleRole, enabled: Boolean, colors: AlphaColors, rais
         CapsuleRole.DangerOutlined -> CapsuleColors(
             Color.Transparent, Color.Transparent, colors.error, 0f, null, colors.error,
         )
+        CapsuleRole.GlassPrimary -> {
+            // Translucent enough to read as glass, opaque enough that the label keeps AA over any
+            // backdrop; the gradient (raised sizes) is a lighter top, never a shadow ring.
+            val alpha = if (colors.isDark) GLASS_PRIMARY_ALPHA_DARK else GLASS_PRIMARY_ALPHA_LIGHT
+            val bottom = colors.primary.copy(alpha = alpha)
+            val top = if (raised) lerp(colors.primary, Color.White, if (colors.isDark) 0.18f else 0.08f).copy(alpha = alpha)
+            else bottom
+            CapsuleColors(top, bottom, colors.onPrimary, if (colors.isDark) 0.45f else 0.55f, null, null)
+        }
     }
 }
 
@@ -150,7 +167,8 @@ fun CapsuleButton(
     loading: Boolean = false,
 ) {
     val alpha = AlphaTheme.colors
-    val raised = role == CapsuleRole.Primary && size.raised
+    val raised = (role == CapsuleRole.Primary || role == CapsuleRole.GlassPrimary) && size.raised
+    val onGlass = role == CapsuleRole.GlassPrimary
     val c = capsuleColors(role, enabled, alpha, raised)
     val shape = AlphaShapes.capsule
     val interaction = remember { MutableInteractionSource() }
@@ -181,6 +199,9 @@ fun CapsuleButton(
             }
             .defaultMinSize(minWidth = size.height, minHeight = size.height)
             .then(glowModifier)
+            // Glass primary: frosted base (blur when a backdrop is reachable, else the near-solid
+            // floating fill) under the translucent tint below.
+            .then(if (onGlass) Modifier.glass(GlassLevel.Float, shape) else Modifier)
             .clip(shape)
             .background(Brush.verticalGradient(listOf(c.containerTop, c.containerBottom)))
             .then(borderModifier)
