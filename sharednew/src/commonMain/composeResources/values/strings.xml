@@ -17,9 +17,9 @@
     <string name="rename_camera_title">Rename</string>
     <string name="rename_camera_label">Camera name</string>
     <string name="rename_camera_save">Save</string>
-    <string name="rename_camera_hint">This name is used in Alpha GPS only.</string>
+    <string name="rename_camera_hint">This name is used in AlphaGPS only.</string>
     <string name="app_name" translatable="false">AlphaGPS</string>
-    <string name="app_name_ui" translatable="false">Alpha GPS</string>
+    <string name="app_name_ui" translatable="false">AlphaGPS</string>
     <string name="header_device_list">My Cameras</string>
     <string name="foreground_service_notification">Transmitting location data to %1$d cameras</string>
     <string name="scan_for_devices">Click to find &amp; associate your camera</string>
@@ -41,7 +41,7 @@
     <string name="logs_title">Logs</string>
     <string name="logs_clear_all">Clear all logs</string>
     <string name="logs_empty">No logs available yet. Logs will appear here as the app runs.</string>
-    <string name="camera_gps_permissions">Alpha GPS Permissions</string>
+    <string name="camera_gps_permissions">AlphaGPS Permissions</string>
     <!-- Permission request strings -->
     <string name="grant_permissions">Grant permissions</string>
     <string name="permissions_missing_title">Permissions missing</string>
@@ -80,7 +80,7 @@
     <string name="scanning_paused_message">Turn on automatic scanning in Settings to look for nearby cameras.</string>
     <string name="scanning_for_cameras">Scanning for cameras...</string>
     <!-- Welcome screen strings -->
-    <string name="welcome_title">Welcome to Alpha GPS Geotagging</string>
+    <string name="welcome_title">Welcome to AlphaGPS Geotagging</string>
     <string name="welcome_subtitle">Real-time GPS coordinates for your camera via Bluetooth</string>
     <string name="welcome_feature_connect_title">Connect Your Camera</string>
     <string name="welcome_feature_connect_description">Pair your Sony camera with your phone via Bluetooth for seamless GPS data transfer</string>
@@ -89,7 +89,7 @@
     <string name="welcome_feature_device_management_title">Device Management</string>
     <string name="welcome_get_started_button">Get Started</string>
     <string name="welcome_settings_note">You can access these settings later from the main menu</string>
-    <string name="welcome_app_icon_description">Alpha GPS App Icon</string>
+    <string name="welcome_app_icon_description">AlphaGPS App Icon</string>
     <!-- Settings screen strings -->
     <string name="settings">Settings</string>
     <string name="app_controls">App Controls</string>
@@ -141,7 +141,7 @@
     <!-- Help & FAQ strings -->
     <string name="help_faq_title">Help &amp; FAQ</string>
     <string name="help_close_description">Close</string>
-    <string name="help_about_title">About Alpha GPS</string>
+    <string name="help_about_title">About AlphaGPS</string>
     <string name="help_about_description">This app provides real-time GPS coordinates to your camera via Bluetooth, allowing for automatic geotagging of your photos without needing a camera's built-in GPS.</string>
     <string name="help_need_more_title">Need more help?</string>
     <string name="help_need_more_description">Check the app logs in the top menu for troubleshooting information, or review your device settings to ensure all permissions are granted.</string>
@@ -153,7 +153,7 @@
     <string name="faq_disconnects_question">My camera is losing connection all the time</string>
     <string name="faq_disconnects_answer">Try these solutions:\n• Keep your phone closer to the camera\n• Disable battery optimization for the app\n• Check whether your camera has power-saving modes that affect Bluetooth\n• Restart both devices and pair them again if needed</string>
     <string name="faq_enable_service_question">How do I enable the service permanently? It seems to stop after a while</string>
-    <string name="faq_enable_service_answer">Please visit the App Settings and try the options in the Battery &amp; Background section. Alternatively try the following: \nTo keep GPS data syncing with your camera:\n1. Go to your device\'s Settings &gt; Apps\n2. Find \'Alpha GPS\' in the app list\n3. Tap on it and select \'Battery\'\n4. Choose \'Don\'t optimize\' or \'Allow background activity\'\n5. This prevents the system from stopping the GPS service\n\nYou can also access this through the device details page in the app.</string>
+    <string name="faq_enable_service_answer">Please visit the App Settings and try the options in the Battery &amp; Background section. Alternatively try the following: \nTo keep GPS data syncing with your camera:\n1. Go to your device\'s Settings &gt; Apps\n2. Find \'AlphaGPS\' in the app list\n3. Tap on it and select \'Battery\'\n4. Choose \'Don\'t optimize\' or \'Allow background activity\'\n5. This prevents the system from stopping the GPS service\n\nYou can also access this through the device details page in the app.</string>
     <string name="faq_camera_not_connecting_question">My camera does not connect automatically, what can I do?</string>
     <string name="faq_camera_not_connecting_answer">Unfortunately, there might be situations, where the automatic connection does not work. If you encounter issues please do the following:  On the main screen, tap on your camera to open the details screen. There you have an option to enable the "Always On" mode, which will keep the app in the foreground. \nOtherwise try toggling bluetooth or remove the device from the app and associate it again.</string>
     <string name="faq_permissions_question">What permissions does the app need?</string>
@@ -176,7 +176,7 @@
     <string name="guide_link_location_a6400">Sony Help Guide: Loc. Info. Link Set. (α6400)</string>
     <string name="guide_link_location_zve10">Sony Help Guide: Location Info. Link Set. (ZV-E10)</string>
     <string name="guide_repair_title">Camera connects but GPS doesn't work</string>
-    <string name="guide_repair_description">Typical when the camera was set up with Sony's Creators' App or Imaging Edge Mobile before: the phone is already paired with the camera, so no new pairing is requested — but location transfer doesn't work properly with Alpha GPS. Removing the old pairing everywhere fixes this.</string>
+    <string name="guide_repair_description">Typical when the camera was set up with Sony's Creators' App or Imaging Edge Mobile before: the phone is already paired with the camera, so no new pairing is requested — but location transfer doesn't work properly with AlphaGPS. Removing the old pairing everywhere fixes this.</string>
     <string name="guide_repair_step_phone">Remove the camera from your phone's Bluetooth settings:</string>
     <string name="guide_repair_step_phone_path_android">Settings → Connected devices (Bluetooth) → your camera → Forget</string>
     <string name="guide_repair_step_phone_path_ios">Settings → Bluetooth → ⓘ next to the camera → Forget This Device</string>
@@ -184,21 +184,21 @@
     <string name="guide_repair_step_camera_path">MENU → Network → Bluetooth → Manage Paired Device</string>
     <string name="guide_repair_step_sony_app">If a Sony app is still installed, remove the camera there as well:</string>
     <string name="guide_repair_step_sony_app_path">Creators' App → Cameras → Setup → Unpair</string>
-    <string name="guide_repair_step_pair_again">Set up the camera again in Alpha GPS: put it into pairing mode and start a new scan.</string>
+    <string name="guide_repair_step_pair_again">Set up the camera again in AlphaGPS: put it into pairing mode and start a new scan.</string>
     <string name="guide_remote_title">Turn off the Bluetooth remote (older cameras)</string>
     <string name="guide_remote_description">Cameras like the α6400 cannot use the Bluetooth remote and location linking at the same time — with the remote on, the connection or GPS transfer stops working. Newer models (e.g. α7 IV and later) support both.</string>
     <string name="guide_remote_step_camera">On the camera, switch the Bluetooth remote off:</string>
     <string name="guide_remote_step_camera_path">MENU → Network → Bluetooth Rmt Ctrl → Off</string>
-    <string name="guide_remote_step_app">Alpha GPS no longer uses the remote control feature — only the camera setting above matters.</string>
+    <string name="guide_remote_step_app">AlphaGPS no longer uses the remote control feature — only the camera setting above matters.</string>
     <string name="guide_link_remote_a6400">Sony Help Guide: Bluetooth Rmt Ctrl (α6400)</string>
     <string name="guide_accuracy_title">Location is imprecise or outdated</string>
     <string name="guide_accuracy_description">If photos are tagged with a position that is noticeably off, the app usually isn't allowed to use your precise location.</string>
-    <string name="guide_accuracy_step_precise">Allow precise location for Alpha GPS:</string>
-    <string name="guide_accuracy_step_precise_path_android">Settings → Apps → Alpha GPS → Permissions → Location → Use precise location</string>
-    <string name="guide_accuracy_step_precise_path_ios">Settings → Privacy &amp; Security → Location Services → Alpha GPS → Precise Location → On</string>
-    <string name="guide_accuracy_step_battery">Exclude the app from battery optimization so transmission keeps running in the background: Settings → Apps → Alpha GPS → Battery → Unrestricted.</string>
+    <string name="guide_accuracy_step_precise">Allow precise location for AlphaGPS:</string>
+    <string name="guide_accuracy_step_precise_path_android">Settings → Apps → AlphaGPS → Permissions → Location → Use precise location</string>
+    <string name="guide_accuracy_step_precise_path_ios">Settings → Privacy &amp; Security → Location Services → AlphaGPS → Precise Location → On</string>
+    <string name="guide_accuracy_step_battery">Exclude the app from battery optimization so transmission keeps running in the background: Settings → Apps → AlphaGPS → Battery → Unrestricted.</string>
     <string name="guide_startup_title">Camera starts slowly or its screen stays black</string>
-    <string name="guide_startup_description">On some cameras, allowing smartphone connections while the camera is off can delay startup when Alpha GPS is enabled.</string>
+    <string name="guide_startup_description">On some cameras, allowing smartphone connections while the camera is off can delay startup when AlphaGPS is enabled.</string>
     <string name="guide_startup_step_disable">In the camera's Network menu, set 'Cnct. while Power OFF' or 'Cnct. during Power OFF' to Off. The name and menu location vary by model. This disables smartphone access while the camera is off; keep Bluetooth enabled for GPS and time sync when the camera is on.</string>
     <!-- Contextual pairing-failure troubleshooting (shown when the camera rejects pairing) -->
     <string name="pairing_failed_device_message">The camera '%1$s' refused the pairing.</string>
@@ -295,14 +295,14 @@
     <string name="bluetooth_connect_permanently_denied">Bluetooth permission has been permanently denied. Please open App Settings, navigate to Permissions → Nearby devices, and grant the permission manually.</string>
     <!-- Tip Jar -->
     <string name="tip_jar">Tip Jar</string>
-    <string name="tip_jar_description">Enjoying the app? Tips help cover the Apple Developer Program fee ($99/year) required to keep this app on the App Store. It's completely optional — thank you for using Alpha GPS! ❤️</string>
+    <string name="tip_jar_description">Enjoying the app? Tips help cover the Apple Developer Program fee ($99/year) required to keep this app on the App Store. It's completely optional — thank you for using AlphaGPS! ❤️</string>
     <string name="tip_jar_loading">Loading…</string>
     <string name="tip_jar_thank_you">Thank you so much for your support!</string>
     <string name="tip_jar_unavailable">Tip options are not available right now.</string>
     <string name="tip_jar_error_prefix">Something went wrong:</string>
     <string name="tip_jar_dismiss">Dismiss</string>
     <!-- Donation prompt -->
-    <string name="donation_dialog_title">Enjoying Alpha GPS?</string>
+    <string name="donation_dialog_title">Enjoying AlphaGPS?</string>
     <string name="donation_dialog_message">If the app helps your photography, a small donation helps keep development going. It is completely optional.</string>
     <string name="donation_dialog_confirm">Support project</string>
     <string name="donation_dialog_dismiss">Not now</string>
@@ -323,16 +323,16 @@
     <string name="welcome_page_position">Page %1$d of %2$d</string>
     <string name="welcome_gps_label">Location</string>
     <string name="welcome_gps_title">Geotag your photos</string>
-    <string name="welcome_gps_body">Alpha GPS sends your phone’s location to your Sony camera over Bluetooth. The camera saves it with each photo.</string>
+    <string name="welcome_gps_body">AlphaGPS sends your phone’s location to your Sony camera over Bluetooth. The camera saves it with each photo.</string>
     <string name="welcome_remote_label">Wi-Fi photo transfer</string>
     <string name="welcome_remote_title">Browse camera photos from your phone</string>
     <string name="welcome_remote_body">Browse the photos on your camera over Wi-Fi and download them to your phone.</string>
     <string name="welcome_pair_label">Connection</string>
     <string name="welcome_pair_title">Connect your camera</string>
-    <string name="welcome_pair_body">When you’re ready, tap Add camera. Alpha GPS will guide you through pairing your Sony camera with your phone.</string>
+    <string name="welcome_pair_body">When you’re ready, tap Add camera. AlphaGPS will guide you through pairing your Sony camera with your phone.</string>
     <string name="welcome_ready_label">Location access</string>
     <string name="welcome_ready_title">Keep your photos geotagged</string>
-    <string name="welcome_ready_body">Alpha GPS needs precise location access to geotag your photos. Background access keeps location updates running while your phone is locked.</string>
+    <string name="welcome_ready_body">AlphaGPS needs precise location access to geotag your photos. Background access keeps location updates running while your phone is locked.</string>
 
     <string name="wifi_remote_experimental_title">Experimental Wi-Fi photo transfer</string>
     <string name="wifi_remote_experimental_message">Wi-Fi photo transfer is experimental and has currently only been validated with the developer’s Sony α6700. Other camera models may behave differently.\n\nPlease report any issues by email or on GitHub. Include your camera model and your phone’s operating system and version (Android or iOS).</string>
@@ -357,11 +357,11 @@
     <string name="wifi_connection_failed">Couldn’t open a Wi-Fi connection to the camera.</string>
     <string name="wifi_connection_help">Connection help</string>
     <string name="wifi_connection_help_title">Check connection settings</string>
-    <string name="wifi_connection_help_message">Make sure the camera is ready for photo transfer and this phone is connected to its Wi-Fi.\n\nSome Android versions can block an app’s network access. In App settings, look for “Mobile data &amp; Wi-Fi”, “Network access” or “Restrict data usage”, and allow Wi-Fi for Alpha GPS. Under Permissions, allow Nearby devices or precise Location if requested, and Local network if listed.\n\nReturn here and try connecting again. Setting names vary by phone.</string>
+    <string name="wifi_connection_help_message">Make sure the camera is ready for photo transfer and this phone is connected to its Wi-Fi.\n\nSome Android versions can block an app’s network access. In App settings, look for “Mobile data &amp; Wi-Fi”, “Network access” or “Restrict data usage”, and allow Wi-Fi for AlphaGPS. Under Permissions, allow Nearby devices or precise Location if requested, and Local network if listed.\n\nReturn here and try connecting again. Setting names vary by phone.</string>
     <string name="wifi_remote_failed">Could not connect. Check the camera IP, keep its smartphone connection active, and close other camera-control apps.</string>
     <string name="wifi_remote_lost">The camera connection was lost. Join its Wi-Fi again and reconnect.</string>
     <string name="wifi_remote_other_camera">Another Wi-Fi photo transfer session is open. Close it before connecting this camera.</string>
-    <string name="wifi_remote_auto_setup">Keep the camera connected by Bluetooth and close Creators’ App. Alpha GPS will start camera Wi-Fi and ask your phone to connect.</string>
+    <string name="wifi_remote_auto_setup">Keep the camera connected by Bluetooth and close Creators’ App. AlphaGPS will start camera Wi-Fi and ask your phone to connect.</string>
     <string name="wifi_remote_auto_connect">Tap To Connect automatically</string>
     <string name="wifi_remote_prepare_only_hint">Enable the camera’s Wi-Fi over Bluetooth, then join its network in phone settings. The camera IP will be detected after you join.</string>
     <string name="wifi_remote_prepare_only">Enable camera Wi-Fi</string>
