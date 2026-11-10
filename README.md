@@ -74,6 +74,14 @@ Other verification tasks are listed in [AGENTS.md](AGENTS.md). For releases (sig
 releases), see [`scripts/release_build.sh`](scripts/release_build.sh) — releasing is a manual,
 confirmed step.
 
+`scripts/release_build.sh --publish-only` publishes to the maintainer's primary repository first and,
+only after that succeeds, to GitHub (`--no-github` skips it; `--publish-github-only` re-runs just the
+GitHub step). The GitHub step pushes the release tag (plus the current branch only with
+`--github-push-branch`), so the commit history reachable from it is publicly visible. The primary
+repository address is kept in an untracked local file (see
+[`scripts/release.local.env.example`](scripts/release.local.env.example)). Exit codes: `0` ok, `1`
+failure, `40` GitHub step failed after the primary release succeeded.
+
 This fork ships only English (`values/`) and Simplified Chinese (`values-zh-rCN/`) — do not add
 other language directories.
 
