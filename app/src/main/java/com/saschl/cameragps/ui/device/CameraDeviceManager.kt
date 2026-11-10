@@ -298,7 +298,6 @@ fun CameraDeviceManager(
                             selectedDeviceAddress = null
                             autoOpenDismissed = true
                         },
-                                onHelpClick = onHelpClick
                             )
                         }
                     }

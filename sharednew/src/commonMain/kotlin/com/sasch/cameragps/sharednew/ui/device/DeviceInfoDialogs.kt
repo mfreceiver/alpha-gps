@@ -41,7 +41,6 @@ import cameragps.sharednew.generated.resources.device_info_title
 import cameragps.sharednew.generated.resources.device_remove_confirm_message
 import cameragps.sharednew.generated.resources.device_remove_confirm_title
 import cameragps.sharednew.generated.resources.dialog_ok
-import cameragps.sharednew.generated.resources.help_menu_item
 import cameragps.sharednew.generated.resources.remove
 import cameragps.sharednew.generated.resources.rename_camera_title
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSession
@@ -88,7 +87,6 @@ fun DeviceDialogs(
     viewModel: DeviceDetailViewModel,
     deviceId: String,
     deviceName: String,
-    onHelp: () -> Unit,
     onDelete: (() -> Unit)?,
 ) {
     when (route) {
@@ -148,10 +146,6 @@ fun DeviceDialogs(
                             TextButton(onClick = { onRoute(DeviceDialogRoute.Rename) }) {
                                 Text(stringResource(Res.string.rename_camera_title))
                             }
-                            TextButton(onClick = {
-                                onRoute(DeviceDialogRoute.None)
-                                onHelp()
-                            }) { Text(stringResource(Res.string.help_menu_item)) }
                             if (onDelete != null) {
                                 TextButton(onClick = { onRoute(DeviceDialogRoute.ConfirmDelete) }) {
                                     Text(
