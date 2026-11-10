@@ -8,7 +8,7 @@
 > 5. 按优先级排序（P1 > P2 > P3），同级按紧迫程度。每次编辑后检查是否有已过期条目。
 > 6. 流程与背景说明不放这里（放 README 或 docs/ 下对应文档）；这里只放“还没做的事”。
 
-最后整理：2026-11-10（基线 v0.1.4，versionCode 见 gradle.properties）
+最后整理：2026-11-11（基线 v0.1.4，versionCode 见 gradle.properties）
 
 ## P1
 
@@ -36,9 +36,9 @@
 - 依据：wave3/m7 实现与 sol 对 0c9b324..ef196de 的复审（Compose 手势/窗口适配/真实相机部分读取无法在 JVM 验证）；`docs/wifi-architecture.md` “Live status and photo metadata” 的 Viewer use 段。
 
 ### 23. 真机核对：0.3.0 B0 玻璃材质与新组件
-- 做什么：装含 B0 的版本（亮/暗各一遍，Android 12 与 14+ 各一台）打开调试预览或已迁移页面，核对：①背景彩色光斑可见但不抢眼；卡片/浮条/对话框能明显看出毛玻璃（双向边缘光、顶部高光带、双层阴影、细噪点），文字清晰；②API 31/32 低端机长列表滚动不掉帧（噪点 + 每卡片模糊）；③对话框/菜单/面板/Snackbar 背后的页面模糊随滚动刷新；④动态字体 200% 下 GlassSegmented/StatusBadge/GlassTopBar 标题不截断；⑤TalkBack：Snackbar 播报、RevealValueRow 状态、图标长按 tooltip 不被朗读；⑥暗色开关/复选框选中态（浅蓝底 + 深蓝滑块/勾）观感可接受。
+- 做什么：装含 B0 的版本（亮/暗各一遍，Android 12 与 14+ 各一台）打开调试预览或已迁移页面，核对：①背景彩色光斑可见但不抢眼；卡片/浮条/对话框能明显看出毛玻璃（双向边缘光、顶部高光带、双层阴影、细噪点），文字清晰；②API 31/32 低端机长列表滚动不掉帧（噪点 + 每卡片模糊）；③对话框/菜单/面板/Snackbar 背后的页面模糊随滚动刷新；④动态字体 200% 下 GlassSegmented/StatusBadge/GlassTopBar 标题不截断；⑤TalkBack：Snackbar 播报、RevealValueRow 状态、图标长按 tooltip 不被朗读；⑥暗色开关/复选框选中态（浅蓝底 + 深蓝滑块/勾）观感可接受。⑦（页面迁移收尾并入）设备详情标题改左对齐后观感；⑧Welcome 页：`WelcomeScreenTest` 几何断言（375×627 slide 不滚动；412×860 标题与 slide 顶部 >80dp；该 androidTest 目前仅编译、未运行，需在设备/模拟器上跑一遍）；⑨设置页 `GlassRadio` 20dp 点击区/外观与 `GlassSwitch` 行高；⑩弹出菜单内 `GlassSegmented` 宽度；⑪网格复选框在很亮缩略图上的可见性；⑫预览页下载按钮对比度（见 #25）；⑬排障页返回按钮无障碍标签由 Close 变为 Back（TalkBack 朗读）；⑭信息值字号 14→15 后各行/弹窗折行；⑮`LocationPermissionBoxTest` 使用已弃用的 `createComposeRule`（既有编译警告，换成新 API 或保留并记录）。
 - 验收：不满意的项按 `docs/glass-material-notes.md` 的参数说明调 token，调后 `PaletteContrastTest` 仍全部通过（不放宽阈值）。
-- 依据：B0 只能在 JVM 做对比度矩阵与纯逻辑测试，渲染观感/性能/无障碍需真机（`docs/glass-material-notes.md` §7）。
+- 依据：B0 只能在 JVM 做对比度矩阵与纯逻辑测试，渲染观感/性能/无障碍需真机（`docs/glass-material-notes.md` §7）；⑦–⑮ 来自 P1–P3 页面迁移批次的自报（`docs/ui-audit-2026-11.md`）。
 
 ## P2
 
@@ -48,12 +48,47 @@
 - 待用户决策/实机核实：①第一版做到 R1 还是 R1+R2；②ILCE-7M4 上蓝牙遥控是否与位置联动冲突（官方只明确 α6400 互斥）；③v4 取景能否稳定出帧；④参数面板与独立对焦是否后置。
 - 依据：用户 2026-11-10 决定；astra 研究报告。
 
-### 24. 页面迁移到 AlphaType/颜色角色，清空样式守卫基线
-- 做什么：0.3.0 后续批次逐页把 `MaterialTheme.typography`/`fontSize =`/`Color.White`/`Color(0x` 换成 `AlphaType` 与 `AlphaTheme.colors` 角色、原生控件换成玻璃组件（对照 `docs/ui-components-cheatsheet.md` §5）；每迁完一页运行 `scripts/ui_style_guard.sh --update-baseline` 下调基线；全部清零后删除 `AlphaTextStyles`、把验证改为 `scripts/ui_style_guard.sh --strict`。
-- 验收：`docs/ui-style-guard-baseline.txt` 只剩注释，`--strict` 通过；`AlphaTextStyles` 无引用后删除。
-- 依据：`docs/ui-audit-2026-11.md` §5 批次划分；B0 基线 24 个文件 122 处。
+### 25. 日志页 snackbar 是否遮挡日志面板底部（真机确认）
+- 做什么：日志页 `GlassSnackbarHost` 作为页内叠层浮在底部，估计会盖住日志面板最后约 70dp。真机（竖屏/横屏、大字体）触发复制/清空等提示，看是否遮住最后几行日志且无法滚出；若遮挡，给日志列表加底部 contentPadding（或提示出现时留出空间）。
+- 验收：提示出现期间最后一行日志仍可见/可滚动到；无遮挡则删除本条。
+- 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/logs/SharedLogViewerScreen.kt:116`（`GlassSnackbarHost(snackbar)`）。
+
+### 26. 预览页下载按钮在竖屏不是真毛玻璃
+- 做什么：竖屏下载按钮位于胶片条下方的纯黑背景上，背后没有可模糊内容，所以呈现为深色着色胶囊而非毛玻璃。要真毛玻璃需让按钮浮在照片区域之上（布局改动：下载区叠在照片底部，照片需为 `hazeSource`），并核对与信息条/抽屉手势区的关系；不改则在设计里确认现状可接受。
+- 验收：竖屏下载按钮取样到照片并呈现玻璃（或文档确认接受现状）；对比度仍过 `PaletteContrastTest`；翻页/下载状态不受影响；B/C 窗口不回归。
+- 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiPhotoViewer.kt` 竖屏下载行（`ViewerDownloadArea`，约 :456、:921）；预览根背景 `:372`。
+
+### 27. GlassPopover 无焦点陷阱
+- 做什么：原系统 `Popup` 自带焦点/无障碍遏制，页内 `GlassPopover` 没有：打开时背后内容仍可被 TalkBack/键盘焦点到达。评估并在组件级实现（打开时背后内容 `clearAndSetSemantics`/隐藏、焦点进入弹层、关闭后回到锚点），菜单 `GlassMenu` 同类问题一并核对。
+- 验收：弹层打开时 TalkBack 焦点只在弹层内，关闭后焦点回锚点；有测试覆盖语义/焦点逻辑（可做 JVM 层）；不引入系统窗口。
+- 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/components/glass/GlassPopover.kt:166`（"never a platform Popup"）；`docs/ui-components-cheatsheet.md` 页内叠层规则。
 
 ## P3
+
+### 28. 网格格子放大镜触摸区与 GlassTileAction 统一
+- 做什么：网格格子的放大镜保留自有 40dp 触摸区（`TILE_ACTION_DP=40`，格子角落空间有限），而 `GlassTileAction` 强制 48dp 点击区。给 `GlassTileAction` 加 `touchTarget` 参数（≥40dp 钳制，同 `GlassIconButton`），网格放大镜/复选框改用它，删除自绘实现。
+- 验收：网格放大镜与复选框都用 `GlassTileAction(touchTarget = …)`；`WifiBrowserModelTest` 的触摸区/角标几何断言仍通过；触摸区不重叠、不触发点格子。
+- 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiPhotoBrowser.kt:644`（`TileActionSize`）、`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiBrowserModel.kt:138`；`sharednew/src/commonTest/.../remote/WifiBrowserModelTest.kt:125-133`（`TILE_ACTION_DP`）；`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/components/glass/GlassSelectionControls.kt:205`。
+
+### 29. 预览页背景色抽 viewerBackground token
+- 做什么：预览页背景 `Color.Black` 抽成 `viewerBackground` token（`ui/theme/Color.kt`，`AlphaColors`），预览页与相关 Viewer 玻璃/对比度测试引用它。
+- 验收：`WifiPhotoViewer.kt` 无字面 `Color.Black` 背景；`PaletteContrastTest` 的 Viewer 背景取值引用 token，测试通过。
+- 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiPhotoViewer.kt:372`。
+
+### 30. Wi-Fi 连接叠层分段 StepRing 保留自定义
+- 做什么：连接叠层用自绘分段 `StepRing` 表达 4 步当前所处位置，不是 `GlassProgress*`（后者不表达分段）。如需统一进度控件，需先设计分段进度形态（`GlassProgressSteps` 之类）再迁移；否则保持现状并在设计文档确认。
+- 验收：要么新增统一分段控件并替换 `StepRing`（保持“4 段依次走、成功绿环、失败红色图标”表现），要么文档确认保留后删除本条。
+- 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiConnectionOverlay.kt:240-262`。
+
+### 31. 顶栏玻璃目前不真正“穿过内容”
+- 做什么：`GlassTopBar` 的玻璃取样源是页面背景，内容按 Scaffold padding 排在栏下方，滚动内容并不从栏后穿过（`docs/glass-material-notes.md` §5.1 的结构改动未做）。让内容铺满全屏、栏悬浮其上（内容加顶部 contentPadding，栏取样到滚动内容），各页（`GlassPageScaffold`、设备页、Wi-Fi 屏）核对首屏位置与滚动。
+- 验收：滚动时内容从顶栏后穿过并被模糊；首屏内容不被栏遮住；各页对话框/叠层宿主行为不回归。
+- 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/components/glass/GlassTopBar.kt:55`、`GlassPageScaffold`；`docs/glass-material-notes.md` §5.1。
+
+### 32. 排障指南“远程提示”步骤改用 GlassWarningCard
+- 做什么：`guide_location_link_step_remote_note` 是警示性步骤，目前按普通步骤呈现，可用 `GlassWarningCard` 展示；需要新增标题字符串（`values` 与 `values-zh-rCN` 同写）。
+- 验收：该步骤以警示卡片呈现且有标题；两种语言字符串齐全；排障页其余步骤不变。
+- 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/help/TroubleshootingGuideScreen.kt:110`；`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/components/glass/GlassStatus.kt:77`（`GlassWarningCard`）。
 
 ### 20. 缩略图黑边成因：待真机日志
 - 做什么：网格“相机缩略图自带黑边”仍只是推断（暗景/夜景也可能命中近黑边缘检测，因此日志里的 `nearBlackBars` 非零不等于相机像素里有黑边）。真机用 `adb logcat -s AlphaThumb` 取前 3 张缩略图的 `decoded=WxH nearBlackBars=top/bottom/left/right`，对照同一张照片在相机上的实际画面（明亮场景与暗景各取几张）后下结论；确认前不要据此改网格呈现。
