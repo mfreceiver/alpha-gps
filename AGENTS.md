@@ -21,7 +21,9 @@
 - 包名 `cn.vectory.alphagps`（与上游 `com.saschl.cameragps` 共存），签名复用统一密钥，证书 SHA256 `18ff24c5...97d7`。
 - 发版：`scripts/release_build.sh <X.Y.Z>` 构建归档并打 tag，`--publish-only` 推送并发布到主仓库（release.local.env 配置）。**versionCode 只在仓库根 `gradle.properties` 的 `alphagps.versionCode` 一处 bump**；发版脚本对该平面文件做严格解析（key 恰好一行、整行精确匹配 canonical 正整数），断言 APK 并校验相对上一发布 tag 递增（`scripts/release_lib.sh`，不再解析 Kotlin 源码；v0.1.0–v0.1.2 用内置历史表）。发版属对外动作，须用户确认。
 - **双源发布（M10）**：`--publish` / `--publish-only` 先发主仓库，**成功后**才做 GitHub 步骤（github.com/mfreceiver/alpha-gps）：推 tag 到本机 GitHub 远端（名由 `release.local.env` 的 `ALPHAGPS_GITHUB_REMOTE` 配置，默认 `github`；不存在则 fail-closed 并提示 `git remote add github https://github.com/mfreceiver/alpha-gps.git`，脚本不自动创建）→ api.github.com 建/复用 release → uploads.github.com 上传 → 下载 `browser_download_url`（手动走一跳到白名单 CDN 域，二跳匿名、不再跟随）重算 sha256 对账。凭据走 `git credential fill`（host=github.com），token 不进日志/argv。选项：`--no-github` 跳过 GitHub 步骤；`--publish-github-only` 只补 GitHub 步骤（同 tag 同名同 sha256 资产跳过、同名不同 sha 中止，幂等）；`--github-tag-only`（默认）只推 tag，`--github-push-branch` 才再推当前分支。**GitHub 步骤会推送 tag（`--github-push-branch` 时再加当前分支），其可达的历史对公开可见。**
-- 发版脚本退出码：`0` 成功；`1` 失败（用法/配置/前置/构建/主仓库发布，此时 GitHub 步骤未执行）；`40` GitHub 步骤失败（若出现在主仓库成功之后，主仓库不回滚，修复后 `--publish-github-only` 重跑）。
+- 发版脚本退出码：`0` 成功；`1` 失败（用法/配置/前置/构建/主仓库发布，此时 GitHub 步骤未执行）；`40` GitHub 步骤失败（若出现在主仓库成功之后，主仓库不回滚，修复后 `--publish-github-only` 重跑）。仅 `--publish-github-only` 失败时 40 不涉及主仓库。
+- GitHub 目的地规则：本机 GitHub 远端的 fetch 与 push 侧都必须解析到唯一公开 URL，传输钉在 URL 字面量上（见 `rl_gh_verify_remote`）。
+- **历史已净化（2026-11）**：自有提交范围的私有主机/仓库/账号标识、`@local`/私有邮箱作者与旧版设计 PDF 已从历史移除（保留包名 `cn.vectory.alphagps`）；tag v0.1.x 已随之迁移，已发布 APK 不变。**每次向 GitHub 推送前必须对待推 tag/分支的全部可达对象做指纹扫描**（私有主机名、端口、主发布仓库的产品名、私有邮箱、`/home/<user>/` 绝对路径），非空不得推送；新增入库内容也不得带这些标识。
 - 发版脚本自测：`scripts/*_test.sh`（无网络、沙箱 + fake curl，不碰真实仓库），改动发版脚本后须全部通过。
 - iOS 目标默认禁用（`gradle.properties` 的 `alphagps.enableIos=false`），源码保留；Linux 无法编译 iOS。
 - 验证命令：`./gradlew --no-daemon :sharednew:testAndroidHostTest :app:testFossDebugUnitTest :app:assembleFossDebug :app:compileFossDebugAndroidTestKotlin`。

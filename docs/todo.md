@@ -23,11 +23,6 @@
 - 依据：本轮 5 提交自报需真机验证（日期/视口/拖选/planner/Info 连接状态机均含无法在 JVM 验证的 Android 传输与手势部分）。
 - 子项（权限请求改造，fix(permissions)）：Android 12（API 31/32）全新安装，首次授权定位应一次弹出 FINE+COARSE 同请求（系统显示"精确/大致位置"二选一）；选"精确位置"后走后台定位分步授权（先前台全部通过再弹 ACCESS_BACKGROUND_LOCATION），选"仅大致位置"不放行、仍提示需要精确位置。API 33+ 同步确认 FINE+COARSE+通知一次请求。依据：sol 审阅 03dc59ae（Android 12 要求 FINE 与 COARSE 同请求，`PermissionBox.kt` `foregroundRuntimePermissions`）。
 
-### 12. GitHub 公开发布前：决定历史净化方案（阻断项）
-- 做什么：现有 v0.1.x 之前的 git 历史（如 86fbb90 的 `scripts/release_build.sh`）含私有主发布仓库的主机/仓库常量；发版脚本的 GitHub 步骤（只推 tag 也会带出全部可达祖先）一旦执行，这些历史对公开可见。需用户决定：①用经审计/净化的公开祖先（如对公开历史做一次净化重写，或以新的单提交公开导出作为 GitHub 侧基线）；②为"待公开可达对象"加入阻断扫描；③在此之前保持禁用 GitHub 步骤（只用 `--no-github`）。历史重写与远端改写须用户另行授权。
-- 验收：对将公开的 tag 的全部可达对象扫描私有指纹为空；决定后在 AGENTS.md 记录公开基线规则。
-- 依据：sol 审阅 e78f6702 的 P1（cf09dbd/5535f52；`release_build.sh` 407-434 仅警告不阻断）。
-
 ## P2
 
 ### 13. 恢复遥控拍摄功能（后续计划）
