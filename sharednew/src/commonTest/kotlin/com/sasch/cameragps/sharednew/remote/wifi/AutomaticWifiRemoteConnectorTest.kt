@@ -100,4 +100,56 @@ class AutomaticWifiRemoteConnectorTest {
         val error = assertFailsWith<WifiRemoteConnectException> { connector.open("id", backgroundScope) {} }
         assertEquals(WifiRemoteFailure.CameraSetupFailed, error.failure)
     }
+
+    private class Radio(var wifi: Boolean = true, var location: Boolean = true) : WifiPreconditions {
+        override suspend fun isWifiEnabled(): Boolean = wifi
+        override suspend fun isLocationEnabled(): Boolean = location
+    }
+
+    @Test
+    fun disabledPhoneWifiFailsBeforeWakingTheCamera() = runTest {
+        var prepared = 0
+        val connector = AutomaticWifiRemoteConnector<String>(
+            { prepared++; credentials() },
+            { error("No network request") }, { _, _, _ -> error("No camera") },
+            preconditions = Radio(wifi = false),
+        )
+        val phases = mutableListOf<WifiRemotePhase>()
+        val error = assertFailsWith<WifiRemoteConnectException> {
+            connector.open("id", backgroundScope, phases::add)
+        }
+        assertEquals(WifiRemoteFailure.WifiDisabled, error.failure)
+        assertEquals(0, prepared, "The camera must not be woken over BLE when phone Wi-Fi is off")
+        assertTrue(phases.isEmpty(), "No phase — not even PreparingCamera — is published")
+    }
+
+    @Test
+    fun disabledLocationServicesFailsBeforeWakingTheCamera() = runTest {
+        var prepared = 0
+        val connector = AutomaticWifiRemoteConnector<String>(
+            { prepared++; credentials() },
+            { error("No network request") }, { _, _, _ -> error("No camera") },
+            preconditions = Radio(location = false),
+        )
+        val error = assertFailsWith<WifiRemoteConnectException> { connector.open("id", backgroundScope) {} }
+        assertEquals(WifiRemoteFailure.LocationServicesRequired, error.failure)
+        assertEquals(0, prepared, "The camera must not be woken over BLE when location is required and off")
+    }
+
+    @Test
+    fun satisfiedPreconditionsLeaveTheFlowUnchanged() = runTest {
+        val request = Request().apply { ready() }
+        val connection = Connection(request)
+        var prepared = 0
+        val phases = mutableListOf<WifiRemotePhase>()
+        val connector = AutomaticWifiRemoteConnector(
+            { prepared++; credentials() }, { request }, { _, _, _ -> connection },
+            preconditions = Radio(),
+        )
+        val opened = connector.open("id", backgroundScope, phases::add)
+        assertEquals(listOf(WifiRemotePhase.PreparingCamera, WifiRemotePhase.AwaitingNetworkApproval,
+            WifiRemotePhase.JoiningNetwork, WifiRemotePhase.OpeningSession), phases)
+        assertEquals(1, prepared)
+        opened.close()
+    }
 }
