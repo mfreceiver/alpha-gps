@@ -42,12 +42,16 @@ LIB=$HERE/release_lib.sh
 source "$LIB"
 
 TMP=$(mktemp -d)
-trap 'rm -rf -- "$TMP"' EXIT
-# 兜底：镜像本脚本自身的 stderr（仍原样透传，不吞）。shell 展开错误（bad substitution 等）
+# 兜底：镜像本脚本自身的 stderr（结束时原样回显，不吞）。shell 展开错误（bad substitution 等）
 # 发生在 check 的参数展开阶段，不进 PASS/FAILED 计数，脚本会假绿（2026-11 曾出现
 # ${#"$(...)"} 写法导致断言静默丢失）。退出前核对镜像文件，发现此类错误一律判失败。
+# 方案：同步把 stderr 重定向到文件（无异步 tee / 进程替换，无竞态），原 stderr 保存在 FD3；
+# EXIT trap 里把镜像一次性回显到 FD3 后再清理 TMP。取舍：脚本运行期间 stderr 内容不再
+# 实时可见，只在结束时统一回显（本脚本无用例依赖实时 stderr）。2026-11 的 ${#"$(...)"} 事故
+# 即由此兜底捕获目标而来。
 SELF_STDERR=$TMP/self_stderr.log
-exec 2> >(tee "$SELF_STDERR" >&2)
+exec 3>&2 2>"$SELF_STDERR"
+trap 'cat -- "$SELF_STDERR" >&3 2>/dev/null || true; rm -rf -- "$TMP"' EXIT
 
 PASS=0; FAILED=0
 check() { # check <desc> <expr...>
@@ -1020,9 +1024,15 @@ echo
 SCENARIOS=$(grep -c '^echo "== 场景' -- "$0")
 TOTAL=$((PASS+FAILED))
 echo "结果: ${SCENARIOS} 场景 / ${TOTAL} 断言: PASS=$PASS FAIL=$FAILED"
-# 兜底核对（见文件头注释）：等 tee 刷盘后检查自身 stderr 镜像。
-SHELL_ERR=$(sleep 0.2; grep -Ec 'bad substitution|unbound variable|syntax error' "$SELF_STDERR" || true)
-if [[ "${SHELL_ERR:-0}" -ne 0 ]]; then
+# 兜底核对（见文件头注释）：先恢复原 stderr，再扫描自身 stderr 镜像（此时扫描不会被本脚本的
+# xtrace 写入镜像文件污染）。grep 退出码只允许 0/1：>=2 是读取失败，fail-closed。
+exec 2>&3
+SHELL_ERR=$(grep -Ec 'bad substitution|unbound variable|syntax error' "$SELF_STDERR"); SHELL_RC=$?
+if [[ "$SHELL_RC" -ge 2 ]]; then
+  echo "FATAL: 无法读取自身 stderr 镜像 $SELF_STDERR（grep rc=$SHELL_RC）" >&2
+  exit 1
+fi
+if [[ "$SHELL_ERR" -ne 0 ]]; then
   echo "FATAL: 自身 stderr 出现 $SHELL_ERR 处 shell 展开错误（bad substitution/unbound/syntax），断言计数不可信" >&2
   exit 1
 fi
