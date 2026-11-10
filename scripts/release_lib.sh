@@ -506,3 +506,151 @@ $RL_CFG_EXAMPLE"
   fi
   return 0
 }
+
+# ── GitHub 步骤纯函数（M10 双源发布；无网络，可离线自测）────────────────────────
+# 公开仓库与主机白名单（常量）。带凭据的请求只允许去 api/upload 主机；下载对账是匿名的
+# （发布是公开 release），首跳 github.com，唯一一次重定向只允许落在下载白名单内。
+RL_GH_REPO=mfreceiver/alpha-gps
+RL_GH_API_HOSTS="api.github.com"
+RL_GH_UPLOAD_HOSTS="uploads.github.com"
+# 下载白名单核对记录（2026-11-10，开发时联网）：
+#   GitHub 当前对 release 资产的 302 目标是 release-assets.githubusercontent.com
+#   （实测：api.github.com/repos/<o>/<r>/releases/assets/<id> 带 Accept: application/octet-stream、
+#   --no-location → 302 Location: https://release-assets.githubusercontent.com/github-production-release-asset/...）；
+#   历史/回退域名 objects.githubusercontent.com 一并保留。该主机上 github.com 网页路径本机不可达
+#   （超时），故网页路径的 302 目标按 GitHub 文档与上述同源 CDN 推断，未逐字节实测。
+RL_GH_DOWNLOAD_HOSTS="github.com objects.githubusercontent.com release-assets.githubusercontent.com"
+
+# rl_gh_url_allowed <api|upload|download> <url>
+#   URL 白名单纯函数（urllib.parse，fail-closed）：URL 非空、无控制字符/空白/反斜杠、不含
+#   '@'（userinfo 旁路）、必须以小写 'https://' 开头（http 降级拒绝）、无 userinfo、无 fragment、
+#   netloc 与白名单项**精确相等**（大小写敏感；因此带端口、子域、后缀拼接、尾点、大写一律拒绝）。
+rl_gh_url_allowed() {
+  local kind=${1:-} url=${2:-} hosts
+  case "$kind" in
+    api)      hosts=$RL_GH_API_HOSTS ;;
+    upload)   hosts=$RL_GH_UPLOAD_HOSTS ;;
+    download) hosts=$RL_GH_DOWNLOAD_HOSTS ;;
+    *) rl_fail "GitHub URL 白名单: 未知类别 '$kind'，fail-closed"; return 1 ;;
+  esac
+  python3 - "$url" "$hosts" "$kind" <<'PY'
+import sys
+from urllib.parse import urlsplit
+
+url, hosts, kind = sys.argv[1], sys.argv[2].split(), sys.argv[3]
+
+def fail(msg):
+    sys.stderr.write(f"FAIL GitHub URL 白名单({kind}): {msg}，fail-closed\n")
+    sys.exit(1)
+
+if not url:
+    fail("URL 为空")
+for c in url:
+    if ord(c) < 0x20 or ord(c) == 0x7F or c.isspace() or c == "\\":
+        fail(f"URL 含控制字符/空白/反斜杠（ord={ord(c):#x}）")
+if "@" in url:
+    fail("URL 含 '@'（userinfo 旁路）")
+if not url.startswith("https://"):
+    fail(f"必须以小写 'https://' 开头（拒绝 http 降级/大小写 scheme），实际开头 {url[:12]!r}")
+p = urlsplit(url)
+if p.scheme != "https":
+    fail(f"scheme 必须是 https，实际 '{p.scheme}'")
+if p.username is not None or p.password is not None:
+    fail("URL 含 userinfo")
+if p.fragment:
+    fail("URL 含 fragment")
+if p.netloc not in hosts:
+    fail(f"主机 '{p.netloc}' 不在白名单 {hosts}")
+sys.exit(0)
+PY
+}
+
+# rl_gh_location_from_headers <curl -D 头文件>
+#   取**最后一个**响应块里恰好一个 Location 头（头名大小写不敏感），stdout 输出其值；
+#   0 个/多个/无 HTTP 状态行 → 非零。相对 Location 原样输出（交给 rl_gh_url_allowed 拒绝）。
+rl_gh_location_from_headers() {
+  python3 - "${1:-}" <<'PY'
+import sys
+try:
+    raw = open(sys.argv[1], "rb").read().decode("latin-1")
+except OSError as e:
+    sys.stderr.write(f"FAIL 重定向头: 无法读取头文件: {e}\n"); sys.exit(1)
+blocks = [b for b in raw.replace("\r\n", "\n").split("\n\n") if b.strip()]
+if not blocks or not blocks[-1].lstrip().startswith("HTTP/"):
+    sys.stderr.write("FAIL 重定向头: 无 HTTP 响应块，fail-closed\n"); sys.exit(1)
+locs = []
+for line in blocks[-1].split("\n")[1:]:
+    if ":" in line:
+        k, v = line.split(":", 1)
+        if k.strip().lower() == "location":
+            locs.append(v.strip())
+if len(locs) != 1 or not locs[0]:
+    sys.stderr.write(f"FAIL 重定向头: Location 头须恰好 1 个（实际 {len(locs)}），fail-closed\n"); sys.exit(1)
+print(locs[0])
+PY
+}
+
+# rl_gh_remote_url_ok <git config 里的原始 remote url>
+#   本机 GitHub 远端必须精确指向 https://github.com/<RL_GH_REPO>[.git]（防配错远端把公开推送
+#   发到别处）。比较原始配置值（git config --get remote.X.url，不含 insteadOf 重写）。
+rl_gh_remote_url_ok() {
+  case "${1:-}" in
+    "https://github.com/$RL_GH_REPO"|"https://github.com/$RL_GH_REPO.git") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# rl_gh_curl_config   stdin=token → stdout curl 配置（-K - 用；token 只经配置流，绝不进 argv）
+#   token 形态严格校验（[A-Za-z0-9_.-]+，防头注入）；Accept/版本/UA 头一并写入。
+rl_gh_curl_config() {
+  python3 -c '
+import json, re, sys
+tok = sys.stdin.read()
+if not re.fullmatch(r"[A-Za-z0-9_.-]+", tok):
+    sys.stderr.write("FAIL GitHub token 形态非法（仅允许 [A-Za-z0-9_.-]，非空），fail-closed\n"); sys.exit(1)
+print("header = " + json.dumps("Authorization: Bearer " + tok))
+print("header = \"Accept: application/vnd.github+json\"")
+print("header = \"X-GitHub-Api-Version: 2022-11-28\"")
+print("user-agent = \"alpha-gps-release\"")'
+}
+
+# rl_gh_release_field <release JSON 文件> <id|assets>
+#   id     → stdout 正整数 release id
+#   assets → 每行 TSV：name \t size \t sha256|- \t state \t browser_download_url
+#            （sha256 取自 digest 字段 "sha256:<64hex>"，否则 '-'；名称含 TAB/换行 → 失败）
+rl_gh_release_field() {
+  python3 - "${1:-}" "${2:-}" <<'PY'
+import json, re, sys
+def die(m):
+    sys.stderr.write(f"FAIL GitHub release JSON: {m}，fail-closed\n"); sys.exit(1)
+try:
+    rel = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception as e:
+    die(f"解析失败: {e}")
+if not isinstance(rel, dict):
+    die("顶层不是对象")
+mode = sys.argv[2]
+if mode == "id":
+    i = rel.get("id")
+    if not isinstance(i, int) or isinstance(i, bool) or i <= 0:
+        die("id 缺失或非正整数")
+    print(i)
+elif mode == "assets":
+    assets = rel.get("assets", [])
+    if not isinstance(assets, list):
+        die("assets 非列表")
+    for a in assets:
+        if not isinstance(a, dict):
+            die("assets 元素非对象")
+        name = str(a.get("name", ""))
+        url = str(a.get("browser_download_url") or "")
+        if not name or any(c in name + url for c in "\t\n\r"):
+            die("资产名/URL 为空或含 TAB/换行")
+        d = a.get("digest") or ""
+        m = re.fullmatch(r"sha256:([0-9a-fA-F]{64})", d) if isinstance(d, str) else None
+        print("\t".join([name, str(a.get("size", -1)), m.group(1).lower() if m else "-",
+                         str(a.get("state", "")), url]))
+else:
+    die(f"未知模式 {mode}")
+PY
+}

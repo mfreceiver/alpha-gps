@@ -7,15 +7,16 @@
 #   - 产物 app/build/outputs/apk/foss/release/app-foss-release.apk（签名可用时）归档为
 #     release/alpha-gps-<版本>.apk；release/ 只留最新版，SHA256SUMS 每次全量重生成
 #   - 断言：构建后必须调用 scripts/release_assert_apk.sh（签名者/证书钉定/包名/版本/权限）
-#   - 发布（--publish / --publish-only）：push 当前分支+tag 到主仓库 git 远端（PRIMARY_REMOTE）
-#     → 主仓库 /api/v1 REST 建 release（按 tag
-#     查询复用/404 新建）→ 上传本次 APK 单文件资产 → 资产对账
+#   - 发布（--publish / --publish-only）两步：①主仓库：push 当前分支+tag 到主仓库 git 远端
+#     （PRIMARY_REMOTE）→ 主仓库 /api/v1 REST 建 release（按 tag 查询复用/404 新建）→ 上传本次
+#     APK 单文件资产 → 资产对账；失败即中止。②**主仓库成功后**才做 GitHub 步骤（M10 双源发布，
+#     可 --no-github 跳过；--publish-github-only 单独重跑）：推 tag（默认不推分支）到本机 GitHub
+#     远端 → api.github.com 建/复用 release → uploads.github.com 上传 → 手动走一跳重定向下载
+#     重算 sha256 对账。GitHub 失败**不回滚**主仓库，退出码 40（区别于主仓库失败的 1）。
+#   - 主仓库参数（host/repo/本机远端名）不入库：scripts/release.local.env 或 ALPHAGPS_PRIMARY_*
+#     环境变量（见 scripts/release.local.env.example）；缺失 fail-closed
 #   - 硬红线：release 资产只上传本次 APK；任何 *.jks/*.keystore/*.p12/*.pass/*.key
-#     绝不上传；口令只经 env/curl 配置流传递，绝不进 argv/日志
-# 用法: scripts/release_build.sh <X.Y.Z> [--allow-dirty|--publish|--publish-only]
-#   --allow-dirty:  仅构建验证（跳过归档/tag/发布；不要求干净树）
-#   --publish:      构建+归档+tag 后立即对外发布（要求干净树）
-#   --publish-only: 不构建：校验 HEAD 对应 tag 与 release/ 归档完整后仅发布（幂等重试）
+#     绝不上传；口令/token 只经 stdin/curl 配置流传递，绝不进 argv/日志
 set -euo pipefail
 
 fail() { echo "FAIL $1" >&2; exit 1; }
@@ -44,27 +45,64 @@ PINNED_CERT_SHA256="18ff24c56bc52533c75ec709ea53497aa4323dac13c511979ac0a5fd7f9d
 LOCAL_ENV_FILE="$REPO_ROOT/scripts/release.local.env"
 
 # ─── 参数解析 ────────────────────────────────────────────────────────────
-ALLOW_DIRTY=0; PUBLISH=0; PUBLISH_ONLY=0; VERSION_NAME=""
+usage() {
+  cat <<'USAGE'
+用法: scripts/release_build.sh <X.Y.Z> [模式] [GitHub 选项]
+模式（互斥；缺省=构建+归档+打 tag，不对外发布）:
+  --allow-dirty          仅构建验证（跳过归档/tag/发布；不要求干净树）
+  --publish              构建+归档+tag 后立即发布：主仓库 → 成功后 GitHub（要求干净树）
+  --publish-only         不构建：校验 HEAD 对应 tag 与 release/ 归档完整后发布：主仓库 → GitHub（幂等重试）
+  --publish-github-only  不构建、不碰主仓库：同上校验后只做 GitHub 步骤（同 tag 同名同 sha256 资产跳过；同名不同 sha 中止）
+GitHub 选项（仅在会执行 GitHub 步骤的模式下有效）:
+  --no-github            （仅 --publish/--publish-only）跳过 GitHub 步骤
+  --github-tag-only      只推 tag 不推分支（默认行为，显式写出）
+  --github-push-branch   同时推当前分支到 GitHub 远端（默认不推）
+说明: GitHub 步骤推送 tag（可选再加当前分支），tag/分支可达的全部提交历史对公开可见。
+退出码: 0 成功 | 1 失败（用法/配置/前置校验/构建/主仓库发布） | 40 GitHub 步骤失败（若在主仓库成功之后则
+        主仓库已成功且不回滚，用 --publish-github-only 重跑）
+配置: 主仓库 host/repo/远端名见 scripts/release.local.env（不入库）；GitHub 远端名默认 github，需先
+      git remote add github https://github.com/mfreceiver/alpha-gps.git
+USAGE
+}
+ALLOW_DIRTY=0; PUBLISH=0; PUBLISH_ONLY=0; PUBLISH_GH_ONLY=0
+NO_GITHUB=0; GH_TAG_ONLY=0; GH_PUSH_BRANCH=0; VERSION_NAME=""
 for arg in "$@"; do
   case "$arg" in
-    --allow-dirty)  ALLOW_DIRTY=1 ;;
-    --publish)      PUBLISH=1 ;;
-    --publish-only) PUBLISH_ONLY=1 ;;
-    -h|--help)      sed -n '2,17p' "$SCRIPT_REAL"; exit 0 ;;
+    --allow-dirty)          ALLOW_DIRTY=1 ;;
+    --publish)              PUBLISH=1 ;;
+    --publish-only)         PUBLISH_ONLY=1 ;;
+    --publish-github-only)  PUBLISH_GH_ONLY=1 ;;
+    --no-github)            NO_GITHUB=1 ;;
+    --github-tag-only)      GH_TAG_ONLY=1 ;;
+    --github-push-branch)   GH_PUSH_BRANCH=1 ;;
+    -h|--help)              usage; exit 0 ;;
     *)
       if [[ -z "$VERSION_NAME" ]]; then VERSION_NAME=$arg
-      else fail "无法识别的参数: $arg（用法: $0 <X.Y.Z> [--allow-dirty|--publish|--publish-only]）"; fi ;;
+      else fail "无法识别的参数: $arg（见 $0 --help）"; fi ;;
   esac
 done
-[[ -n "$VERSION_NAME" ]] || { echo "用法: $0 <X.Y.Z> [--allow-dirty|--publish|--publish-only]" >&2; exit 1; }
-(( PUBLISH + PUBLISH_ONLY <= 1 )) || fail "--publish 与 --publish-only 互斥"
-(( ALLOW_DIRTY + PUBLISH + PUBLISH_ONLY <= 1 )) || fail "--allow-dirty 仅限构建验证，不能与发布模式组合"
+[[ -n "$VERSION_NAME" ]] || { echo "用法: $0 <X.Y.Z> [--allow-dirty|--publish|--publish-only|--publish-github-only] （详见 --help）" >&2; exit 1; }
+(( PUBLISH + PUBLISH_ONLY + PUBLISH_GH_ONLY <= 1 )) || fail "--publish / --publish-only / --publish-github-only 互斥"
+(( ALLOW_DIRTY + PUBLISH + PUBLISH_ONLY + PUBLISH_GH_ONLY <= 1 )) || fail "--allow-dirty 仅限构建验证，不能与发布模式组合"
+(( ! NO_GITHUB || PUBLISH || PUBLISH_ONLY )) || fail "--no-github 仅可与 --publish / --publish-only 组合"
+(( ! (GH_TAG_ONLY && GH_PUSH_BRANCH) )) || fail "--github-tag-only 与 --github-push-branch 互斥"
+# GitHub 步骤是否会执行：--publish-github-only，或发布模式且未 --no-github
+GITHUB_STEP=0
+if (( PUBLISH_GH_ONLY )) || { (( PUBLISH || PUBLISH_ONLY )) && (( ! NO_GITHUB )); }; then GITHUB_STEP=1; fi
+(( GITHUB_STEP || ( ! GH_TAG_ONLY && ! GH_PUSH_BRANCH ) )) \
+  || fail "--github-tag-only / --github-push-branch 仅在会执行 GitHub 步骤的发布模式下有效"
+# 不构建、只校验既有归档的模式
+ARCHIVE_ONLY=0; MODE_FLAG=""
+if (( PUBLISH_ONLY )); then ARCHIVE_ONLY=1; MODE_FLAG=--publish-only; fi
+if (( PUBLISH_GH_ONLY )); then ARCHIVE_ONLY=1; MODE_FLAG=--publish-github-only; fi
 [[ "$VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
   || fail "版本号必须是 X.Y.Z 语义化格式（如 1.7.3），当前: '${VERSION_NAME}'"
 
-# 主仓库参数外置：本机配置/环境变量，缺失或非法 fail-closed（本脚本所有模式都需要主仓库
-# 远端做版本唯一性/发布；-h/--help 已在上面提前退出，不受影响）
-rl_load_release_config "$LOCAL_ENV_FILE" 1 || exit 1
+# 主仓库参数外置：本机配置/环境变量，缺失或非法 fail-closed（除 --publish-github-only 外所有
+# 模式都需要主仓库远端做版本唯一性/发布；-h/--help 已在上面提前退出，不受影响）。
+# GITHUB_REMOTE（本机 GitHub 远端名，默认 github）同在此解析。
+if (( PUBLISH_GH_ONLY )); then rl_load_release_config "$LOCAL_ENV_FILE" 0 || exit 1
+else rl_load_release_config "$LOCAL_ENV_FILE" 1 || exit 1; fi
 
 EMBED_NAME="v$VERSION_NAME"          # 产物 manifest 期望 versionName（仓库惯例带 v）
 TAG_NAME="v$VERSION_NAME"
@@ -274,6 +312,214 @@ print(json.dumps({'tag_name': '$TAG_NAME', 'name': '$TAG_NAME', 'body': 'alpha-g
   log "主仓库 release: https://$PRIMARY_HOST/$PRIMARY_REPO/releases/tag/$TAG_NAME"
 }
 
+# ─── GitHub 步骤（M10 双源发布；主仓库成功后才执行）─────────────────────────────
+# 公开仓库 github.com/mfreceiver/alpha-gps（常量，见 release_lib.sh RL_GH_*）。
+# 凭据：git credential fill（protocol=https host=github.com，15s 超时），token 只存在于 shell
+# 变量 GH_TOKEN（不 export），经 stdin→curl -K - 配置流传递，绝不进 argv/日志；整个步骤在
+# set +x 下运行。带 token 的请求只发往 api.github.com / uploads.github.com（rl_gh_url_allowed
+# 白名单硬校验，且 --no-location 不跟随重定向）。
+# 对账下载是匿名的（release 公开）：首跳 browser_download_url（先过 assert_asset_url_trusted
+# 同源校验）不跟随、读 Location，须 https 且主机在下载白名单；第二跳（无凭据、仍不跟随）必须
+# 直接 200，再遇重定向或主机不在白名单 → 中止。绝不放开 --proto-redir / -L。
+# 失败语义：整个 publish_github 跑在子 shell，任何失败 → 子 shell 非零 → 脚本以 40 退出。
+GITHUB_REPO=$RL_GH_REPO
+GH_WEB_HOST=github.com
+GH_API="https://api.github.com/repos/$GITHUB_REPO"
+GH_UPLOAD="https://uploads.github.com/repos/$GITHUB_REPO"
+EXIT_GITHUB_FAIL=40
+GH_TOKEN=""
+GH_AFTER_PRIMARY=0
+
+gh_err() { echo "FAIL $1" >&2; }
+
+# gh_preflight：本地前置检查（在构建/任何对外动作之前执行；失败 → 普通失败 exit 1，尚未发布任何东西）
+gh_preflight() {
+  { set +x; } 2>/dev/null
+  local raw CRED
+  raw=$(git config --get "remote.$GITHUB_REMOTE.url" 2>/dev/null) \
+    || fail "GitHub 远端 '$GITHUB_REMOTE' 不存在（fail-closed，脚本不自动创建）。请先执行: git remote add $GITHUB_REMOTE https://github.com/$GITHUB_REPO.git"
+  rl_gh_remote_url_ok "$raw" \
+    || fail "GitHub 远端 '$GITHUB_REMOTE' 的 url 必须精确为 https://github.com/$GITHUB_REPO[.git]（实际: $raw）"
+  [[ "$GITHUB_REMOTE" != "${PRIMARY_REMOTE:-}" ]] \
+    || fail "GitHub 远端名不能与主仓库远端名相同（$GITHUB_REMOTE）"
+  CRED="$(printf 'protocol=https\nhost=github.com\n\n' | timeout 15 git credential fill)" \
+    || fail "GitHub 凭据缺失/超时（git credential fill 15s 内未非交互返回 github.com 凭据）"
+  GH_TOKEN="$(printf '%s' "$CRED" | sed -n 's/^password=//p')"
+  CRED=""
+  [[ -n "$GH_TOKEN" ]] || fail "GitHub 凭据不完整（password/token 缺失）"
+  printf '%s' "$GH_TOKEN" | rl_gh_curl_config > /dev/null || fail "GitHub token 形态非法"
+  pass "GitHub 前置检查通过（远端 $GITHUB_REMOTE → github.com/$GITHUB_REPO；凭据已取得，不回显）"
+}
+
+# gh_api <api|upload> <输出文件> <curl 参数...> <URL>  → stdout=HTTP 码；rc=curl/白名单失败
+gh_api() {
+  local kind=$1 out=$2; shift 2
+  local url=${!#}
+  rl_gh_url_allowed "$kind" "$url" || return 97
+  printf '%s' "$GH_TOKEN" | rl_gh_curl_config \
+    | curl -q -K - -sS -m 60 --no-location --proto '=https' --proto-redir '=https' \
+        -o "$out" -w '%{http_code}' "$@"
+}
+
+# gh_fetch_noredirect <url> <输出文件> <头文件> → stdout=HTTP 码。匿名、不跟随重定向。
+gh_fetch_noredirect() {
+  curl -q -sS -m 300 --max-filesize 209715200 --no-location --proto '=https' --proto-redir '=https' \
+    -D "$3" -o "$2" -w '%{http_code}' --url "$1"
+}
+
+# gh_remote_sha256 <资产名> <browser_download_url> → stdout=下载内容 sha256（手动走一跳重定向）
+gh_remote_sha256() {
+  local name=$1 url=$2 dl="$GH_WORK/asset_dl.bin" code loc lochost
+  assert_asset_url_trusted "$url" "$GH_WEB_HOST" "$GITHUB_REPO" "$TAG_NAME" "$name" >&2 \
+    || { gh_err "GitHub 资产 URL 未通过同源校验: $name"; return 1; }
+  rm -f "$dl" "$GH_WORK/hop1.hdr" "$GH_WORK/hop2.hdr"
+  code="$(gh_fetch_noredirect "$url" "$dl" "$GH_WORK/hop1.hdr")" \
+    || { gh_err "GitHub 资产下载首跳失败（curl 错误）: $name"; return 1; }
+  case "$code" in
+    200) ;;   # 无重定向直接返回字节（不预期，但安全：来源是 assert_asset_url_trusted 通过的 github.com URL）
+    301|302|303|307|308)
+      loc="$(rl_gh_location_from_headers "$GH_WORK/hop1.hdr")" \
+        || { gh_err "GitHub 资产下载：首跳 $code 但 Location 头不可用"; return 1; }
+      rl_gh_url_allowed download "$loc" >&2 \
+        || { gh_err "GitHub 资产下载：重定向目标未通过 https+主机白名单校验（不跟随）"; return 1; }
+      lochost=${loc#https://}; lochost=${lochost%%[/?#]*}
+      echo ">>> 资产下载重定向一跳 → $lochost（白名单内；第二跳匿名、不跟随）" >&2
+      rm -f "$dl"
+      code="$(gh_fetch_noredirect "$loc" "$dl" "$GH_WORK/hop2.hdr")" \
+        || { gh_err "GitHub 资产下载第二跳失败（curl 错误）: $lochost"; return 1; }
+      case "$code" in
+        200) ;;
+        30[12378]) gh_err "GitHub 资产下载：第二跳仍重定向（HTTP $code），中止（只允许走一跳）"; return 1 ;;
+        *) gh_err "GitHub 资产下载第二跳 HTTP $code"; return 1 ;;
+      esac ;;
+    *) gh_err "GitHub 资产下载首跳 HTTP $code（期望 200 或 3xx）"; return 1 ;;
+  esac
+  sha256sum "$dl" | awk '{print $1}'
+  rm -f "$dl"
+}
+
+publish_github() {
+  { set +x; } 2>/dev/null
+  GH_WORK=$(mktemp -d)
+  trap 'rm -rf -- "$GH_WORK"' EXIT
+  [[ -n "$GH_TOKEN" ]] || fail "GitHub token 未就绪（内部错误）"
+  log "GitHub 步骤: 推送 tag $TAG_NAME$( (( GH_PUSH_BRANCH )) && echo ' + 当前分支' ) 到远端 $GITHUB_REMOTE（github.com/$GITHUB_REPO）"
+  warn "GitHub 步骤会推送 tag$( (( GH_PUSH_BRANCH )) && echo ' 与当前分支' )，其可达的全部提交历史对公开可见"
+
+  local lsha lsize BRANCH LOCAL_SHA REMOTE_OUT REMOTE_SHA
+  lsha="$(awk -v f="release/$APK_NAME" '$2==f{print $1}' "$RELEASE_DIR/SHA256SUMS")"
+  [[ -n "$lsha" ]] || fail "GitHub 对账：release/$APK_NAME 无本地 SHA256SUMS 条目（fail-closed）"
+  lsize="$(wc -c < "$RELEASE_DIR/$APK_NAME" | tr -d ' ')"
+
+  # ① 远端 tag：已存在且同 commit → 跳过 push；不一致 → 中止（禁止移动已发布 tag）
+  LOCAL_SHA="$(git rev-parse "$TAG_NAME^{commit}")" || fail "本地 tag $TAG_NAME 不可解析"
+  if ! REMOTE_OUT="$(timeout 30 git ls-remote --tags "$GITHUB_REMOTE" "refs/tags/$TAG_NAME" "refs/tags/$TAG_NAME^{}" 2>&1)"; then
+    fail "GitHub 远端 tag 查询失败（$GITHUB_REMOTE 不可达/网络错误，fail-closed）"
+  fi
+  REMOTE_SHA="$(awk -v t="refs/tags/$TAG_NAME" -v p="refs/tags/$TAG_NAME^{}" '
+    $2 == p { peeled = $1 }
+    $2 == t { plain = $1 }
+    END { if (peeled != "") print peeled; else if (plain != "") print plain }' <<<"$REMOTE_OUT")"
+  if [[ -n "$REMOTE_SHA" ]]; then
+    [[ "$REMOTE_SHA" == "$LOCAL_SHA" ]] \
+      || fail "GitHub 远端 tag $TAG_NAME 指向 $REMOTE_SHA ≠ 本地 $LOCAL_SHA（禁止移动已发布 tag）"
+    log "GitHub 远端 tag $TAG_NAME 已存在且同 commit → 跳过 tag push"
+  else
+    timeout 120 git push "$GITHUB_REMOTE" "refs/tags/$TAG_NAME:refs/tags/$TAG_NAME" \
+      || fail "git push $GITHUB_REMOTE $TAG_NAME 失败"
+  fi
+  if (( GH_PUSH_BRANCH )); then
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    [[ "$BRANCH" != HEAD ]] || fail "--github-push-branch：当前是游离 HEAD，无分支可推"
+    timeout 120 git push "$GITHUB_REMOTE" "refs/heads/$BRANCH:refs/heads/$BRANCH" \
+      || fail "git push $GITHUB_REMOTE $BRANCH 失败"
+  fi
+
+  # ② release：按 tag 查询——200 复用 / 404 新建 / 其它 fail-closed
+  log "GitHub release"
+  local REL_ID="" HTTP RC=0 GETF="$GH_WORK/rel_get.json" RESPF="$GH_WORK/rel_resp.json" BODYF="$GH_WORK/rel_body.json"
+  HTTP="$(gh_api api "$GETF" "$GH_API/releases/tags/$TAG_NAME")" || RC=$?
+  [[ "$RC" -eq 0 ]] || fail "GitHub release 查询失败（rc=$RC, HTTP=${HTTP:-n/a}）"
+  if [[ "$HTTP" == "200" ]]; then
+    REL_ID="$(rl_gh_release_field "$GETF" id)" || fail "GitHub release 查询响应无有效 id"
+    log "GitHub 已有 tag $TAG_NAME 的 release（id=$REL_ID）→ 复用并做资产对账"
+  elif [[ "$HTTP" != "404" ]]; then
+    head -c 300 "$GETF" >&2 2>/dev/null || true
+    fail "GitHub release 查询失败: HTTP $HTTP"
+  else
+    log "GitHub 无 tag $TAG_NAME 的 release → 新建"
+    python3 -c "
+import json
+print(json.dumps({'tag_name': '$TAG_NAME', 'name': '$TAG_NAME', 'body': 'alpha-gps $TAG_NAME'}))
+" > "$BODYF"
+    RC=0
+    HTTP="$(gh_api api "$RESPF" -X POST -H 'Content-Type: application/json' -d @"$BODYF" "$GH_API/releases")" || RC=$?
+    [[ "$RC" -eq 0 && "$HTTP" == "201" ]] \
+      || { head -c 300 "$RESPF" >&2 2>/dev/null || true; fail "GitHub release 创建失败（rc=$RC, HTTP=${HTTP:-n/a}）"; }
+    REL_ID="$(rl_gh_release_field "$RESPF" id)" || fail "GitHub release 创建响应无有效 id"
+  fi
+
+  # ③ 资产：同名存在 → 先快检（state/size/digest）；同名不同内容中止；缺失 → 上传
+  local VF="$GH_WORK/rel_assets.json" ASSET_LINE
+  fetch_asset_line() { # 重新枚举 release，输出本次 APK 资产行（0/1 行）
+    RC=0
+    HTTP="$(gh_api api "$VF" "$GH_API/releases/$REL_ID")" || RC=$?
+    [[ "$RC" -eq 0 && "$HTTP" == "200" ]] || { gh_err "GitHub release 资产表查询失败: HTTP ${HTTP:-n/a}"; return 1; }
+    local all; all="$(rl_gh_release_field "$VF" assets)" || { gh_err "GitHub 资产表解析失败"; return 1; }
+    awk -F'\t' -v n="$APK_NAME" '$1==n' <<<"$all"
+  }
+  ASSET_LINE="$(fetch_asset_line)" || fail "GitHub 资产枚举失败（fail-closed）"
+  if [[ -n "$ASSET_LINE" ]]; then
+    [[ "$(wc -l <<<"$ASSET_LINE")" -eq 1 ]] || fail "GitHub 资产表同名资产出现多次: $APK_NAME"
+    local a_size a_sha a_state
+    a_size=$(cut -f2 <<<"$ASSET_LINE"); a_sha=$(cut -f3 <<<"$ASSET_LINE"); a_state=$(cut -f4 <<<"$ASSET_LINE")
+    [[ "$a_state" == uploaded ]] \
+      || fail "GitHub 资产 $APK_NAME 状态为 '$a_state'（非 uploaded，疑似残缺上传）；请在 GitHub release 页手工删除后重跑"
+    [[ "$a_size" == "$lsize" ]] \
+      || fail "GitHub 远端资产同名但内容不一致: $APK_NAME（size 远端 $a_size ≠ 本地 $lsize），中止"
+    if [[ "$a_sha" != "-" && "$a_sha" != "$lsha" ]]; then
+      fail "GitHub 远端资产同名但 sha256 不一致: $APK_NAME（远端 digest $a_sha ≠ 本地 $lsha），中止"
+    fi
+    log "GitHub 已存在同名资产且 size/digest 一致: $APK_NAME → 跳过上传，进入下载对账"
+  else
+    local UPF="$GH_WORK/asset_resp.json"
+    RC=0
+    HTTP="$(gh_api upload "$UPF" -m 600 -X POST -H 'Content-Type: application/vnd.android.package-archive' \
+      --data-binary @"$RELEASE_DIR/$APK_NAME" "$GH_UPLOAD/releases/$REL_ID/assets?name=$APK_NAME")" || RC=$?
+    [[ "$RC" -eq 0 && "$HTTP" == "201" ]] \
+      || { head -c 300 "$UPF" >&2 2>/dev/null || true; fail "GitHub 资产上传失败: $APK_NAME（rc=$RC, HTTP=${HTTP:-n/a}）"; }
+    pass "GitHub 资产上传 OK: $APK_NAME（HTTP $HTTP）"
+    ASSET_LINE="$(fetch_asset_line)" || fail "GitHub 上传后资产枚举失败（fail-closed）"
+    [[ -n "$ASSET_LINE" ]] || fail "GitHub 上传后资产表中找不到 $APK_NAME（fail-closed）"
+    [[ "$(cut -f4 <<<"$ASSET_LINE")" == uploaded && "$(cut -f2 <<<"$ASSET_LINE")" == "$lsize" ]] \
+      || fail "GitHub 上传后资产状态/size 异常: $(cut -f2,4 <<<"$ASSET_LINE")"
+  fi
+
+  # ④ 对账：下载 browser_download_url（手动走一跳）重算 sha256
+  local a_url rsha
+  a_url=$(cut -f5 <<<"$ASSET_LINE")
+  [[ -n "$a_url" ]] || fail "GitHub 资产无 browser_download_url（fail-closed）"
+  rsha="$(gh_remote_sha256 "$APK_NAME" "$a_url")" || fail "GitHub 资产下载对账失败: $APK_NAME"
+  [[ "$rsha" == "$lsha" ]] \
+    || fail "GitHub 资产对账：$APK_NAME 下载重算 sha256 不一致（远端 $rsha ≠ 本地 $lsha）"
+  pass "GitHub 资产对账通过: $APK_NAME sha256 一致"
+  log "GitHub release: https://github.com/$GITHUB_REPO/releases/tag/$TAG_NAME"
+}
+
+# run_github_step：子 shell 隔离执行；任何失败 → 以 EXIT_GITHUB_FAIL(40) 退出并明确报告
+run_github_step() {
+  local rc=0
+  ( publish_github ) || rc=$?
+  if (( rc != 0 )); then
+    if (( GH_AFTER_PRIMARY )); then
+      echo "FATAL release_build: 主仓库发布已成功，但 GitHub 步骤失败（子步骤 rc=$rc；脚本退出码 $EXIT_GITHUB_FAIL；主仓库不回滚）。排查后单独重跑: scripts/release_build.sh $VERSION_NAME --publish-github-only" >&2
+    else
+      echo "FATAL release_build: GitHub 步骤失败（子步骤 rc=$rc；脚本退出码 $EXIT_GITHUB_FAIL；本次未涉及主仓库）" >&2
+    fi
+    exit "$EXIT_GITHUB_FAIL"
+  fi
+}
+
 # ─── 签名预检（fail-closed）──────────────────────────────────────────────
 log "签名预检"
 [[ -f "$GRADLE_PROPS" ]] || fail "未找到 $GRADLE_PROPS（DSH_* 签名凭据应位于其中）"
@@ -303,9 +549,9 @@ pass "keystore 可读、alias=$SIGNING_KEY_ALIAS、证书 SHA256 与钉定值一
 log "git 门禁"
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 GIT_STATUS=$(git status --porcelain)
-if [[ -n "$GIT_STATUS" ]] && (( PUBLISH || PUBLISH_ONLY )); then
+if [[ -n "$GIT_STATUS" ]] && (( PUBLISH || PUBLISH_ONLY || PUBLISH_GH_ONLY )); then
   echo "$GIT_STATUS" | head -5 >&2
-  fail "工作树不干净：发布（--publish/--publish-only）不允许脏树（--allow-dirty 仅限构建验证）"
+  fail "工作树不干净：发布（--publish/--publish-only/--publish-github-only）不允许脏树（--allow-dirty 仅限构建验证）"
 fi
 if [[ -n "$GIT_STATUS" ]] && (( ! ALLOW_DIRTY )); then
   echo "$GIT_STATUS" | head -5 >&2
@@ -316,8 +562,14 @@ if [[ -n "$GIT_STATUS" ]] && (( ALLOW_DIRTY )); then
 fi
 pass "分支 $BRANCH${GIT_STATUS:+（脏树，--allow-dirty）}"
 
-# ─── 版本唯一性（fail-closed；--publish-only 不出新版本，跳过）──────────
-if (( ! PUBLISH_ONLY )); then
+# ─── GitHub 前置检查（先于构建与一切对外动作；失败 = 尚未发布任何东西的普通失败）────
+if (( GITHUB_STEP )); then
+  log "GitHub 前置检查（远端/凭据；GitHub 步骤会推送 tag$( (( GH_PUSH_BRANCH )) && echo ' 与当前分支' )，其可达历史对公开可见）"
+  gh_preflight
+fi
+
+# ─── 版本唯一性（fail-closed；--publish-only / --publish-github-only 不出新版本，跳过）──
+if (( ! ARCHIVE_ONLY )); then
   log "版本唯一性检查: $VERSION_NAME"
   git rev-parse -q --verify "refs/tags/$TAG_NAME" > /dev/null \
     && fail "本地 tag $TAG_NAME 已存在（重发已归档版本用 --publish-only）"
@@ -329,38 +581,39 @@ if (( ! PUBLISH_ONLY )); then
 fi
 
 # ─── --publish-only：不构建，校验 HEAD 对应 tag 与 release/ 归档完整后仅发布 ──
-if (( PUBLISH_ONLY )); then
-  log "--publish-only：校验归档完整性（不构建）"
+if (( ARCHIVE_ONLY )); then
+  log "$MODE_FLAG：校验归档完整性（不构建）"
   git rev-parse -q --verify "refs/tags/$TAG_NAME" > /dev/null \
-    || fail "--publish-only：本地 tag $TAG_NAME 不存在。发版产物由 release_build.sh 归档时创建，勿手工造 tag 绕门禁"
+    || fail "$MODE_FLAG：本地 tag $TAG_NAME 不存在。发版产物由 release_build.sh 归档时创建，勿手工造 tag 绕门禁"
   [[ "$(git rev-parse "$TAG_NAME^{commit}")" == "$(git rev-parse HEAD)" ]] \
-    || fail "--publish-only：tag $TAG_NAME 不在 HEAD 上（HEAD 版本与归档不符；在干净树重跑 release_build.sh 出该版本）"
-  [[ -f "$RELEASE_DIR/$APK_NAME" ]] || fail "--publish-only：归档缺失 release/$APK_NAME"
-  [[ -f "$RELEASE_DIR/SHA256SUMS" ]] || fail "--publish-only：release/SHA256SUMS 缺失"
+    || fail "$MODE_FLAG：tag $TAG_NAME 不在 HEAD 上（HEAD 版本与归档不符；在干净树重跑 release_build.sh 出该版本）"
+  [[ -f "$RELEASE_DIR/$APK_NAME" ]] || fail "$MODE_FLAG：归档缺失 release/$APK_NAME"
+  [[ -f "$RELEASE_DIR/SHA256SUMS" ]] || fail "$MODE_FLAG：release/SHA256SUMS 缺失"
   grep -qxF "release/$APK_NAME" <(awk '{print $2}' "$RELEASE_DIR/SHA256SUMS") \
-    || fail "--publish-only：SHA256SUMS 缺当前版本条目: release/$APK_NAME"
+    || fail "$MODE_FLAG：SHA256SUMS 缺当前版本条目: release/$APK_NAME"
   sha256sum -c "$RELEASE_DIR/SHA256SUMS" > /dev/null \
-    || fail "--publish-only：SHA256SUMS 校验失败（归档损坏）"
+    || fail "$MODE_FLAG：SHA256SUMS 校验失败（归档损坏）"
   # 预期 versionCode 独立来源：被发布 tag 提交的 gradle.properties（上方门禁已确认
   # tag 在 HEAD 上；LEGACY 表中的历史 tag 用表值——其提交的 gradle.properties 尚无该 key），
   # 不信任归档 APK 自读值（否则等于自比，APK code 错也会 PASS）。
   # git show 原始字节经临时文件直入 parser（不经 bash 变量——NUL 会被丢弃仅留 warning）。
   EXPECT_CODE=$(expected_code_for_tag "$TAG_NAME") \
-    || fail "--publish-only：无法读取/解析 tag 提交的 gradle.properties 的 versionCode（fail-closed）: $TAG_NAME"
-  assert_code_monotonic "$EXPECT_CODE" "$VERSION_NAME" || fail "--publish-only：versionCode 单调性门禁失败"
+    || fail "$MODE_FLAG：无法读取/解析 tag 提交的 gradle.properties 的 versionCode（fail-closed）: $TAG_NAME"
+  assert_code_monotonic "$EXPECT_CODE" "$VERSION_NAME" || fail "$MODE_FLAG：versionCode 单调性门禁失败"
   find_aapt
   EMBEDDED_NAME=$(apk_version_name "$RELEASE_DIR/$APK_NAME")
   VERSION_CODE=$(apk_version_code "$RELEASE_DIR/$APK_NAME")
   [[ -n "$EMBEDDED_NAME" && -n "$VERSION_CODE" ]] \
-    || fail "--publish-only：归档 APK 内嵌版本解析失败（fail-closed）: $APK_NAME"
+    || fail "$MODE_FLAG：归档 APK 内嵌版本解析失败（fail-closed）: $APK_NAME"
   [[ "$EMBEDDED_NAME" == "$EMBED_NAME" ]] \
-    || fail "--publish-only：归档 APK 内嵌 versionName($EMBEDDED_NAME)与请求版本($EMBED_NAME)不一致"
+    || fail "$MODE_FLAG：归档 APK 内嵌 versionName($EMBEDDED_NAME)与请求版本($EMBED_NAME)不一致"
   "$REPO_ROOT/scripts/release_assert_apk.sh" "$RELEASE_DIR/$APK_NAME" "$EMBED_NAME" "$EXPECT_CODE" "$PINNED_CERT_SHA256" \
-    || fail "--publish-only：归档 APK 断言失败（含 versionCode 与 tag 提交 gradle.properties 期望值比对）"
+    || fail "$MODE_FLAG：归档 APK 断言失败（含 versionCode 与 tag 提交 gradle.properties 期望值比对）"
   pass "归档完整（APK+SHA256SUMS+断言）"
-  publish_release
+  if (( PUBLISH_ONLY )); then publish_release; fi
+  if (( GITHUB_STEP )); then GH_AFTER_PRIMARY=$PUBLISH_ONLY; run_github_step; fi
   echo
-  echo "--publish-only 完成: $VERSION_NAME (versionCode $VERSION_CODE)  tag: $TAG_NAME"
+  echo "$MODE_FLAG 完成: $VERSION_NAME (versionCode $VERSION_CODE)  tag: $TAG_NAME"
   exit 0
 fi
 
@@ -494,6 +747,7 @@ pass "tag $TAG_NAME → $(git rev-parse --short HEAD)"
 
 if (( PUBLISH )); then
   publish_release
+  if (( GITHUB_STEP )); then GH_AFTER_PRIMARY=1; run_github_step; fi
   echo
   echo "========================================================================="
   echo "  发版完成: $EMBED_NAME (code $VERSION_CODE)  tag: $TAG_NAME"
@@ -503,4 +757,4 @@ fi
 
 echo
 echo "构建+归档+tag 完成: $EMBED_NAME (code $VERSION_CODE)  tag: $TAG_NAME"
-echo "对外发布: scripts/release_build.sh $VERSION_NAME --publish-only"
+echo "对外发布: scripts/release_build.sh $VERSION_NAME --publish-only（主仓库→GitHub；可加 --no-github；只补 GitHub 用 --publish-github-only）"
