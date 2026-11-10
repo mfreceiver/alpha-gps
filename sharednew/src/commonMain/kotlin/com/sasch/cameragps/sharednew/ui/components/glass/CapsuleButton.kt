@@ -1,0 +1,214 @@
+package com.sasch.cameragps.sharednew.ui.components.glass
+
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.shadow.Shadow
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.dp
+import cameragps.sharednew.generated.resources.Res
+import cameragps.sharednew.generated.resources.m0_button_loading
+import com.sasch.cameragps.sharednew.ui.theme.AlphaColors
+import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import org.jetbrains.compose.resources.stringResource
+
+/**
+ * Role of an operation capsule (design page 7, "按钮规则表"):
+ * - [Primary]: the one main action of a screen (下载 / 照片传输 / 添加相机 / 搜索相机), icon + text,
+ *   at the bottom; the confirm button of a dialog.
+ * - [Secondary]: pale glass capsule — the cancel / left button of a dialog.
+ * - [Tonal]: secondary operations in a card (连接 / 配对 / 重新读取 / 去授权).
+ * - [Danger]: filled red — confirm of a destructive dialog (移除 / 断开 / 删除).
+ * - [DangerOutlined]: red outline — the destructive entry point on a page (移除相机).
+ */
+enum class CapsuleRole { Primary, Secondary, Tonal, Danger, DangerOutlined }
+
+/** Height of a capsule: 48 dp (dialogs, inline), 56 dp (screen primary), 68 dp (device page hero). */
+enum class CapsuleSize(val height: Dp, val iconSize: Dp, val horizontalPadding: Dp) {
+    Regular(48.dp, 20.dp, 20.dp),
+    Large(56.dp, 22.dp, 24.dp),
+    Hero(68.dp, 24.dp, 28.dp),
+}
+
+/**
+ * Resolved colours of a capsule. [containerTop]/[containerBottom] form a vertical gradient (equal for
+ * flat roles); [rimAlpha] is the white 1 dp rim; [glow] is the coloured drop shadow of a raised
+ * primary button (null = none); [border] is the outline of [CapsuleRole.DangerOutlined].
+ */
+@Immutable
+data class CapsuleColors(
+    val containerTop: Color,
+    val containerBottom: Color,
+    val content: Color,
+    val rimAlpha: Float,
+    val glow: Color?,
+    val border: Color?,
+)
+
+/**
+ * Pure colour resolution for [role] (design `lib3.primary_btn` / `pill_btn` / `tonal_btn`).
+ * [raised] adds the primary gradient glow (operation buttons ≥ 56 dp, not dialog capsules).
+ */
+fun capsuleColors(role: CapsuleRole, enabled: Boolean, colors: AlphaColors, raised: Boolean = false): CapsuleColors {
+    if (!enabled) {
+        val fill = colors.onSurface.copy(alpha = 0.12f)
+        return CapsuleColors(
+            containerTop = fill,
+            containerBottom = fill,
+            content = colors.onSurface.copy(alpha = 0.45f),
+            rimAlpha = 0f,
+            glow = null,
+            border = null,
+        )
+    }
+    return when (role) {
+        CapsuleRole.Primary -> CapsuleColors(
+            // Raised: vertical gradient from a lightened primary; flat capsules (dialogs) stay solid.
+            containerTop = if (raised) lerp(colors.primary, Color.White, if (colors.isDark) 0.25f else 0.16f) else colors.primary,
+            containerBottom = colors.primary,
+            content = colors.onPrimary,
+            rimAlpha = if (raised) (if (colors.isDark) 0.5f else 0.35f) else 0.3f,
+            glow = if (raised) {
+                if (colors.isDark) Color.Black.copy(alpha = 0.5f) else Color(0xFF0B57D0).copy(alpha = 0.34f)
+            } else {
+                null
+            },
+            border = null,
+        )
+        CapsuleRole.Secondary -> {
+            val fill = colors.onSurface.copy(alpha = if (colors.isDark) 0.13f else 0.07f)
+            CapsuleColors(fill, fill, colors.onSurface, if (colors.isDark) 0.16f else 0.7f, null, null)
+        }
+        CapsuleRole.Tonal -> CapsuleColors(
+            colors.primaryContainer, colors.primaryContainer, colors.onPrimaryContainer, 0f, null, null,
+        )
+        CapsuleRole.Danger -> CapsuleColors(colors.error, colors.error, colors.onError, 0.3f, null, null)
+        CapsuleRole.DangerOutlined -> CapsuleColors(
+            Color.Transparent, Color.Transparent, colors.error, 0f, null, colors.error,
+        )
+    }
+}
+
+/**
+ * Operation capsule button (≥ 48 dp touch). Text is required — icon-only actions use
+ * [GlassIconButton]. [loading] keeps the label, swaps the icon for a spinner and ignores clicks;
+ * TalkBack hears the loading state.
+ */
+@Composable
+fun CapsuleButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    role: CapsuleRole = CapsuleRole.Primary,
+    size: CapsuleSize = CapsuleSize.Regular,
+    icon: Painter? = null,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+) {
+    val alpha = AlphaTheme.colors
+    val raised = role == CapsuleRole.Primary && size != CapsuleSize.Regular
+    val c = capsuleColors(role, enabled, alpha, raised)
+    val shape = AlphaShapes.capsule
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, tween(120), label = "capsulePress")
+    val loadingLabel = stringResource(Res.string.m0_button_loading)
+    val glowModifier = c.glow?.let {
+        Modifier.dropShadow(shape, Shadow(radius = 16.dp, color = it, offset = DpOffset(0.dp, 6.dp)))
+    } ?: Modifier
+    val borderModifier = when {
+        c.border != null -> Modifier.border(1.dp, c.border, shape)
+        c.rimAlpha > 0f -> Modifier.border(1.dp, Color.White.copy(alpha = c.rimAlpha), shape)
+        else -> Modifier
+    }
+    val textStyle = when (size) {
+        CapsuleSize.Regular -> AlphaTextStyles.button
+        CapsuleSize.Large -> AlphaTextStyles.buttonLarge
+        CapsuleSize.Hero -> AlphaTextStyles.buttonHero
+    }
+    Row(
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .defaultMinSize(minWidth = size.height, minHeight = size.height)
+            .then(glowModifier)
+            .clip(shape)
+            .background(Brush.verticalGradient(listOf(c.containerTop, c.containerBottom)))
+            .then(borderModifier)
+            .clickable(
+                interactionSource = interaction,
+                indication = ripple(color = c.content),
+                enabled = enabled && !loading,
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .then(if (loading) Modifier.semantics { stateDescription = loadingLabel } else Modifier)
+            .padding(PaddingValues(horizontal = size.horizontalPadding)),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(size.iconSize - 2.dp),
+                color = c.content,
+                strokeWidth = 2.dp,
+            )
+            Spacer(Modifier.width(8.dp))
+        } else if (icon != null) {
+            // Decorative: the label already names the action.
+            Image(
+                painter = icon,
+                contentDescription = null,
+                modifier = Modifier.size(size.iconSize),
+                colorFilter = ColorFilter.tint(c.content),
+            )
+            Spacer(Modifier.width(8.dp))
+        }
+        Text(
+            text = text,
+            style = textStyle,
+            color = c.content,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
