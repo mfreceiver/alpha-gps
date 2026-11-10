@@ -28,6 +28,7 @@ import androidx.navigation3.ui.NavDisplay
 import com.sasch.cameragps.sharednew.database.LogDatabase
 import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
 import com.sasch.cameragps.sharednew.database.logging.LogRepository
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassBackground
 import com.sasch.cameragps.sharednew.ui.logs.SharedLogViewerScreen
 import com.sasch.cameragps.sharednew.ui.theme.CameraGpsTheme
 import com.sasch.cameragps.sharednew.whatsnew.rememberWhatsNewState
@@ -55,7 +56,14 @@ class MainActivity : AppCompatActivity() {
 
         setContent {
             CameraGpsTheme {
-                AppContent()
+                // App-wide G0 canvas + blur source + in-tree dialog layer (design v3): every
+                // CapsuleDialog in the app blurs the page behind it. A screen whose content must
+                // not be sampled (photo grid) nests its own
+                // GlassBackground(contentIsBackdropSource = false), which overrides this one for
+                // its subtree.
+                GlassBackground {
+                    AppContent()
+                }
             }
         }
     }

@@ -4,12 +4,8 @@ import android.Manifest
 import android.companion.CompanionDeviceManager
 import androidx.activity.compose.BackHandler
 import androidx.annotation.RequiresPermission
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -17,34 +13,51 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cameragps.sharednew.generated.resources.Res
+import cameragps.sharednew.generated.resources.arrow_back_24px
 import cameragps.sharednew.generated.resources.back
 import cameragps.sharednew.generated.resources.device_info_title
+import cameragps.sharednew.generated.resources.info_24px
+import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionOrchestrator
+import com.sasch.cameragps.sharednew.bluetooth.status.CameraLiveStatus
 import com.sasch.cameragps.sharednew.database.LogDatabase
 import com.sasch.cameragps.sharednew.database.devices.CameraDevice
 import com.sasch.cameragps.sharednew.database.devices.CameraDeviceDAO
 import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
+import com.sasch.cameragps.sharednew.ui.components.glass.LocalGlassOverlayHost
 import com.sasch.cameragps.sharednew.ui.device.DeviceDetailContent
-import com.sasch.cameragps.sharednew.ui.device.DeviceDialogRoute
-import com.sasch.cameragps.sharednew.ui.device.DeviceDialogs
-import com.sasch.cameragps.sharednew.ui.device.rememberDeviceDialogRoute
 import com.sasch.cameragps.sharednew.ui.device.DeviceDetailDataSource
 import com.sasch.cameragps.sharednew.ui.device.DeviceDetailViewModel
+import com.sasch.cameragps.sharednew.ui.device.DeviceDialogRoute
+import com.sasch.cameragps.sharednew.ui.device.DeviceDialogs
+import com.sasch.cameragps.sharednew.ui.device.DeviceLiveStatusSource
+import com.sasch.cameragps.sharednew.ui.device.rememberDeviceDialogRoute
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.saschl.cameragps.AppServices
-import com.saschl.cameragps.R
 import com.saschl.cameragps.service.AssociatedDeviceCompat
 import com.saschl.cameragps.ui.pairing.startDevicePresenceObservation
 import com.saschl.cameragps.ui.pairing.stopDevicePresenceObservation
+import kotlinx.coroutines.flow.Flow
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+
+/** The orchestrator's live-status hub as the device page sees it (read-only + signal lease). */
+private class OrchestratorLiveStatusSource(private val orchestrator: CameraSessionOrchestrator) :
+    DeviceLiveStatusSource {
+    override fun observe(address: String): Flow<CameraLiveStatus?> = orchestrator.liveStatus.observe(address)
+    override fun acquireSignalMonitoring(address: String): () -> Unit {
+        val lease = orchestrator.acquireSignalMonitoring(address)
+        return { lease.release() }
+    }
+}
 
 private fun createAndroidDataSource(dao: CameraDeviceDAO): DeviceDetailDataSource {
     return object : DeviceDetailDataSource {
@@ -76,6 +89,11 @@ private fun createAndroidDataSource(dao: CameraDeviceDAO): DeviceDetailDataSourc
     }
 }
 
+/**
+ * Device page host (design v3): title = camera name, back and Ⓘ as icon buttons on a transparent
+ * bar over the app's [com.sasch.cameragps.sharednew.ui.components.glass.GlassBackground]. Back only
+ * leaves the page; Bluetooth stays as it is (a disconnect is an explicit, confirmed action).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
@@ -95,6 +113,7 @@ fun DeviceDetailScreen(
 
     val viewModel: DeviceDetailViewModel = viewModel(key = device.address) {
         val dao = LogDatabase.getRoomDatabase(getDatabaseBuilder(context)).cameraDeviceDao()
+        val orchestrator = AppServices.from(context).orchestrator
         DeviceDetailViewModel(
             dataSource = createAndroidDataSource(dao),
             serviceActions = AndroidDeviceDetailServiceActions(
@@ -104,60 +123,59 @@ fun DeviceDetailScreen(
                     else stopDevicePresenceObservation(deviceManager, device)
                 },
             ),
-            cameraSettings = AppServices.from(context).orchestrator,
+            cameraSettings = orchestrator,
+            liveStatusSource = OrchestratorLiveStatusSource(orchestrator),
         )
     }
 
     val resolvedName = viewModel.uiState.collectAsState().value.deviceName.ifEmpty { device.name }
     var dialogRoute by rememberDeviceDialogRoute(device.address)
+    val overlayHost = LocalGlassOverlayHost.current
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
                     Text(
                         text = resolvedName,
-                        fontWeight = FontWeight.SemiBold,
+                        style = AlphaTextStyles.topBarTitle,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onClose) {
-                        Icon(
-                            painter = painterResource(R.drawable.arrow_back_24px),
-                            contentDescription = stringResource(Res.string.back)
-                        )
-                    }
+                    GlassIconButton(
+                        icon = painterResource(Res.drawable.arrow_back_24px),
+                        contentDescription = stringResource(Res.string.back),
+                        onClick = onClose,
+                    )
                 },
                 actions = {
-                    // Remove and rename live inside the info dialog now.
-                    IconButton(onClick = { dialogRoute = DeviceDialogRoute.Info }) {
-                        Icon(
-                            painter = painterResource(R.drawable.info_24px),
-                            contentDescription = stringResource(Res.string.device_info_title),
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
+                    // Rename, keep-active and remove live inside the Ⓘ dialog.
+                    GlassIconButton(
+                        icon = painterResource(Res.drawable.info_24px),
+                        contentDescription = stringResource(Res.string.device_info_title),
+                        onClick = { dialogRoute = DeviceDialogRoute.Info },
+                    )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                )
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent,
+                    titleContentColor = AlphaTheme.colors.onSurface,
+                ),
             )
-        }
+        },
     ) { innerPadding ->
-        BackHandler { onClose() }
+        // An open in-tree dialog handles Back itself (closes the dialog, not the page).
+        BackHandler(enabled = overlayHost?.hasOverlay != true) { onClose() }
 
         DeviceDetailContent(
             onWifiRemote = { wifiRemoteOpen = true },
             viewModel = viewModel,
             deviceId = device.address,
             deviceName = device.name,
-            modifier = Modifier.padding(innerPadding),
-            // Rename lives in the info dialog; the screen offers connect/disconnect instead.
-            renameEnabled = false,
-            connectionControls = true,
+            contentPadding = innerPadding,
         )
     }
 

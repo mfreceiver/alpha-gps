@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -72,6 +71,10 @@ import cameragps.sharednew.generated.resources.step2_grant
 import cameragps.sharednew.generated.resources.step2_granted
 import cameragps.sharednew.generated.resources.step2_title
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
+import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTextStyles
+import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.google.accompanist.permissions.MultiplePermissionsState
 import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.isGranted
@@ -340,69 +343,55 @@ private fun EnhancedPermissionScreen(
 
     // Rationale dialogs
     if (showForegroundRationale) {
-        AlertDialog(
+        CapsuleDialog(
             onDismissRequest = { showForegroundRationale = false },
-            title = { Text(stringResource(Res.string.location_bluetooth_access_title)) },
-            text = {
-                Column {
-                    Text(text = stringResource(Res.string.location_bluetooth_access_message))
-                    Text(text = stringResource(Res.string.location_bluetooth_benefit_1))
-                    Text(text = stringResource(Res.string.location_bluetooth_benefit_2))
-                    Text(text = stringResource(Res.string.location_bluetooth_benefit_3))
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showForegroundRationale = false
-                        foregroundPermissionState.launchMultiplePermissionRequest()
-                    }
-                ) {
-                    Text(stringResource(Res.string.grant_permissions_button))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showForegroundRationale = false }) {
-                    Text(stringResource(Res.string.cancel_button))
-                }
-            }
-        )
+            title = stringResource(Res.string.location_bluetooth_access_title),
+            confirm = DialogAction(stringResource(Res.string.grant_permissions_button), onClick = {
+                showForegroundRationale = false
+                foregroundPermissionState.launchMultiplePermissionRequest()
+            }),
+            dismiss = DialogAction(stringResource(Res.string.cancel_button), onClick = {
+                showForegroundRationale = false
+            }),
+        ) { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            RationaleText(stringResource(Res.string.location_bluetooth_access_message))
+            RationaleText(stringResource(Res.string.location_bluetooth_benefit_1))
+            RationaleText(stringResource(Res.string.location_bluetooth_benefit_2))
+            RationaleText(stringResource(Res.string.location_bluetooth_benefit_3))
+        } }
     }
 
     if (showBackgroundRationale) {
-        AlertDialog(
+        CapsuleDialog(
             onDismissRequest = { showBackgroundRationale = false },
-            title = { Text(stringResource(Res.string.background_location_access_title)) },
-            text = {
-                Column {
-                    Text(text = stringResource(Res.string.background_location_access_message))
-                    Text(text = stringResource(Res.string.background_location_benefit_1))
-                    Text(text = stringResource(Res.string.background_location_benefit_2))
-                    Text(text = stringResource(Res.string.background_location_benefit_3))
-                    Text(
-                        fontWeight = FontWeight.Bold,
-                        text = stringResource(Res.string.background_location_instruction)
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showBackgroundRationale = false
-                        backgroundLocationPermission.launchPermissionRequest()
-                    }
-                ) {
-                    Text(stringResource(Res.string.continue_button))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showBackgroundRationale = false }) {
-                    Text(stringResource(Res.string.cancel_button))
-                }
-            }
-        )
+            title = stringResource(Res.string.background_location_access_title),
+            confirm = DialogAction(stringResource(Res.string.continue_button), onClick = {
+                showBackgroundRationale = false
+                backgroundLocationPermission.launchPermissionRequest()
+            }),
+            dismiss = DialogAction(stringResource(Res.string.cancel_button), onClick = {
+                showBackgroundRationale = false
+            }),
+        ) { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            RationaleText(stringResource(Res.string.background_location_access_message))
+            RationaleText(stringResource(Res.string.background_location_benefit_1))
+            RationaleText(stringResource(Res.string.background_location_benefit_2))
+            RationaleText(stringResource(Res.string.background_location_benefit_3))
+            RationaleText(stringResource(Res.string.background_location_instruction), bold = true)
+        } }
     }
 
+}
+
+/** Body line of a permission rationale dialog. */
+@Composable
+private fun RationaleText(text: String, bold: Boolean = false) {
+    Text(
+        text = text,
+        style = AlphaTextStyles.dialogBody,
+        fontWeight = if (bold) FontWeight.Bold else null,
+        color = AlphaTheme.colors.onSurfaceVariant,
+    )
 }
 
 /**
