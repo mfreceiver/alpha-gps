@@ -59,8 +59,3 @@
 - 做什么：设备页连接按钮 Connecting 态目前双禁用（不可重复点也不可取消）；评估加"取消连接"（enabled=false→close GATT 的反向路径）并处理超时（CONNECT_SETTLE 8s 仅解除 UI pending，不中止系统 autoConnect）。
 - 验收：Connecting 可取消且不留残余 GATT；与 disconnectDevice 的 retiredGatts 机制兼容。
 - 依据：本轮 E 设计状态机（Connecting→禁用）与 AndroidBleTransport.connect 使用 autoConnect。
-
-### 14. 清理 Play Services 定位选择器残留
-- 做什么：单一构建后 `LOCATION_PROVIDER_SELECTABLE` 恒为 false，选择入口不可达，但仍保留：`SettingsScreen.kt` 的目的地与页面、`LocationProviderCard.kt`、`PreferencesManager.kt` 的 PLAY_SERVICES 枚举/偏好读写、中英文"Play Services 推荐"文案。删除这些不可达代码与无消费者的偏好 API（旧存储 key 可留在用户数据里不再读取）。
-- 验收：全仓 grep 无 PLAY_SERVICES/LocationProviderCard 引用；全量测试与构建通过；设置页行为不变。
-- 依据：sol 审阅 974eae74（P3，flavor 合并残留）。

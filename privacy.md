@@ -53,8 +53,9 @@ versions are no longer declared.
 
 ## External links
 
-The help page links to the public GitHub repository and a sponsor page. These open in your
-browser; once there, the linked sites' own privacy policies apply.
+The help and About pages link to the public GitHub repository (source code and issue tracker) and,
+on the About page only, to the upstream author's sponsor page. These open in your browser; once
+there, the linked sites' own privacy policies apply.
 
 ## Data retention and deletion
 

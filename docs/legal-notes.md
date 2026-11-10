@@ -76,7 +76,7 @@
 | Haze（dev.chrisbanes.haze:haze / haze-blur 2.1.0，传递依赖 haze-utils 与 androidx.tracing 2.0.5，均为 Apache-2.0） | Apache-2.0 | 玻璃背景模糊，仅 sharednew 模块依赖（ui/components/glass） |
 | Timber | Apache-2.0 | 本机日志 |
 | Accompanist（permissions） | Apache-2.0 | |
-| diamondedge:logging | Apache-2.0（待核对） | 多平台日志门面 |
+| diamondedge:logging（KmLogging） | Apache-2.0 | 多平台日志门面 |
 | Google Play services location、Play Core review（review / review-ktx） | — | 已随 gplay 变体删除（flavor 合并为单一 foss 行为），不再出现在任何构建中 |
 
 > 上游使用的 Sentry（崩溃上报）相关组件已随 Sentry 移除（W2）从依赖中删除，不再列于此清单。
@@ -106,3 +106,22 @@
 
 > AlphaGPS 得益于 Saschl 的原上游项目。如果你觉得有用，可以考虑支持**原上游作者
 > Saschl**：[Buy Me A Coffee](https://buymeacoffee.com/wj8tism4dq)
+
+## 8. 图标素材来源
+
+**EN**
+
+> The app icon artwork comes from the upstream project (Saschl/alpha-gps) and is used under the
+> same GPL-3.0 license. The About page states this credit. `docs/brand/` holds this project's own
+> brand SVG sources.
+
+**zh-CN**
+
+> 应用图标素材来自上游项目（Saschl/alpha-gps），与上游同为 GPL-3.0 协议。应用内“关于”页注明该来源。
+> `docs/brand/` 为本项目自有品牌图标的 SVG 源。
+
+## 9. 应用内展示位置
+
+- 关于页：fork 声明、修改声明、GPL-3.0 全文、开源许可入口（与第 5 节清单一致，`LicenseCatalog`）、
+  源码与反馈（仅 GitHub）、隐私入口、支持上游作者（第 7 节）、商标免责声明（第 6 节）、图标来源（第 8 节）。
+- 帮助页不放赞助链接；第 7 节的链接全应用仅在关于页出现。
