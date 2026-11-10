@@ -67,9 +67,25 @@ internal data class ViewerInfoStrip(
     val noJpeg: Boolean,
 )
 
-internal fun viewerInfoStrip(capture: WifiCameraCapture, policy: WifiFormatPolicy): ViewerInfoStrip {
-    val size = captureDownloadSize(capture, policy)
-    return ViewerInfoStrip(viewerFormatText(capture), size.bytes, size.notDownloaded)
+/**
+ * Whether the portrait details drawer is up and the viewer below must be hidden from
+ * accessibility services (the drawer is modal; the wide layouts' side panel is not — this is
+ * false for them because `portrait` is false).
+ */
+internal fun viewerHidesBackgroundSemantics(portrait: Boolean, drawerOpen: Boolean, hasDetails: Boolean): Boolean =
+    portrait && drawerOpen && hasDetails
+
+internal fun viewerInfoStrip(
+    capture: WifiCameraCapture,
+    policy: WifiFormatPolicy,
+    saved: Set<WifiPhotoDownload> = emptySet(),
+): ViewerInfoStrip {
+    val size = captureDownloadSize(capture, policy, saved)
+    // Only the NoJpeg exception carries a size that will not download (see CaptureDownloadSize).
+    return ViewerInfoStrip(
+        viewerFormatText(capture), size.bytes,
+        noJpeg = size.reason == WifiSkipReason.NoJpeg,
+    )
 }
 
 /** One file of a capture in the details: its format ("JPG" / "RAW" / "HEIF"), name and own size. */

@@ -29,6 +29,7 @@ import cameragps.sharednew.generated.resources.b1_exif_camera
 import cameragps.sharednew.generated.resources.b1_exif_focal
 import cameragps.sharednew.generated.resources.b1_exif_iso
 import cameragps.sharednew.generated.resources.b1_exif_shutter
+import cameragps.sharednew.generated.resources.d1_exif_focal_35mm
 import cameragps.sharednew.generated.resources.chevron_right_24px
 import cameragps.sharednew.generated.resources.close_24px
 import androidx.compose.foundation.Canvas
@@ -92,8 +93,14 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.focusable
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -288,7 +295,7 @@ internal fun WifiPhotoViewer(
                     histogram = withContext(Dispatchers.Default) { image.luminanceHistogram() }
                 }
             }
-            val info = current?.let { viewerInfoStrip(it, policy) }
+            val info = current?.let { viewerInfoStrip(it, policy, browser.savedDownloads) }
             val details = current?.let { viewerDetails(it, metadataState) }
             val download = current?.let {
                 viewerDownloadState(it, policy, browser.savedDownloads, transfer, browser.loading)
@@ -319,6 +326,8 @@ internal fun WifiPhotoViewer(
                 onOpenDetails = if (portrait) ({ drawerOpen = true }) else null,
             )
             val backdrop = rememberGlassBackdrop()
+            // Focus home of the info strip: the details drawer returns focus here when it closes.
+            val stripFocus = remember { FocusRequester() }
             val photo: @Composable (Modifier) -> Unit = { modifier ->
                 ViewerPager(
                     pager = pager,
@@ -338,7 +347,7 @@ internal fun WifiPhotoViewer(
                 )
             }
             val strip: @Composable (Modifier) -> Unit = { modifier ->
-                parts.info?.let { ViewerInfoStripBar(it, parts.onOpenDetails, modifier) }
+                parts.info?.let { ViewerInfoStripBar(it, parts.onOpenDetails, modifier.focusRequester(stripFocus)) }
             }
             val film: @Composable (Modifier) -> Unit = { modifier ->
                 ViewerFilmstrip(
@@ -352,20 +361,39 @@ internal fun WifiPhotoViewer(
                 )
             }
             CompositionLocalProvider(LocalGlassBackdrop provides backdrop) {
+                // While the portrait details drawer is up it is modal: the viewer below (photo,
+                // download, selection, filmstrip) is hidden from accessibility services, exactly
+                // like a dialog behind a GlassBackground overlay host — this screen has none, so the
+                // isolation is applied here. The wide layouts' side panel is not modal and never
+                // hides the photo.
+                val drawerVisible = viewerHidesBackgroundSemantics(portrait, drawerOpen, parts.details != null)
                 Box(Modifier.fillMaxSize().background(Color.Black)) {
-                    when (currentWindowClass()) {
-                        WindowClass.Portrait -> PortraitViewer(parts, photo, strip, film)
-                        WindowClass.NearSquare -> WideViewer(parts, photo, strip, film, landscape = false)
-                        WindowClass.Landscape -> WideViewer(parts, photo, strip, film, landscape = true)
+                    Box(
+                        Modifier.fillMaxSize().then(
+                            if (drawerVisible) Modifier.clearAndSetSemantics { } else Modifier
+                        )
+                    ) {
+                        when (currentWindowClass()) {
+                            WindowClass.Portrait -> PortraitViewer(parts, photo, strip, film)
+                            WindowClass.NearSquare -> WideViewer(parts, photo, strip, film, landscape = false)
+                            WindowClass.Landscape -> WideViewer(parts, photo, strip, film, landscape = true)
+                        }
                     }
                     val shownDetails = parts.details
                     AnimatedVisibility(
-                        visible = portrait && drawerOpen && shownDetails != null,
+                        visible = drawerVisible,
                         enter = fadeIn(),
                         exit = fadeOut(),
                     ) {
                         if (shownDetails != null) {
-                            ViewerDetailsDrawer(shownDetails, parts.histogram, onClose = { drawerOpen = false })
+                            ViewerDetailsDrawer(
+                                shownDetails, parts.histogram,
+                                onClose = {
+                                    drawerOpen = false
+                                    // Focus returns to the strip that opened the drawer.
+                                    runCatching { stripFocus.requestFocus() }
+                                },
+                            )
                         }
                     }
                 }
@@ -677,6 +705,10 @@ private fun ViewerDetailsDrawer(details: ViewerDetails, histogram: FloatArray?, 
         onBackCompleted = onClose,
     )
     val closeLabel = stringResource(Res.string.b1_details_close)
+    val title = stringResource(Res.string.b1_details_title)
+    // The drawer is its own accessibility pane (like CapsuleDialog) and takes focus on entry.
+    val sheetFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { sheetFocus.requestFocus() } }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val maxSheetHeight = maxHeight * 0.75f
         Box(
@@ -689,7 +721,13 @@ private fun ViewerDetailsDrawer(details: ViewerDetails, histogram: FloatArray?, 
                 .widthIn(max = PortraitStripMaxWidth).fillMaxWidth()
                 .heightIn(max = maxSheetHeight)
                 // Taps on the sheet's plain areas must not fall through to the scrim (which closes).
-                .pointerInput(Unit) { detectTapGestures { } },
+                .pointerInput(Unit) { detectTapGestures { } }
+                .semantics {
+                    isTraversalGroup = true
+                    paneTitle = title
+                }
+                .focusRequester(sheetFocus)
+                .focusable(),
             level = GlassLevel.Viewer,
             shape = DrawerShape,
             contentPadding = PaddingValues(0.dp),
@@ -806,6 +844,7 @@ private fun exifFieldLabel(field: ViewerExifField): String = stringResource(
         ViewerExifField.Iso -> Res.string.b1_exif_iso
         ViewerExifField.ExposureBias -> Res.string.b1_exif_bias
         ViewerExifField.FocalLength -> Res.string.b1_exif_focal
+        ViewerExifField.FocalLength35mm -> Res.string.d1_exif_focal_35mm
         ViewerExifField.Lens -> Res.string.m7_viewer_lens
         ViewerExifField.Camera -> Res.string.b1_exif_camera
     }
@@ -1022,8 +1061,12 @@ private fun ViewerFilmstrip(
             val label = stringResource(Res.string.m7_viewer_filmstrip_item, index + 1, captures.size)
             Box(
                 Modifier.size(FilmstripCell).clip(FilmstripShape)
-                    .background(Color.White.copy(alpha = 0.08f))
-                    .then(if (isCurrent) Modifier.border(2.dp, Color.White, FilmstripShape) else Modifier)
+                    .background(AlphaTheme.colors.thumbnailFrame)
+                    .then(
+                        if (isCurrent) Modifier.border(
+                            2.dp, AlphaTheme.colors.thumbnailBadgeStroke, FilmstripShape
+                        ) else Modifier
+                    )
                     .clickable(enabled = enabled && !isCurrent, role = Role.Button) { onSelect(index) }
                     .semantics {
                         contentDescription = label

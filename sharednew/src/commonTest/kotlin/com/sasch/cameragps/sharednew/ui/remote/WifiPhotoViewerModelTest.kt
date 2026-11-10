@@ -73,6 +73,17 @@ class WifiPhotoViewerModelTest {
         assertFalse(detailsSwipeCloses(dx = 90f, dy = 50f, distance = d), "sideways keeps it open")
     }
 
+    @Test
+    fun onlyThePortraitDrawerHidesTheViewerBelowFromAccessibility() {
+        // Portrait: the drawer is modal — the photo, download, selection and filmstrip below
+        // become unreachable for accessibility services while it is up.
+        assertTrue(viewerHidesBackgroundSemantics(portrait = true, drawerOpen = true, hasDetails = true))
+        assertFalse(viewerHidesBackgroundSemantics(portrait = true, drawerOpen = false, hasDetails = true))
+        assertFalse(viewerHidesBackgroundSemantics(portrait = true, drawerOpen = true, hasDetails = false))
+        // Wide layouts: the details panel sits next to the photo, not over it — never hidden.
+        assertFalse(viewerHidesBackgroundSemantics(portrait = false, drawerOpen = true, hasDetails = true))
+    }
+
     // ---- info strip --------------------------------------------------------------------------------
 
     @Test
@@ -94,6 +105,18 @@ class WifiPhotoViewerModelTest {
         for (policy in WifiFormatPolicy.entries) for (capture in listOf(pair, rawOnly, jpgOnly)) {
             assertEquals(captureDownloadSize(capture, policy).bytes, viewerInfoStrip(capture, policy).sizeBytes, "$policy ${capture.id}")
         }
+        // Saved-aware: the strip shows what remains to download, like the grid tag and the button.
+        assertEquals(
+            captureDownloadSize(pair, WifiFormatPolicy.Original, setOf(WifiPhotoDownload(1))).bytes,
+            viewerInfoStrip(pair, WifiFormatPolicy.Original, setOf(WifiPhotoDownload(1))).sizeBytes,
+        )
+    }
+
+    @Test
+    fun aFullySavedCaptureHidesItsStripSizeInsteadOfThePhotoTotal() {
+        val strip = viewerInfoStrip(pair, WifiFormatPolicy.Original, setOf(WifiPhotoDownload(1), WifiPhotoDownload(2)))
+        assertFalse(strip.noJpeg)
+        assertEquals(0L, strip.sizeBytes, "everything saved: no size, the download area says Saved")
     }
 
     @Test
@@ -173,6 +196,25 @@ class WifiPhotoViewerModelTest {
             listOf(ViewerExifField.Shutter to "2.5s", ViewerExifField.Iso to "ISO 100", ViewerExifField.Camera to "ILCE-7M4"),
             viewerExifRows(metadata(1, PhotoExif(iso = 100, exposureTimeSeconds = 2.5, lensModel = " ", cameraModel = "ILCE-7M4"))),
         )
+    }
+
+    @Test
+    fun theEquivalentFocalLengthIsItsOwnRowNextToTheActualOne() {
+        // Both present: two rows, "focal length 50mm" and "focal length (35 mm equiv.) 75mm".
+        assertEquals(
+            listOf(
+                ViewerExifField.FocalLength to "50mm",
+                ViewerExifField.FocalLength35mm to "75mm",
+            ),
+            viewerExifRows(metadata(1, PhotoExif(focalLengthMm = 50.0, focalLength35mm = 75))).map { it },
+        )
+        // Only the equivalent (no actual focal length): still shown.
+        assertEquals(
+            listOf(ViewerExifField.FocalLength35mm to "40mm"),
+            viewerExifRows(metadata(1, PhotoExif(focalLength35mm = 40))),
+        )
+        // Neither: no focal row at all.
+        assertTrue(viewerExifRows(metadata(1, PhotoExif())).none { it.first == ViewerExifField.FocalLength35mm })
     }
 
     // ---- download button ---------------------------------------------------------------------------
