@@ -8,6 +8,7 @@ import com.sasch.cameragps.sharednew.bluetooth.BleSessionPhase
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionRegistry
 import com.sasch.cameragps.sharednew.ui.remote.WifiRemoteViewModel
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
@@ -3210,6 +3211,82 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         controller.closeAndJoin()
     }
 
+
+    /** Collects dispatched work until the test drains it, so "queued but not yet run" is observable. */
+    private class ManualDispatcher : CoroutineDispatcher() {
+        private val queue = ArrayDeque<Runnable>()
+        override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) { queue.addLast(block) }
+        fun drain() { while (queue.isNotEmpty()) queue.removeFirst().run() }
+    }
+
+    private class DiagnosticsProbe {
+        val dispatcher = ManualDispatcher()
+        var scans = 0
+        var failWith: Exception? = null
+        val scan: (IntArray, Int, Int, () -> Unit) -> LetterboxBarCounts = { _, _, _, _ ->
+            scans++
+            failWith?.let { throw it }
+            LetterboxBarCounts(0, 0, 0, 0)
+        }
+    }
+
+    private suspend fun TestScope.probedDayController(
+        connection: Connection, registry: CameraSessionRegistry, probe: DiagnosticsProbe,
+    ): WifiRemoteController {
+        connection.thumbnailImage = PreviewBitmap(160, 120)
+        val controller = WifiRemoteController(
+            backgroundScope, registry, { _, _ -> connection }, {}, {},
+            diagnosticsDispatcher = probe.dispatcher, letterboxScan = probe.scan,
+        )
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browseDates("camera")
+        runCurrent()
+        controller.browseDate("camera", UNKNOWN_DATE_KEY)
+        runCurrent()
+        controller.requestThumbnails("camera", registry.revision(), photoIds(0..5), emptyList())
+        runCurrent()
+        return controller
+    }
+
+    @Test
+    fun letterboxDiagnosticsScanTheFirstThreeThumbnailsOfAPage() = runTest {
+        val probe = DiagnosticsProbe()
+        val controller = probedDayController(pagedConnection(), CameraSessionRegistry(), probe)
+        probe.dispatcher.drain()
+        runCurrent()
+        assertEquals(3, probe.scans, "control: a live session does scan (so the cancel test is not vacuous)")
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun aQueuedLetterboxScanDiesWithTheSessionInsteadOfOutlivingIt() = runTest {
+        val probe = DiagnosticsProbe()
+        val controller = probedDayController(pagedConnection(), CameraSessionRegistry(), probe)
+        assertEquals(0, probe.scans, "the scans are still queued behind the diagnostics dispatcher")
+        controller.disconnect("camera")
+        runCurrent()
+        probe.dispatcher.drain() // the dispatcher finally gets to them: they must see the cancellation
+        runCurrent()
+        assertEquals(0, probe.scans, "no diagnostics after the session ended")
+        assertNull(controller.owner.value)
+    }
+
+    @Test
+    fun aFailingLetterboxScanIsLoggedAndNeverFailsTheLoaderOrTheSession() = runTest {
+        val probe = DiagnosticsProbe().apply { failWith = IllegalStateException("pixels unavailable") }
+        val registry = CameraSessionRegistry()
+        val controller = probedDayController(pagedConnection(), registry, probe)
+        probe.dispatcher.drain()
+        runCurrent()
+        assertEquals(3, probe.scans)
+        assertEquals(WifiRemotePhase.Ready, registry.get("camera")!!.wifiRemote.phase)
+        assertEquals(6, controller.thumbnails.value.size, "the loader kept serving the demand")
+        controller.requestThumbnails("camera", registry.revision(), photoIds(6..8), emptyList())
+        runCurrent()
+        assertEquals(9, controller.thumbnails.value.size)
+        controller.closeAndJoin()
+    }
 
     @Test
     fun aDayPageFetchesNothingUntilTheViewportIsReportedThenVisibleBeforeMargin() = runTest {

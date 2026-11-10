@@ -6,6 +6,7 @@ import com.sasch.cameragps.sharednew.bluetooth.BleSessionPhase
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionRegistry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.yield
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
@@ -147,6 +149,10 @@ class WifiRemoteController internal constructor(
     private val backgroundDownloadTimeoutMs: Long = 30 * 60 * 1_000L,
     /** Receives (identifier, percent) once per session when the camera reports its battery level. */
     private val onBatteryRead: (String, Int) -> Unit = { _, _ -> },
+    /** Where the thumbnail letterbox diagnostics scan runs (a child of the loader); tests swap it. */
+    private val diagnosticsDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val letterboxScan: (IntArray, Int, Int, () -> Unit) -> LetterboxBarCounts =
+        { pixels, width, height, checkpoint -> letterboxBarCounts(pixels, width, height, checkpoint) },
 ) {
     private val log = logging()
 
@@ -678,8 +684,10 @@ class WifiRemoteController internal constructor(
         }
         _thumbnails.value += photo.handle to bitmap
         // Fire-and-forget: the pixel scan runs away from this loader so it can never delay the
-        // next thumbnail; the log line is the only side effect.
-        if (index < 3) scope.launch(Dispatchers.Default) {
+        // next thumbnail; the log line is the only side effect. It is a child of the loader (hence of the browsing session and its generation): a day
+        // switch, refresh or disconnect cancels the loader and with it the scan, so it can never
+        // outlive the screen it describes.
+        if (index < 3) CoroutineScope(currentCoroutineContext() + diagnosticsDispatcher).launch {
             logLetterboxDiagnostics(pageOffset, index, photo.handle, bitmap)
         }
         return ThumbnailFetch(fetchedBytes, itemMs)
@@ -687,15 +695,26 @@ class WifiRemoteController internal constructor(
 
     /**
      * "AlphaThumb" diagnostics for the first three thumbnails of a page: decoded size plus the
-     * near-black edge lines measured off the composition thread ([Dispatchers.Default]); the scan
-     * only produces a log line, never touches what is displayed.
+     * near-black edge lines measured off the composition thread (`diagnosticsDispatcher`); the scan
+     * only produces a log line, never touches what is displayed. It checks for cancellation between
+     * lines and never fails its loader: a real failure is logged with its class and message.
      */
     private suspend fun logLetterboxDiagnostics(pageOffset: Int, index: Int, handle: Long, bitmap: ImageBitmap) {
-        val bars = runCatching {
+        val context = currentCoroutineContext()
+        val bars = try {
             val pixels = IntArray(bitmap.width * bitmap.height)
             bitmap.readPixels(pixels)
-            letterboxBarCounts(pixels, bitmap.width, bitmap.height)
-        }.getOrNull()
+            yield()
+            letterboxScan(pixels, bitmap.width, bitmap.height) { context.ensureActive() }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            thumbLog.w {
+                "page=$pageOffset #$index handle=$handle letterbox scan failed: " +
+                        "${failure::class.simpleName}: ${failure.message}"
+            }
+            null
+        }
         thumbLog.i {
             "page=$pageOffset #$index handle=$handle decoded=${bitmap.width}x${bitmap.height} " +
                     "nearBlackBars=${bars ?: "unavailable"}"

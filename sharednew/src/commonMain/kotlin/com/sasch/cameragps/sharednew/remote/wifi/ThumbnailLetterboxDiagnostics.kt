@@ -37,7 +37,11 @@ internal const val BLACK_LINE_FRACTION = 0.95
  * array. A bright pixel inside a bar (noise, a scratch) does not end the run — the fraction
  * threshold does. Pure and thread-safe: callers hand over the pixels read on a worker thread.
  */
-internal fun letterboxBarCounts(pixels: IntArray, width: Int, height: Int): LetterboxBarCounts {
+internal fun letterboxBarCounts(
+    pixels: IntArray, width: Int, height: Int,
+    /** Called once per scanned line; a cooperative cancellation point for the caller (may throw). */
+    checkpoint: () -> Unit = {},
+): LetterboxBarCounts {
     fun rowBlack(y: Int): Boolean {
         var black = 0
         for (x in 0 until width) if (isNearBlackPixel(pixels[y * width + x])) black++
@@ -52,7 +56,11 @@ internal fun letterboxBarCounts(pixels: IntArray, width: Int, height: Int): Lett
 
     fun run(limit: Int, line: (Int) -> Boolean): Int {
         var i = 0
-        while (i < limit && line(i)) i++
+        while (i < limit) {
+            checkpoint()
+            if (!line(i)) break
+            i++
+        }
         return i
     }
 
