@@ -29,6 +29,12 @@
 - **仅 arm64**：app 与 heif 的 `defaultConfig.ndk.abiFilters` 只含 `arm64-v8a`（native 仅构建/打包该 ABI）；老 32 位（armeabi-v7a）与 x86/x86_64 设备/模拟器不可安装。`scripts/release_assert_apk.sh` 断言 APK `lib/` 下仅含 `arm64-v8a` 且至少一个 `.so`。
 - `release_build.sh` 构建前清理 compose 资源生成残留（sharednew/build 与 app/build 的生成/中间 assets 目录），并断言 APK 仅含 en+zh-rCN 的 composeResources（`assets/composeResources/*/values*` ⊆ {values, values-zh-rCN}）。
 
+## UI 组件库用法（设计 v3）
+- 位置与清单见 `docs/design/README.md`「组件库在代码中的位置」；主题唯一入口 `CameraGpsTheme`（固定蓝色，不用动态色），颜色从 `AlphaTheme.colors` / `MaterialTheme.colorScheme` 取，不写死色值。
+- 每个页面根部用 `GlassBackground { … }`（G0 底光 + 模糊取样源 + 对话框叠层）；卡片 / 行用 `GlassCard`/`GlassSurface(level = …)`，按角色选 G1/G2/G3/GV。照片网格不作模糊取样源（`GlassBackground(contentIsBackdropSource = false)` 或不包进取样区）。
+- 按钮：文字操作一律 `CapsuleButton`（role 主/次/色调/危险/危险描边，≥48dp）；纯图标用 `GlassIconButton`（必须给 contentDescription）；信息标签用 `InfoTag`（不可点）。对话框一律 `CapsuleDialog`（取消左、确认右，危险操作 `destructive = true`），不再新增 `AlertDialog`。不用分隔线。
+- 窗口适配用 `windowClassOf(widthDp, heightDp)` / `currentWindowClass()`（A 竖长 / B 近方形 / C 横屏）。
+
 ## 语言资源纪律
 - 仅支持英文基线（`values/`）+ 简体中文（`values-zh-rCN/`）；其余语言已移除，`app/build.gradle.kts` 用 `androidResources.localeFilters`（en、zh-rCN）屏蔽依赖库语言。
 - 新增文案只需写 `values/` 与 `values-zh-rCN/` 两处（app 的 `app/src/main/res` 与 sharednew 的 `commonMain/composeResources` 同理），不要新增其它语言目录。
