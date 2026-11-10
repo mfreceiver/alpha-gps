@@ -591,4 +591,15 @@
     <string name="mw_tag_protection">Protection</string>
     <string name="mw_tag_protection_unavailable">Not provided by this camera</string>
     <string name="mw_protected">Protected</string>
+    <string name="m7_viewer_only_format">Only %1$s</string>
+    <string name="m7_viewer_download_format">Download %1$s</string>
+    <string name="m7_viewer_downloading">Downloading %1$s</string>
+    <string name="m7_viewer_other_transfer">Another download is running.</string>
+    <string name="m7_viewer_selected_count">%1$d selected</string>
+    <string name="m7_viewer_filmstrip_item">Photo %1$d of %2$d</string>
+    <string name="m7_viewer_shooting_params">Shooting parameters</string>
+    <string name="m7_viewer_lens">Lens</string>
+    <string name="m7_viewer_histogram">Histogram</string>
+    <string name="m7_viewer_metadata_loading">Reading photo info…</string>
+    <string name="m7_viewer_file_size">File size</string>
 </resources>
