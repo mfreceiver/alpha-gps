@@ -3266,10 +3266,28 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         assertEquals(0, probe.scans, "the scans are still queued behind the diagnostics dispatcher")
         controller.disconnect("camera")
         runCurrent()
+        // Ending the session never waits for a scan that has not even been scheduled yet.
+        assertNull(controller.owner.value)
         probe.dispatcher.drain() // the dispatcher finally gets to them: they must see the cancellation
         runCurrent()
         assertEquals(0, probe.scans, "no diagnostics after the session ended")
-        assertNull(controller.owner.value)
+    }
+
+    @Test
+    fun aPendingLetterboxScanNeverHoldsUpADayChangeAndIsCancelledByIt() = runTest {
+        val probe = DiagnosticsProbe()
+        val registry = CameraSessionRegistry()
+        val controller = probedDayController(pagedConnection(), registry, probe)
+        val oldRevision = registry.revision()
+        // The scans are queued on a dispatcher that never runs here (a slow worker thread in real
+        // life): reopening the day must neither wait for them nor let them run afterwards.
+        controller.browseDate("camera", UNKNOWN_DATE_KEY)
+        runCurrent()
+        assertTrue(registry.revision() > oldRevision, "the day change was not held up by the pending scans")
+        probe.dispatcher.drain()
+        runCurrent()
+        assertEquals(0, probe.scans, "the old page's scans were cancelled with its loader")
+        controller.closeAndJoin()
     }
 
     @Test
