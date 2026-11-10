@@ -7,6 +7,7 @@ import androidx.core.content.edit
 import com.sasch.cameragps.sharednew.ui.settings.LocationProvider
 import com.saschl.cameragps.service.TransmissionSoundEvent
 import com.saschl.cameragps.service.TransmissionSoundMode
+import com.sasch.cameragps.sharednew.ui.remote.WifiGridOptions
 
 object PreferencesManager {
     private const val PREFS_NAME = "camera_gps_prefs"
@@ -253,4 +254,31 @@ object PreferencesManager {
         TransmissionSoundEvent.CAMERA_CONNECTED -> KEY_SOUND_URI_CAMERA_CONNECTED
         TransmissionSoundEvent.CAMERA_DISCONNECTED -> KEY_SOUND_URI_CAMERA_DISCONNECTED
     }
+
+    // ---- Wi-Fi photo grid view options (wave 2 / Wi-Fi screen; keys prefixed mw_) ----
+
+    /** Wi-Fi day-grid view options; default small tiles with every tag off. */
+    fun getWifiGridOptions(context: Context): WifiGridOptions {
+        val prefs = getPreferences(context)
+        return WifiGridOptions(
+            size = prefs.getString(KEY_MW_WIFI_GRID_SIZE, null) ?: WifiGridOptions().size,
+            showFormat = prefs.getBoolean(KEY_MW_WIFI_GRID_SHOW_FORMAT, false),
+            showSize = prefs.getBoolean(KEY_MW_WIFI_GRID_SHOW_SIZE, false),
+            showProtection = prefs.getBoolean(KEY_MW_WIFI_GRID_SHOW_PROTECTION, false),
+        )
+    }
+
+    fun setWifiGridOptions(context: Context, options: WifiGridOptions) {
+        getPreferences(context).edit {
+            putString(KEY_MW_WIFI_GRID_SIZE, options.size)
+            putBoolean(KEY_MW_WIFI_GRID_SHOW_FORMAT, options.showFormat)
+            putBoolean(KEY_MW_WIFI_GRID_SHOW_SIZE, options.showSize)
+            putBoolean(KEY_MW_WIFI_GRID_SHOW_PROTECTION, options.showProtection)
+        }
+    }
+
+    private const val KEY_MW_WIFI_GRID_SIZE = "mw_wifi_grid_size"
+    private const val KEY_MW_WIFI_GRID_SHOW_FORMAT = "mw_wifi_grid_show_format"
+    private const val KEY_MW_WIFI_GRID_SHOW_SIZE = "mw_wifi_grid_show_size"
+    private const val KEY_MW_WIFI_GRID_SHOW_PROTECTION = "mw_wifi_grid_show_protection"
 }
