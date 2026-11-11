@@ -5,6 +5,7 @@ import com.diamondedge.logging.KmLogging
 import com.diamondedge.logging.PlatformLogger
 import com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants
 import com.sasch.cameragps.sharednew.bluetooth.coordinator.BleGattPort
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -15,6 +16,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -119,7 +121,77 @@ class LocationTransmissionStateTest {
         assertEquals(null, f.fixes.last())
     }
 
-    private class Fixture(scope: CoroutineScope) {
+    @Test
+    fun aThrowingFixObserverChangesNothingAboutGatingThrottlingOrSending() = runTest {
+        suspend fun scenario(scope: CoroutineScope, throwing: Boolean): List<String> {
+            val f = Fixture(scope, observer = if (throwing) { _ -> error("observer boom") } else null)
+            val trace = mutableListOf<String>()
+            fun snap(label: String) {
+                trace += "$label queued=${f.queued} writes=${f.port.writes} " +
+                    "tx=${f.manager.isTransmitting.value} active=${f.manager.isActive.value} " +
+                    "latest=${f.manager.latestFix.value?.accuracyMeters}"
+            }
+            f.manager.onDeviceReady("A")
+            runCurrent()
+            val first = fix()
+            f.source.locations.emit(first)
+            runCurrent()
+            snap("first")
+            // Much worse accuracy and recent: gated out, nothing sent.
+            f.source.locations.emit(GeoLocation(52.52, 13.405, 500.0, first.timestampMillis + 1_000))
+            runCurrent()
+            snap("gated")
+            // Better fix: accepted, picked up by the periodic tick (throttle), not sent at once.
+            f.source.locations.emit(GeoLocation(52.53, 13.406, 3.0, first.timestampMillis + 2_000))
+            runCurrent()
+            snap("throttled")
+            advanceTimeBy(SonyBluetoothConstants.LOCATION_UPDATE_INTERVAL_MS)
+            runCurrent()
+            snap("tick")
+            // Transmission not allowed: observed, but nothing sent.
+            f.allowed = false
+            f.source.locations.emit(GeoLocation(52.54, 13.407, 4.0, first.timestampMillis + 3_000))
+            runCurrent()
+            snap("blocked")
+            f.allowed = true
+            // The collector survived every observer failure: later fixes are still processed.
+            f.source.locations.emit(GeoLocation(52.55, 13.408, 2.0, first.timestampMillis + 4_000))
+            runCurrent()
+            snap("after")
+            f.manager.shutdown()
+            snap("shutdown")
+            assertEquals(if (throwing) 6 else 0, f.observerFailures)
+            return trace
+        }
+
+        val withObserver = scenario(backgroundScope, throwing = true)
+        val without = scenario(backgroundScope, throwing = false)
+        assertEquals(without, withObserver)
+        // Sanity: the scenario really sent packets (the comparison is not vacuous).
+        assertTrue(without.any { it.startsWith("tick") && "queued=[A, A]" in it })
+    }
+
+    @Test
+    fun aThrowingObserverDoesNotMakeShutdownThrow() = runTest {
+        val f = Fixture(backgroundScope, observer = { error("observer boom") })
+        f.manager.onDeviceReady("A")
+        runCurrent()
+        f.source.locations.emit(fix())
+        runCurrent()
+        f.manager.shutdown()
+        assertEquals(null, f.manager.latestFix.value)
+        assertFalse(f.manager.isActive.value)
+        assertFalse(f.manager.isTransmitting.value)
+    }
+
+    @Test
+    fun cancellationFromTheObserverIsNotSwallowed() = runTest {
+        val f = Fixture(backgroundScope, observer = { throw CancellationException("cancelled") })
+        assertFailsWith<CancellationException> { f.manager.shutdown() }
+    }
+
+    private class Fixture(scope: CoroutineScope, observer: ((PhoneLocationFix?) -> Unit)? = null) {
+        var observerFailures = 0
         val source = FakeSource()
         val port = FakePort()
         val ready = mutableSetOf("A")
@@ -129,7 +201,17 @@ class LocationTransmissionStateTest {
         val manager = LocationTransmissionManager(
             source, { ready }, { null }, port, scope, { allowed },
             onPacketQueued = { queued += it },
-            onFixObserved = { fixes += it },
+            onFixObserved = {
+                fixes += it
+                if (observer != null) {
+                    try {
+                        observer(it)
+                    } catch (e: Exception) {
+                        observerFailures++
+                        throw e
+                    }
+                }
+            },
         )
     }
 
@@ -148,11 +230,15 @@ class LocationTransmissionStateTest {
             state: com.sasch.cameragps.sharednew.bluetooth.session.CameraSettingState,
         ) = Unit
         var acceptWrites = true
+        var writes = 0
         override fun writeCharacteristic(
             identifier: String,
             characteristicUuid: String,
             value: ByteArray
-        ) = acceptWrites
+        ): Boolean {
+            writes++
+            return acceptWrites
+        }
 
         override fun subscribeToNotifications(identifier: String, characteristicUuid: String) =
             false
