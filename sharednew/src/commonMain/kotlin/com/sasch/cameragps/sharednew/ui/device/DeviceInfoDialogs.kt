@@ -1,13 +1,11 @@
 package com.sasch.cameragps.sharednew.ui.device
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
@@ -20,22 +18,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
-import cameragps.sharednew.generated.resources.a1_address_hidden
-import cameragps.sharednew.generated.resources.a1_address_hide
-import cameragps.sharednew.generated.resources.a1_address_show
 import cameragps.sharednew.generated.resources.a1_bt_connected_short
 import cameragps.sharednew.generated.resources.a1_bt_connecting_short
 import cameragps.sharednew.generated.resources.a1_bt_disconnected_short
 import cameragps.sharednew.generated.resources.a1_bt_disconnecting_short
-import cameragps.sharednew.generated.resources.a1_info_bt_address
 import cameragps.sharednew.generated.resources.a1_setting_enabled
 import cameragps.sharednew.generated.resources.a1_setting_off
 import cameragps.sharednew.generated.resources.a1_setting_unknown
@@ -47,10 +38,7 @@ import cameragps.sharednew.generated.resources.m2_disconnect_bt_confirm
 import cameragps.sharednew.generated.resources.m2_disconnect_bt_message
 import cameragps.sharednew.generated.resources.m2_disconnect_bt_title
 import cameragps.sharednew.generated.resources.cancel_button
-import cameragps.sharednew.generated.resources.check_24px
 import cameragps.sharednew.generated.resources.delete_24px
-import cameragps.sharednew.generated.resources.device_info_auto_area
-import cameragps.sharednew.generated.resources.device_info_auto_time
 import cameragps.sharednew.generated.resources.device_info_keep_active
 import cameragps.sharednew.generated.resources.device_info_title
 import cameragps.sharednew.generated.resources.device_remove_confirm_message
@@ -64,6 +52,9 @@ import cameragps.sharednew.generated.resources.m2_info_location_idle
 import cameragps.sharednew.generated.resources.m2_info_remove
 import cameragps.sharednew.generated.resources.m2_info_rename
 import cameragps.sharednew.generated.resources.m2_rename_title
+import cameragps.sharednew.generated.resources.q_info_auto_area_off
+import cameragps.sharednew.generated.resources.q_info_auto_time_area
+import cameragps.sharednew.generated.resources.q_info_auto_time_off
 import cameragps.sharednew.generated.resources.remove
 import cameragps.sharednew.generated.resources.rename_camera_hint
 import cameragps.sharednew.generated.resources.rename_camera_label
@@ -82,7 +73,6 @@ import com.sasch.cameragps.sharednew.ui.components.glass.GlassSwitch
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassTextField
 import com.sasch.cameragps.sharednew.ui.components.glass.IconEmphasis
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusTone
-import com.sasch.cameragps.sharednew.ui.components.glass.statusIconColor
 import com.sasch.cameragps.sharednew.ui.components.glass.statusToneColor
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
@@ -122,13 +112,14 @@ fun locationWritingActive(session: CameraSession?): Boolean = session?.phase == 
 
 /**
  * Info / Rename / delete- and disconnect-confirmation dialogs of a camera (design v3 "Ⓘ"): title and
- * ✕ share the header row, the name with ✎ (rename) sits on its own line below, then only what
- * Bluetooth knows — link state (green ✓ when connected) with its action (Disconnect → confirmation
- * → [DeviceDetailViewModel.disconnect], the same persisted manual disconnect as before; Cancel while
- * connecting; Connect when off), the address (hidden until tapped, never logged), GPS writing, the
- * camera's auto time/area state (read-only, the app keeps them on) — the keep-active switch and
- * "Remove camera". No MTU, firmware, serial or help here. Delete only ever goes through [onDelete]
- * after the confirmation route; a null [onDelete] hides it.
+ * ✕ share the header row; below it the name with ✎ (rename) on the left and the link control on the
+ * right (Disconnect → confirmation → [DeviceDetailViewModel.disconnect], the same persisted manual
+ * disconnect as before; Cancel while connecting; Connect when off), then text-only status rows —
+ * Bluetooth state, GPS writing, the camera's auto time & area state in one row (read-only, the app
+ * keeps them on) — the keep-active switch and "Remove camera". No address, MTU, firmware, serial or
+ * help here. Used by the device page and by the device list's ⓘ (also for a camera that is not
+ * connected). Delete only ever goes through [onDelete] after the confirmation route; a null
+ * [onDelete] hides it.
  */
 @Composable
 fun DeviceDialogs(
@@ -147,7 +138,6 @@ fun DeviceDialogs(
             val pending by viewModel.pending.collectAsState()
             val session = sessions[deviceId.uppercase()]
             DeviceInfoDialog(
-                deviceId = deviceId,
                 deviceName = deviceName,
                 session = session,
                 pending = pending,
@@ -209,8 +199,7 @@ fun DeviceDialogs(
 }
 
 @Composable
-private fun DeviceInfoDialog(
-    deviceId: String,
+internal fun DeviceInfoDialog(
     deviceName: String,
     session: CameraSession?,
     pending: PendingConnection,
@@ -232,42 +221,35 @@ private fun DeviceInfoDialog(
         onClose = onClose,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            // Name with ✎ right beside it, on its own line under the title / ✕ header.
+            val status = deviceConnectionStatus(session)
+            val headline = connectionHeadline(status, pending)
+
+            // Name with ✎ right beside it on the left, the link control on the right. A long name
+            // is cut with an ellipsis; the capsule keeps its full width.
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(
-                    deviceName,
-                    style = AlphaType.Heading,
-                    color = colors.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                GlassIconButton(
-                    icon = painterResource(Res.drawable.m2_edit_24px),
-                    contentDescription = stringResource(Res.string.m2_info_rename),
-                    onClick = onRename,
-                    emphasis = IconEmphasis.Primary,
-                    touchTarget = AlphaDimens.minDenseTouchTarget + 4.dp,
-                )
-            }
-
-            val status = deviceConnectionStatus(session)
-            val headline = connectionHeadline(status, pending)
-            InfoRow(stringResource(Res.string.m2_info_bluetooth)) {
-                InfoStatusValue(
-                    text = stringResource(
-                        when (headline) {
-                            ConnectionHeadline.Connected -> Res.string.a1_bt_connected_short
-                            ConnectionHeadline.Connecting -> Res.string.a1_bt_connecting_short
-                            ConnectionHeadline.Disconnecting -> Res.string.a1_bt_disconnecting_short
-                            ConnectionHeadline.Disconnected -> Res.string.a1_bt_disconnected_short
-                        },
-                    ),
-                    tone = connectionTone(headline),
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        deviceName,
+                        style = AlphaType.Heading,
+                        color = colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    GlassIconButton(
+                        icon = painterResource(Res.drawable.m2_edit_24px),
+                        contentDescription = stringResource(Res.string.m2_info_rename),
+                        onClick = onRename,
+                        emphasis = IconEmphasis.Primary,
+                        touchTarget = AlphaDimens.minDenseTouchTarget + 4.dp,
+                    )
+                }
                 when (connectionAction(status, pending)) {
                     ConnectionAction.Disconnect -> InfoChip(
                         text = stringResource(Res.string.m2_disconnect_bt_confirm),
@@ -288,27 +270,17 @@ private fun DeviceInfoDialog(
                 }
             }
 
-            // Hidden until asked for; a new opening of the dialog starts hidden again.
-            var addressVisibility by remember(deviceId) { mutableStateOf(AddressVisibility.Hidden) }
-            val hiddenDescription = stringResource(Res.string.a1_address_hidden)
-            InfoRow(stringResource(Res.string.a1_info_bt_address)) {
-                Text(
-                    addressText(deviceId, addressVisibility),
-                    style = InfoValueStyle,
-                    color = colors.textPrimary,
-                    maxLines = 1,
-                    modifier = if (addressVisibility == AddressVisibility.Hidden) {
-                        Modifier.clearAndSetSemantics { contentDescription = hiddenDescription }
-                    } else {
-                        Modifier
-                    },
-                )
-                InfoChip(
+            InfoRow(stringResource(Res.string.m2_info_bluetooth)) {
+                InfoStatusValue(
                     text = stringResource(
-                        if (addressVisibility == AddressVisibility.Hidden) Res.string.a1_address_show else Res.string.a1_address_hide,
+                        when (headline) {
+                            ConnectionHeadline.Connected -> Res.string.a1_bt_connected_short
+                            ConnectionHeadline.Connecting -> Res.string.a1_bt_connecting_short
+                            ConnectionHeadline.Disconnecting -> Res.string.a1_bt_disconnecting_short
+                            ConnectionHeadline.Disconnected -> Res.string.a1_bt_disconnected_short
+                        },
                     ),
-                    role = CapsuleRole.Secondary,
-                    onClick = { addressVisibility = addressVisibility.toggled() },
+                    tone = connectionTone(headline),
                 )
             }
 
@@ -319,11 +291,8 @@ private fun DeviceInfoDialog(
                     tone = if (writing) StatusTone.Success else StatusTone.Neutral,
                 )
             }
-            InfoRow(stringResource(Res.string.device_info_auto_time)) {
-                SettingValue(infoSettingDisplay(session, session?.autoTimeCorrection))
-            }
-            InfoRow(stringResource(Res.string.device_info_auto_area)) {
-                SettingValue(infoSettingDisplay(session, session?.autoAreaAdjustment))
+            InfoRow(stringResource(Res.string.q_info_auto_time_area)) {
+                AutoCorrectionValue(autoCorrectionSummary(session))
             }
 
             GlassInsetBlock(modifier = Modifier.fillMaxWidth()) {
@@ -386,21 +355,10 @@ private fun InfoRow(label: String, value: @Composable () -> Unit) {
     }
 }
 
-/** A row value in one style: green ✓ + text when it is a success, otherwise the tone's colour. */
+/** A row value: text only, in the tone's text colour (no leading mark). */
 @Composable
 private fun InfoStatusValue(text: String, tone: StatusTone) {
-    val colors = AlphaTheme.colors
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (showsCheck(tone)) {
-            Image(
-                painterResource(Res.drawable.check_24px),
-                contentDescription = null,
-                colorFilter = ColorFilter.tint(statusIconColor(tone, colors)),
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        Text(text, style = InfoValueStyle, color = statusToneColor(tone, colors), maxLines = 1)
-    }
+    Text(text, style = InfoValueStyle, color = statusToneColor(tone, AlphaTheme.colors), maxLines = 1)
 }
 
 /** Compact in-row action (32 dp capsule, 48 dp touch target). */
@@ -410,17 +368,19 @@ private fun InfoChip(text: String, role: CapsuleRole, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SettingValue(display: SettingDisplay) {
+private fun AutoCorrectionValue(summary: AutoCorrectionSummary) {
     InfoStatusValue(
         text = stringResource(
-            when (display) {
-                SettingDisplay.Enabled -> Res.string.a1_setting_enabled
-                SettingDisplay.Off -> Res.string.a1_setting_off
-                SettingDisplay.Unsupported -> Res.string.a1_setting_unsupported
-                SettingDisplay.Unknown -> Res.string.a1_setting_unknown
+            when (summary) {
+                AutoCorrectionSummary.Enabled -> Res.string.a1_setting_enabled
+                AutoCorrectionSummary.TimeNotEnabled -> Res.string.q_info_auto_time_off
+                AutoCorrectionSummary.AreaNotEnabled -> Res.string.q_info_auto_area_off
+                AutoCorrectionSummary.NeitherEnabled -> Res.string.a1_setting_off
+                AutoCorrectionSummary.Unsupported -> Res.string.a1_setting_unsupported
+                AutoCorrectionSummary.Unknown -> Res.string.a1_setting_unknown
             },
         ),
-        tone = settingTone(display),
+        tone = autoCorrectionTone(summary),
     )
 }
 

@@ -137,6 +137,7 @@ fun DevicesScreen(
         ) {
             AssociatedDevicesList(
                 associatedDevices = associatedDevices,
+                deviceManager = deviceManager,
                 onConnect = onConnect,
                 onDisassociate = onDisassociate,
                 onOpenTroubleshooting = onTroubleshootingClick,

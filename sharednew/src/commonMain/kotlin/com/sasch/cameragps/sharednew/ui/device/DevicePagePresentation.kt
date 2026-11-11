@@ -1,8 +1,11 @@
 package com.sasch.cameragps.sharednew.ui.device
 
+import com.sasch.cameragps.sharednew.bluetooth.location.PhoneLocationFix
 import com.sasch.cameragps.sharednew.bluetooth.status.BatteryFreshness
 import com.sasch.cameragps.sharednew.bluetooth.status.CameraBattery
 import com.sasch.cameragps.sharednew.bluetooth.status.CameraLiveStatus
+import com.sasch.cameragps.sharednew.bluetooth.status.GpsWriteStats
+import com.sasch.cameragps.sharednew.bluetooth.status.TimeSyncOutcome
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlin.time.Duration.Companion.days
@@ -18,6 +21,9 @@ interface DeviceLiveStatusSource {
 
     /** Starts signal polling for [address] while the page is visible; call the result to release it. */
     fun acquireSignalMonitoring(address: String): () -> Unit
+
+    /** Phone-level: accuracy and time of the phone's latest location fix (no coordinates). */
+    fun observePhoneLocation(): Flow<PhoneLocationFix?> = flowOf(null)
 
     object None : DeviceLiveStatusSource {
         override fun observe(address: String): Flow<CameraLiveStatus?> = flowOf(null)
@@ -136,6 +142,83 @@ fun batteryDisplay(battery: CameraBattery?, nowMillis: Long): BatteryDisplay {
             ageMinutes = battery.ageMillis(nowMillis) / 1.minutes.inWholeMilliseconds,
         )
         BatteryFreshness.Expired -> BatteryDisplay.Unknown
+    }
+}
+
+/** Coarse quality of the phone's own location fix, from its horizontal accuracy radius. */
+enum class LocationSignalLevel { Strong, Medium, Weak, Unknown }
+
+/** A fix older than this no longer describes the phone's current location quality. */
+const val LOCATION_FIX_MAX_AGE_MILLIS: Long = 2 * 60_000L
+
+/** Accuracy radius (metres) up to which a fix reads as [LocationSignalLevel.Strong]. */
+const val LOCATION_STRONG_MAX_METERS: Double = 10.0
+
+/** Accuracy radius (metres) up to which a fix reads as [LocationSignalLevel.Medium]. */
+const val LOCATION_MEDIUM_MAX_METERS: Double = 30.0
+
+/**
+ * ≤ 10 m strong, ≤ 30 m medium, larger weak. No fix, an accuracy that is not a positive finite
+ * number (Android reports 0 when the provider has no estimate), or a fix older than
+ * [LOCATION_FIX_MAX_AGE_MILLIS] is [LocationSignalLevel.Unknown]. A fix time slightly ahead of the
+ * phone clock counts as fresh.
+ */
+fun locationSignalLevel(accuracyMeters: Double?, fixTimeMillis: Long?, nowMillis: Long): LocationSignalLevel {
+    if (accuracyMeters == null || fixTimeMillis == null) return LocationSignalLevel.Unknown
+    if (accuracyMeters.isNaN() || accuracyMeters.isInfinite() || accuracyMeters <= 0.0) {
+        return LocationSignalLevel.Unknown
+    }
+    if (nowMillis - fixTimeMillis > LOCATION_FIX_MAX_AGE_MILLIS) return LocationSignalLevel.Unknown
+    return when {
+        accuracyMeters <= LOCATION_STRONG_MAX_METERS -> LocationSignalLevel.Strong
+        accuracyMeters <= LOCATION_MEDIUM_MAX_METERS -> LocationSignalLevel.Medium
+        else -> LocationSignalLevel.Weak
+    }
+}
+
+/**
+ * The one line under the status card's headline. A healthy link shows nothing; only a problem the
+ * user may want to act on is reported (most important first).
+ */
+enum class StatusCardAlert {
+    None,
+
+    /** The camera reports its location linking as off: nothing is written until it is turned on. */
+    LocationDisabledByCamera,
+
+    /** The latest location write of this link failed and no write has succeeded since. */
+    LocationWriteFailing,
+
+    /** The time correction could not be written. */
+    TimeSyncFailed,
+
+    /** The camera answered the time correction with a rejection. */
+    TimeSyncRejected,
+}
+
+/**
+ * Only a connected link can have an alert (connecting / disconnected headlines say enough).
+ * "Unconfirmed" and "unsupported" time sync are not errors and stay silent.
+ */
+fun statusCardAlert(
+    headline: ConnectionHeadline,
+    locationDisabledByCamera: Boolean,
+    gps: GpsWriteStats?,
+    timeSync: TimeSyncOutcome?,
+): StatusCardAlert {
+    if (headline != ConnectionHeadline.Connected) return StatusCardAlert.None
+    if (locationDisabledByCamera) return StatusCardAlert.LocationDisabledByCamera
+    if (gps != null && gps.failedCount > 0) {
+        val failedAt = gps.lastFailureAtMillis
+        val writtenAt = gps.lastWriteAtMillis
+        if (failedAt != null && (writtenAt == null || failedAt > writtenAt)) {
+            return StatusCardAlert.LocationWriteFailing
+        }
+    }
+    return when (timeSync) {
+        TimeSyncOutcome.Failed -> StatusCardAlert.TimeSyncFailed
+        TimeSyncOutcome.Rejected -> StatusCardAlert.TimeSyncRejected
+        else -> StatusCardAlert.None
     }
 }
 

@@ -7,10 +7,8 @@ import com.sasch.cameragps.sharednew.bluetooth.status.SignalLevel
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusTone
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
-/** Batch A (0.2.1): device status card, coloured metrics and the Ⓘ dialog rows. */
+/** Device status card, coloured metrics and the Ⓘ dialog rows (batch A 0.2.1, batch Q). */
 class DeviceIndicatorsTest {
     private val connected = DeviceConnectionStatus.Connected
     private val connecting = DeviceConnectionStatus.Connecting
@@ -106,34 +104,60 @@ class DeviceIndicatorsTest {
         )
     }
 
+    private fun live(time: CameraSettingState, area: CameraSettingState) = CameraSession(
+        "AA:BB",
+        phase = BleSessionPhase.Transmitting,
+        autoTimeCorrection = time,
+        autoAreaAdjustment = area,
+    )
+
     @Test
-    fun onlyEnabledGetsTheGreenCheck() {
-        assertEquals(StatusTone.Success, settingTone(SettingDisplay.Enabled))
-        assertTrue(showsCheck(settingTone(SettingDisplay.Enabled)))
-        listOf(SettingDisplay.Off, SettingDisplay.Unsupported, SettingDisplay.Unknown).forEach {
-            assertEquals(StatusTone.Neutral, settingTone(it))
-            assertFalse(showsCheck(settingTone(it)), "$it")
-        }
-        // Same check style as "Bluetooth connected" / "Location writing · Active".
-        assertTrue(showsCheck(connectionTone(ConnectionHeadline.Connected)))
-        assertFalse(showsCheck(connectionTone(ConnectionHeadline.Connecting)))
+    fun autoTimeAndAreaReadAsOneRowNamingWhatIsOff() {
+        val unsupported = CameraSettingState(supported = false, enabled = false)
+        val unknown = CameraSettingState()
+        assertEquals(AutoCorrectionSummary.Enabled, autoCorrectionSummary(live(onSupported, onSupported)))
+        // The two settings are independent on the camera: the row names the one that is off.
+        assertEquals(AutoCorrectionSummary.TimeNotEnabled, autoCorrectionSummary(live(offSupported, onSupported)))
+        assertEquals(AutoCorrectionSummary.AreaNotEnabled, autoCorrectionSummary(live(onSupported, offSupported)))
+        assertEquals(AutoCorrectionSummary.NeitherEnabled, autoCorrectionSummary(live(offSupported, offSupported)))
+        assertEquals(AutoCorrectionSummary.NeitherEnabled, autoCorrectionSummary(live(offSupported, unsupported)))
+        assertEquals(AutoCorrectionSummary.AreaNotEnabled, autoCorrectionSummary(live(onSupported, unsupported)))
+        assertEquals(AutoCorrectionSummary.Unsupported, autoCorrectionSummary(live(unsupported, unsupported)))
+        // One side still unknown: report the known "off", otherwise unknown (never a false "enabled").
+        assertEquals(AutoCorrectionSummary.TimeNotEnabled, autoCorrectionSummary(live(offSupported, unknown)))
+        assertEquals(AutoCorrectionSummary.Unknown, autoCorrectionSummary(live(onSupported, unknown)))
+        // Not connected: nothing is trusted.
+        assertEquals(AutoCorrectionSummary.Unknown, autoCorrectionSummary(null))
+        assertEquals(AutoCorrectionSummary.Unknown, autoCorrectionSummary(session(BleSessionPhase.Disconnected)))
     }
 
     @Test
-    fun addressIsHiddenByDefaultAndTogglesOnTap() {
-        val initial = AddressVisibility.entries.first()
-        assertEquals(AddressVisibility.Hidden, initial)
-        assertEquals(AddressVisibility.Shown, initial.toggled())
-        assertEquals(AddressVisibility.Hidden, initial.toggled().toggled())
+    fun autoRowToneIsGreenOnlyWhenBothAreOn() {
+        assertEquals(StatusTone.Success, autoCorrectionTone(AutoCorrectionSummary.Enabled))
+        listOf(
+            AutoCorrectionSummary.TimeNotEnabled,
+            AutoCorrectionSummary.AreaNotEnabled,
+            AutoCorrectionSummary.NeitherEnabled,
+        ).forEach { assertEquals(StatusTone.Warning, autoCorrectionTone(it), "$it") }
+        assertEquals(StatusTone.Neutral, autoCorrectionTone(AutoCorrectionSummary.Unsupported))
+        assertEquals(StatusTone.Neutral, autoCorrectionTone(AutoCorrectionSummary.Unknown))
     }
 
     @Test
-    fun hiddenAddressRevealsNothing() {
-        val address = "a0:b1:c2:d3:e4:f5"
-        val hidden = addressText(address, AddressVisibility.Hidden)
-        assertEquals(HIDDEN_ADDRESS_TEXT, hidden)
-        assertEquals(hidden, addressText("00:11:22:33:44:55", AddressVisibility.Hidden))
-        assertFalse(hidden.any { it.isLetterOrDigit() })
-        assertEquals("A0:B1:C2:D3:E4:F5", addressText(address, AddressVisibility.Shown))
+    fun signalRingArcFollowsTheLevel() {
+        assertEquals(1f, signalArcFraction(SignalLevel.Excellent))
+        assertEquals(0.75f, signalArcFraction(SignalLevel.Good))
+        assertEquals(0.5f, signalArcFraction(SignalLevel.Fair))
+        assertEquals(0.25f, signalArcFraction(SignalLevel.Poor))
+        // Unknown: only the track.
+        assertEquals(0f, signalArcFraction(SignalLevel.Unknown))
+    }
+
+    @Test
+    fun locationSignalIsColouredStrongMediumWeak() {
+        assertEquals(StatusTone.Success, locationSignalTone(LocationSignalLevel.Strong))
+        assertEquals(StatusTone.Warning, locationSignalTone(LocationSignalLevel.Medium))
+        assertEquals(StatusTone.Error, locationSignalTone(LocationSignalLevel.Weak))
+        assertEquals(StatusTone.Neutral, locationSignalTone(LocationSignalLevel.Unknown))
     }
 }
