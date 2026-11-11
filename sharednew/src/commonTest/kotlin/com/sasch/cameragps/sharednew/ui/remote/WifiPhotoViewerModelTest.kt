@@ -15,6 +15,7 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiSkipReason
 import com.sasch.cameragps.sharednew.remote.wifi.captureDownloadSize
 import com.sasch.cameragps.sharednew.remote.wifi.formatByteSize
 import com.sasch.cameragps.sharednew.remote.wifi.singleFormatChoices
+import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -504,5 +505,29 @@ class WifiPhotoViewerModelTest {
         assertEquals(0f, scaled[0])
         assertEquals(0.5f, scaled[1])
         assertEquals(1f, scaled[2])
+    }
+
+    @Test
+    fun actionSlotIsTheTouchTargetUnlessALabelLineNeedsMore() {
+        assertEquals(48.dp, viewerActionSlotHeight(20.dp))
+        assertEquals(48.dp, viewerActionSlotHeight(40.dp))
+        assertEquals(48.dp, viewerActionSlotHeight(0.dp))
+        assertEquals(52.dp, viewerActionSlotHeight(44.dp))
+    }
+
+    @Test
+    fun aTransferResultIsAnnouncedOnceAndANewTransferClearsIt() {
+        listOf(WifiImageTransferStatus.Failed, WifiImageTransferStatus.Cancelled, WifiImageTransferStatus.ConversionFailed, WifiImageTransferStatus.PermissionDenied).forEach { result ->
+            assertEquals(ViewerNoticeAction.Show, viewerNoticeAction(WifiImageTransferStatus.Downloading, result), "$result")
+            assertEquals(ViewerNoticeAction.Show, viewerNoticeAction(WifiImageTransferStatus.Converting, result), "$result")
+            // Recomposition / a viewer opened on an old result: nothing.
+            assertEquals(ViewerNoticeAction.None, viewerNoticeAction(result, result), "$result")
+            assertEquals(ViewerNoticeAction.Clear, viewerNoticeAction(result, WifiImageTransferStatus.Downloading), "$result")
+        }
+        assertEquals(ViewerNoticeAction.Clear, viewerNoticeAction(WifiImageTransferStatus.Idle, WifiImageTransferStatus.Downloading))
+        assertEquals(ViewerNoticeAction.None, viewerNoticeAction(WifiImageTransferStatus.Downloading, WifiImageTransferStatus.Downloading))
+        // A save shows as the greyed "Saved" button, not a message.
+        assertEquals(ViewerNoticeAction.None, viewerNoticeAction(WifiImageTransferStatus.Downloading, WifiImageTransferStatus.Saved))
+        assertEquals(ViewerNoticeAction.None, viewerNoticeAction(WifiImageTransferStatus.Failed, WifiImageTransferStatus.Idle))
     }
 }

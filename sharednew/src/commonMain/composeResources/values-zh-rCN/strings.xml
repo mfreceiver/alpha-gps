@@ -521,6 +521,8 @@
     <string name="mw_tag_format">文件格式</string>
     <string name="mw_tag_size">文件大小</string>
     <string name="m7_viewer_only_format">仅 %1$s</string>
+    <string name="m7_viewer_download_busy">下载占用中</string>
+    <string name="m7_viewer_download_too_large">超出大小上限</string>
     <string name="m7_viewer_download_format">下载 %1$s</string>
     <string name="m7_viewer_downloading">正在下载 %1$s</string>
     <string name="m7_viewer_other_transfer">另一项下载正在进行。</string>

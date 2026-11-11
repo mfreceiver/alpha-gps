@@ -549,6 +549,8 @@
     <string name="mw_tag_format">File format</string>
     <string name="mw_tag_size">File size</string>
     <string name="m7_viewer_only_format">Only %1$s</string>
+    <string name="m7_viewer_download_busy">Download busy</string>
+    <string name="m7_viewer_download_too_large">Over size limit</string>
     <string name="m7_viewer_download_format">Download %1$s</string>
     <string name="m7_viewer_downloading">Downloading %1$s</string>
     <string name="m7_viewer_other_transfer">Another download is running.</string>

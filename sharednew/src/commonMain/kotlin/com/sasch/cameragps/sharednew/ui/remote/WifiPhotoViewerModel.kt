@@ -1,6 +1,9 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferStatus
 import com.sasch.cameragps.sharednew.remote.wifi.PhotoExif
 import com.sasch.cameragps.sharednew.remote.wifi.PhotoFormat
 import com.sasch.cameragps.sharednew.remote.wifi.PhotoMetadata
@@ -251,11 +254,36 @@ internal fun viewerFormatColor(missingFormat: Boolean, colors: AlphaColors): Col
     if (missingFormat) colors.onPhotoWarning else colors.onPhoto
 
 /**
- * Colour of the hint above the download button: in [ViewerDownloadPhase.Ready] the hint is the last
- * transfer's failure / cancel notice (error, [AlphaColors.onPhotoDanger]); otherwise an explanation.
+ * Height of the viewer's bottom action row (download slot + check box): constant across every
+ * [ViewerDownloadPhase], so no state change moves the photo / filmstrip. The 48 dp touch target, or
+ * one Label line plus a 4 dp margin above and below when a large font scale needs more.
  */
-internal fun viewerDownloadHintColor(phase: ViewerDownloadPhase, colors: AlphaColors): Color =
-    if (phase == ViewerDownloadPhase.Ready) colors.onPhotoDanger else colors.onPhotoSecondary
+internal fun viewerActionSlotHeight(labelLineHeight: Dp): Dp = maxOf(48.dp, labelLineHeight + 8.dp)
+
+/** Test tag of the viewer's bottom action row. */
+internal const val VIEWER_ACTION_ROW_TAG = "viewerActionRow"
+
+/** Cross-fade between two download controls in the slot (opacity only, no layout change). */
+internal const val VIEWER_SLOT_FADE_MILLIS = 150
+
+/** What the viewer does with its transfer-result snackbar when the transfer status changes. */
+internal enum class ViewerNoticeAction { None, Show, Clear }
+
+/**
+ * A finished transfer's result (failed / cancelled / conversion failed / no storage access) is
+ * shown once, as a snackbar over the page, when the status changes to it; a new transfer clears it.
+ * Unchanged status (recomposition, opening the viewer on an old result) does nothing.
+ */
+internal fun viewerNoticeAction(previous: WifiImageTransferStatus, current: WifiImageTransferStatus): ViewerNoticeAction =
+    when {
+        previous == current -> ViewerNoticeAction.None
+        current == WifiImageTransferStatus.Downloading || current == WifiImageTransferStatus.Converting ->
+            ViewerNoticeAction.Clear
+        current == WifiImageTransferStatus.Failed || current == WifiImageTransferStatus.Cancelled ||
+                current == WifiImageTransferStatus.ConversionFailed || current == WifiImageTransferStatus.PermissionDenied ->
+            ViewerNoticeAction.Show
+        else -> ViewerNoticeAction.None
+    }
 
 /** States of the viewer's single download button. */
 internal enum class ViewerDownloadPhase {

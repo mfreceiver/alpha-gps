@@ -679,6 +679,9 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
     }
     val shownFrame = frame ?: if (holdReady && ready) WifiConnectionFrame.Ready else null
     GlassBackground(contentIsBackdropSource = false) {
+        // First entry: the one-time notice is a dialog over a blank glass background, never over the
+        // manual connection controls. Continuing starts the automatic connection straight into the
+        // overlay; the controls page only appears where automatic connection cannot run.
         if (!noticeAcknowledged) {
             WifiRemoteExperimentalNotice(
                 onContinue = {
@@ -689,6 +692,8 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
             )
         }
         when {
+            !noticeAcknowledged && controller.supportsAutomaticConnection && autoConnectOnEntry && !otherCamera -> Unit
+
             shownFrame != null -> WifiConnectionOverlay(
                 frame = shownFrame,
                 networkPermissionMessage = networkPermissionMessage,

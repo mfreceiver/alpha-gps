@@ -1,5 +1,19 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.ui.layout.AlignmentLine
+import androidx.compose.ui.layout.FirstBaseline
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.Constraints
+import cameragps.sharednew.generated.resources.m7_viewer_download_busy
+import cameragps.sharednew.generated.resources.m7_viewer_download_too_large
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSnackbarDuration
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSnackbarHost
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSnackbarHostState
+import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -170,7 +184,6 @@ import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassCheckbox
-import com.sasch.cameragps.sharednew.ui.components.glass.GlassFloatingBar
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressCircle
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressSize
@@ -528,14 +541,7 @@ private fun PortraitViewer(
             )
         }
         film(Modifier.fillMaxWidth().padding(top = 4.dp))
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Spacer(Modifier.size(48.dp))
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { ViewerDownloadArea(parts) }
-            ViewerSelectionToggle(parts)
-        }
+        ViewerActionRow(parts, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp))
     }
 }
 
@@ -928,7 +934,6 @@ private val DetailsSpacing = 10.dp
 
 /** Row height reserved by a details row and its placeholder, so a value replacing it does not jump. */
 private val DetailRowHeight = 24.dp
-private val HistogramWidth = 132.dp
 private val HistogramHeight = 64.dp
 
 /**
@@ -982,10 +987,12 @@ private fun ColumnScope.ViewerDetailsContent(
                 }
             }
         }
-        if (image != null) Column(Modifier.width(HistogramWidth), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // Same two equal columns and 16 dp gap as the exposure grid above: the histogram starts at the
+        // left edge of the second grid column ("Exposure compensation") and ends at the details' right edge.
+        if (image != null) Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(Res.string.m7_viewer_histogram), color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption)
-            // Fixed size whether or not the bins are computed yet: no jump when they arrive.
-            Box(Modifier.size(HistogramWidth, HistogramHeight)) {
+            // Fixed height whether or not the bins are computed yet: no jump when they arrive.
+            Box(Modifier.fillMaxWidth().height(HistogramHeight)) {
                 histogram?.let { HistogramGraph(it, Modifier.fillMaxSize()) }
             }
         }
@@ -1088,19 +1095,71 @@ private fun ViewerDetailsPanel(parts: ViewerParts, modifier: Modifier) {
             ) {
                 parts.capture?.let { ViewerDetailsContent(it, parts.metadata, parts.image) }
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { ViewerDownloadArea(parts) }
-                ViewerSelectionToggle(parts)
-            }
+            ViewerActionRow(parts, Modifier.fillMaxWidth(), spacing = 8.dp, balanced = false)
         }
     }
 }
 
-/** The one download button and what it needs around it (hint, last result, progress capsule). */
+/**
+ * The bottom action row of the viewer: [ViewerDownloadArea] and the check box. Its height is fixed
+ * ([viewerActionSlotHeight]) and independent of the download phase, so starting / finishing /
+ * failing a download never moves the photo or the filmstrip above it. [balanced] (portrait) puts a
+ * 48 dp spacer at the start to mirror the check box and keep the download control centred.
+ */
 @Composable
-private fun ViewerDownloadArea(parts: ViewerParts) {
-    val download = parts.download ?: return
+private fun ViewerActionRow(parts: ViewerParts, modifier: Modifier, spacing: Dp = 0.dp, balanced: Boolean = true) {
+    val height = viewerActionSlotHeight(with(LocalDensity.current) { AlphaType.Label.lineHeight.toDp() })
+    Row(
+        modifier.height(height).testTag(VIEWER_ACTION_ROW_TAG),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(spacing),
+    ) {
+        if (balanced) Spacer(Modifier.size(AlphaDimens.minTouchTarget))
+        Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+            ViewerDownloadArea(parts, height)
+        }
+        ViewerSelectionToggle(parts)
+    }
+}
+
+/**
+ * The one download control, swapped **in place** inside a slot of constant height: a single-line
+ * capsule in every phase (Download / Saved / Download RAW / disabled with a short reason / the
+ * progress capsule). Longer explanations never take a row of their own: a phase's reason ("This
+ * photo has no JPG", the full size-limit sentence…) is the control's accessibility state, and the
+ * result of a finished transfer (failed / cancelled / no storage access / conversion failed) is an
+ * in-page [GlassSnackbarHost] message lifted above this row — it overlays, it never pushes.
+ */
+@Composable
+private fun ViewerDownloadArea(parts: ViewerParts, slotHeight: Dp) {
     val transfer = parts.transfer
+    // Transfer results: announced once when they happen while the viewer is up (never for a state
+    // the viewer was opened with), cleared as soon as a new transfer starts.
+    val snackbar = remember { GlassSnackbarHostState() }
+    val notice = viewerTransferNotice(transfer)
+    var seenStatus by remember { mutableStateOf(transfer.status) }
+    LaunchedEffect(transfer.status, transfer.failureReason) {
+        val action = viewerNoticeAction(seenStatus, transfer.status)
+        seenStatus = transfer.status
+        when (action) {
+            ViewerNoticeAction.Clear -> snackbar.clear()
+            ViewerNoticeAction.Show -> notice?.let {
+                snackbar.clear()
+                snackbar.show(
+                    it,
+                    duration = if (transfer.status == WifiImageTransferStatus.Cancelled) {
+                        GlassSnackbarDuration.Short
+                    } else GlassSnackbarDuration.Long,
+                )
+            }
+            ViewerNoticeAction.None -> Unit
+        }
+    }
+    // Above the action row (the host already clears the navigation bar + 16 dp), so the Download
+    // button stays reachable for a retry while the message is up.
+    GlassSnackbarHost(snackbar, Modifier.padding(bottom = slotHeight + 8.dp))
+
+    val download = parts.download ?: return
     // "Ask each time": the button opens the in-page format chooser; the pick is used for this download only.
     var asking by remember(parts.capture?.id) { mutableStateOf(false) }
     if (asking && download.asks) {
@@ -1116,52 +1175,90 @@ private fun ViewerDownloadArea(parts: ViewerParts) {
     } else if (asking) {
         SideEffect { asking = false }
     }
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        val hint = when (download.phase) {
-            ViewerDownloadPhase.NoJpeg -> stringResource(Res.string.wifi_remote_photo_no_jpg)
-            ViewerDownloadPhase.NoRaw -> stringResource(Res.string.r_viewer_no_raw)
-            ViewerDownloadPhase.OtherTransfer -> stringResource(Res.string.m7_viewer_other_transfer)
-            ViewerDownloadPhase.TooLarge -> stringResource(Res.string.wifi_remote_download_too_large)
-            else -> viewerTransferNotice(transfer)
-        }
-        hint?.let {
-            Text(
-                it, style = AlphaType.Caption,
-                color = viewerDownloadHintColor(download.phase, AlphaTheme.colors),
-            )
-        }
-        when (download.phase) {
-            ViewerDownloadPhase.Downloading -> DownloadProgressCapsule(transfer, parts.onCancel)
-            // Every viewer button is the Viewer-glass variant (GV fill + edge light, label in the
-            // photo-overlay colour) so it reads as frosted glass even where it sits on the black
-            // letterbox below the photo, and never as an opaque light pill.
-            ViewerDownloadPhase.Saved -> CapsuleButton(
-                text = stringResource(Res.string.wifi_remote_download_saved), onClick = {},
-                icon = painterResource(Res.drawable.check_24px), enabled = false,
-                glass = true, glassLevel = GlassLevel.Viewer,
-            )
-            ViewerDownloadPhase.NoJpeg, ViewerDownloadPhase.NoRaw -> CapsuleButton(
-                text = stringResource(Res.string.m7_viewer_download_format, download.manualFormat.orEmpty()),
-                onClick = { parts.onDownload(download.downloads) },
-                role = CapsuleRole.Secondary,
-                icon = painterResource(Res.drawable.download_24px),
-                enabled = download.enabled,
-                glass = true, glassLevel = GlassLevel.Viewer,
-            )
-            else -> CapsuleButton(
-                text = stringResource(Res.string.wifi_remote_download),
-                onClick = { if (download.asks) asking = true else parts.onDownload(download.downloads) },
-                // Frosted Viewer glass tinted with the accent (not an opaque light-blue fill).
-                role = CapsuleRole.GlassPrimary,
-                icon = painterResource(Res.drawable.download_24px),
-                enabled = download.enabled,
-                glassLevel = GlassLevel.Viewer,
-            )
+    // A short cross-fade between controls, keyed by the phase only (progress ticks never re-fade);
+    // both sit in the same fixed-size box, so it changes no layout. The outgoing control keeps the
+    // last data of its own phase while it fades out.
+    val latest = remember { HashMap<ViewerDownloadPhase, Pair<ViewerDownloadState, WifiImageTransferState>>() }
+    latest[download.phase] = download to transfer
+    Crossfade(
+        targetState = download.phase,
+        modifier = Modifier.fillMaxSize(),
+        animationSpec = tween(VIEWER_SLOT_FADE_MILLIS),
+        label = "viewerDownloadSlot",
+    ) { phase ->
+        val (shown, shownTransfer) = if (phase == download.phase) download to transfer
+        else latest[phase] ?: (download to transfer)
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            ViewerDownloadControl(shown, shownTransfer, parts, onAsk = { asking = true })
         }
     }
 }
 
-/** Last finished transfer result worth a line (a save shows as the greyed "Saved" button instead). */
+@Composable
+private fun ViewerDownloadControl(
+    download: ViewerDownloadState,
+    transfer: WifiImageTransferState,
+    parts: ViewerParts,
+    onAsk: () -> Unit,
+) {
+    // Every control fills the slot's height, so they all look the same size at any font scale.
+    val fill = Modifier.fillMaxHeight()
+    val reason = when (download.phase) {
+        ViewerDownloadPhase.NoJpeg -> stringResource(Res.string.wifi_remote_photo_no_jpg)
+        ViewerDownloadPhase.NoRaw -> stringResource(Res.string.r_viewer_no_raw)
+        ViewerDownloadPhase.OtherTransfer -> stringResource(Res.string.m7_viewer_other_transfer)
+        ViewerDownloadPhase.TooLarge -> stringResource(Res.string.wifi_remote_download_too_large)
+        else -> null
+    }
+    val described = reason?.let { fill.semantics { stateDescription = it } } ?: fill
+    when (download.phase) {
+        ViewerDownloadPhase.Downloading -> DownloadProgressCapsule(transfer, parts.onCancel, fill)
+        // Every viewer button is the Viewer-glass variant (GV fill + edge light, label in the
+        // photo-overlay colour) so it reads as frosted glass even where it sits on the black
+        // letterbox below the photo, and never as an opaque light pill.
+        ViewerDownloadPhase.Saved -> CapsuleButton(
+            text = stringResource(Res.string.wifi_remote_download_saved), onClick = {},
+            modifier = fill,
+            icon = painterResource(Res.drawable.check_24px), enabled = false,
+            glass = true, glassLevel = GlassLevel.Viewer,
+        )
+        // The info strip already says "Only RAW" in the warning colour; the full reason is the
+        // button's state for TalkBack.
+        ViewerDownloadPhase.NoJpeg, ViewerDownloadPhase.NoRaw -> CapsuleButton(
+            text = stringResource(Res.string.m7_viewer_download_format, download.manualFormat.orEmpty()),
+            onClick = { parts.onDownload(download.downloads) },
+            modifier = described,
+            role = CapsuleRole.Secondary,
+            icon = painterResource(Res.drawable.download_24px),
+            enabled = download.enabled,
+            glass = true, glassLevel = GlassLevel.Viewer,
+        )
+        // Disabled with the reason as the label itself (short form; the full sentence is the state).
+        ViewerDownloadPhase.OtherTransfer, ViewerDownloadPhase.TooLarge -> CapsuleButton(
+            text = stringResource(
+                if (download.phase == ViewerDownloadPhase.TooLarge) Res.string.m7_viewer_download_too_large
+                else Res.string.m7_viewer_download_busy
+            ),
+            onClick = {},
+            modifier = described,
+            role = CapsuleRole.GlassPrimary,
+            enabled = false,
+            glassLevel = GlassLevel.Viewer,
+        )
+        else -> CapsuleButton(
+            text = stringResource(Res.string.wifi_remote_download),
+            onClick = { if (download.asks) onAsk() else parts.onDownload(download.downloads) },
+            modifier = fill,
+            // Frosted Viewer glass tinted with the accent (not an opaque light-blue fill).
+            role = CapsuleRole.GlassPrimary,
+            icon = painterResource(Res.drawable.download_24px),
+            enabled = download.enabled,
+            glassLevel = GlassLevel.Viewer,
+        )
+    }
+}
+
+/** Message of a finished transfer worth telling (a save shows as the greyed "Saved" button instead). */
 @Composable
 private fun viewerTransferNotice(transfer: WifiImageTransferState): String? = when (transfer.status) {
     WifiImageTransferStatus.Failed -> stringResource(
@@ -1179,46 +1276,89 @@ private fun viewerTransferNotice(transfer: WifiImageTransferState): String? = wh
     else -> null
 }
 
-/** Glass progress capsule: ring + "Downloading 43%" + bytes (and files of a two-file capture) + Cancel. */
+/**
+ * Glass progress capsule, the same height as the button it replaces: ring + "Downloading 43%" and,
+ * when there is room on the line, the bytes (and files of a two-file capture) + a ✕ that cancels.
+ */
 @Composable
-private fun DownloadProgressCapsule(transfer: WifiImageTransferState, onCancel: () -> Unit) {
+private fun DownloadProgressCapsule(transfer: WifiImageTransferState, onCancel: () -> Unit, modifier: Modifier) {
     val fraction = viewerTransferFraction(transfer)
-    GlassFloatingBar(
-        level = GlassLevel.Viewer,
-        contentPadding = PaddingValues(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    GlassSurface(
+        modifier = modifier, level = GlassLevel.Viewer, shape = AlphaShapes.capsule,
+        contentPadding = PaddingValues(start = 14.dp),
+        contentAlignment = Alignment.CenterStart,
     ) {
-        // Determinate while bytes arrive, indeterminate while converting / without a size.
-        GlassProgressCircle(
-            progress = fraction?.takeIf { transfer.status == WifiImageTransferStatus.Downloading },
-            onPhoto = true,
-            strokeWidth = 3.dp,
-        )
-        Column {
-            Text(
-                if (transfer.status == WifiImageTransferStatus.Converting) {
-                    stringResource(Res.string.wifi_remote_converting_jpeg)
-                } else {
-                    stringResource(Res.string.m7_viewer_downloading, "${((fraction ?: 0f) * 100).toInt()}%")
-                },
-                color = AlphaTheme.colors.onPhoto, style = AlphaType.Label, maxLines = 1,
+        Row(
+            Modifier.fillMaxHeight(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            // Determinate while bytes arrive, indeterminate while converting / without a size.
+            GlassProgressCircle(
+                progress = fraction?.takeIf { transfer.status == WifiImageTransferStatus.Downloading },
+                onPhoto = true,
+                strokeWidth = 3.dp,
             )
+            val title = if (transfer.status == WifiImageTransferStatus.Converting) {
+                stringResource(Res.string.wifi_remote_converting_jpeg)
+            } else {
+                stringResource(Res.string.m7_viewer_downloading, "${((fraction ?: 0f) * 100).toInt()}%")
+            }
             val bytes = if (transfer.totalBytes > 0) {
                 formatByteSize(transfer.bytesReceived) + " / " + formatByteSize(transfer.totalBytes)
             } else null
             val files = if (transfer.totalFiles > 1) {
                 stringResource(Res.string.wifi_remote_batch_progress, transfer.completedFiles, transfer.totalFiles)
             } else null
-            listOfNotNull(bytes, files).takeIf { it.isNotEmpty() }?.let {
-                Text(it.joinToString(" · "), color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption, maxLines = 1)
-            }
+            ProgressLine(
+                title = title,
+                detail = listOfNotNull(bytes, files).takeIf { it.isNotEmpty() }?.joinToString(" · "),
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            GlassIconButton(
+                icon = painterResource(Res.drawable.close_24px),
+                contentDescription = stringResource(Res.string.wifi_remote_transfer_cancel),
+                onClick = onCancel,
+                tint = AlphaTheme.colors.onPhoto,
+            )
         }
-        CapsuleButton(
-            text = stringResource(Res.string.wifi_remote_transfer_cancel),
-            onClick = onCancel,
-            role = CapsuleRole.Secondary,
-            glass = true, glassLevel = GlassLevel.Viewer,
-        )
+    }
+}
+
+/**
+ * One line: [title] (Label, ellipsized only if it alone is too wide) then [detail] (Caption) on the
+ * same baseline — the detail is dropped whole rather than cut when the line has no room for it.
+ */
+@Composable
+private fun ProgressLine(title: String, detail: String?, modifier: Modifier) {
+    Layout(
+        content = {
+            Text(
+                title, color = AlphaTheme.colors.onPhoto, style = AlphaType.Label,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            if (detail != null) {
+                Text(detail, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption, maxLines = 1)
+            }
+        },
+        modifier = modifier,
+    ) { measurables, constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val gap = 8.dp.roundToPx()
+        val head = measurables[0].measure(loose)
+        val room = if (constraints.hasBoundedWidth) constraints.maxWidth - head.width - gap else Int.MAX_VALUE
+        val tail = measurables.getOrNull(1)
+            ?.takeIf { room > 0 && it.maxIntrinsicWidth(Constraints.Infinity) <= room }
+            ?.measure(loose.copy(maxWidth = room.coerceAtLeast(0)))
+        val headBase = head[FirstBaseline].takeIf { it != AlignmentLine.Unspecified } ?: head.height
+        val tailBase = tail?.let { t -> t[FirstBaseline].takeIf { it != AlignmentLine.Unspecified } ?: t.height } ?: 0
+        val ascent = maxOf(headBase, tailBase)
+        val height = maxOf(ascent - headBase + head.height, tail?.let { ascent - tailBase + it.height } ?: 0)
+        val width = head.width + (tail?.let { gap + it.width } ?: 0)
+        layout(width, height) {
+            head.place(0, ascent - headBase)
+            tail?.place(head.width + gap, ascent - tailBase)
+        }
     }
 }
 

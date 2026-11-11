@@ -26,7 +26,6 @@ import com.sasch.cameragps.sharednew.ui.device.WrittenMetricTone
 import com.sasch.cameragps.sharednew.ui.device.locationSignalTone
 import com.sasch.cameragps.sharednew.ui.device.signalTone
 import com.sasch.cameragps.sharednew.ui.remote.ViewerDownloadPhase
-import com.sasch.cameragps.sharednew.ui.remote.viewerDownloadHintColor
 import com.sasch.cameragps.sharednew.ui.remote.viewerFormatColor
 import androidx.compose.ui.state.ToggleableState
 import kotlin.test.Test
@@ -258,12 +257,7 @@ class PaletteContrastTest {
                 val r = minRatio(viewerFormatColor(missingFormat, c), bgs)
                 assertTrue(r >= Contrast.AA_TEXT, "info strip format missingFormat=$missingFormat dark=${c.isDark}: $r")
             }
-            ViewerDownloadPhase.entries.forEach { phase ->
-                val r = minRatio(viewerDownloadHintColor(phase, c), bgs)
-                assertTrue(r >= Contrast.AA_TEXT, "download hint $phase dark=${c.isDark}: $r")
-            }
             assertEquals(c.onPhotoWarning, viewerFormatColor(missingFormat = true, c))
-            assertEquals(c.onPhotoDanger, viewerDownloadHintColor(ViewerDownloadPhase.Ready, c))
             assertEquals(c.onPhotoDanger, iconButtonTint(IconEmphasis.Danger, c, enabled = true, onViewer = true))
             // Still distinguishable from plain onPhoto text (they carry the warning / error meaning).
             assertTrue(c.onPhotoWarning != c.onPhoto && c.onPhotoDanger != c.onPhoto && c.onPhotoWarning != c.onPhotoDanger)
