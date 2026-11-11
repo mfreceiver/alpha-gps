@@ -40,6 +40,11 @@
 - 验收：观感可接受；不满意项在 `WifiPhotoViewer.kt` 的抽屉参数（`VIEWER_DETAILS_ENTER_MILLIS`、行高、直方图尺寸）或 `viewerSheet` token 调整，`PaletteContrastTest` 仍全过。
 - 依据：批 P 只能在 JVM 验证重组范围与读取时机（`ViewerDetailsDrawerComposeTest`），渲染与帧耗时需真机。
 
+### 34. 真机读取预览页抽屉帧耗时日志（AlphaViewer）
+- 做什么：用法——打开预览页，点信息条打开详情抽屉，等约 1 秒或关闭；在 设置 → 运行日志（INFO 默认可见）或 `adb logcat -s AlphaViewer` 看到一行 `details open first=<是否本进程首次> end=<timer|closed|reopened|left> frames=… janky=…(>刷新周期ms) worst=…ms p90=…ms worst[input anim layout draw sync command swap gpu]`。采集只在抽屉打开到入场动画结束后 600ms（或提前关闭）之间启用（`app/.../ui/device/ViewerFrameMetrics.kt`）。冷启动后首次打开、再次打开、杀进程重开各记一次，与 #35 安装 profile 前后对比。
+- 验收：记录各场景的 frames/janky/worst/p90；若首次打开最差帧仍明显（例如 >50ms），按 worst[] 中占比最大的阶段（layout/draw/command/gpu）决定下一步。
+- 依据：批 P 新增诊断；JVM 无法测帧耗时。
+
 ### 23. 真机核对：0.3.0 B0 玻璃材质与新组件
 - 做什么：装含 B0 的版本（亮/暗各一遍，Android 12 与 14+ 各一台）打开调试预览或已迁移页面，核对：①背景彩色光斑可见但不抢眼；卡片/浮条/对话框能明显看出毛玻璃（双向边缘光、顶部高光带、双层阴影、细噪点），文字清晰；②API 31/32 低端机长列表滚动不掉帧（噪点 + 每卡片模糊）；③对话框/菜单/面板/Snackbar 背后的页面模糊随滚动刷新；④动态字体 200% 下 GlassSegmented/StatusBadge/GlassTopBar 标题不截断；⑤TalkBack：Snackbar 播报、RevealValueRow 状态、图标长按 tooltip 不被朗读；⑥暗色开关/复选框选中态（浅蓝底 + 深蓝滑块/勾）观感可接受。⑦（页面迁移收尾并入）设备详情标题改左对齐后观感；⑧Welcome 页：`WelcomeScreenTest` 几何断言（375×627 slide 不滚动；412×860 标题与 slide 顶部 >80dp；该 androidTest 目前仅编译、未运行，需在设备/模拟器上跑一遍）；⑨设置页单选行与开关行观感：`GlassRadio` 视觉圈 20dp，设置页由整行 `SharedRadioOption`（≥48dp、整行 selectable，`GlassRadio(onClick = null)`）承担点击，独立使用的 `GlassRadio(onClick ≠ null)` 点击区为 48dp——核对整行点按、选中圈外观与 `GlassSwitch` 行高一致；⑩弹出菜单内 `GlassSegmented` 宽度；⑪网格复选框在很亮缩略图上的可见性；⑫预览页下载按钮对比度（见 #26）；⑬排障页返回按钮无障碍标签由 Close 变为 Back（TalkBack 朗读）；⑭信息值字号 14→15 后各行/弹窗折行；⑮`LocationPermissionBoxTest` 使用已弃用的 `createComposeRule`（既有编译警告，换成新 API 或保留并记录）；⑯TalkBack 聚焦 `GlassTextField`（重命名相机、手动加入 Wi-Fi 的 SSID/密码、IP）读出标签名称、空值时 placeholder 提示、错误时错误文本，且标签/说明不重复朗读；在设备/模拟器上跑 `GlassTextFieldSemanticsTest`（目前仅编译）；⑰弹层焦点：外接键盘/方向键打开网格"视图选项"弹层与各对话框/底部面板，焦点进入弹层、Tab/方向键到不了背后页面、关闭后回到打开它的按钮（触屏关闭后不会强制聚焦 opener；全局焦点框/IME/TalkBack 待设备验证）；在设备/模拟器上跑 `GlassOverlayFocusTest`（目前仅编译）；⑱字体 200% 下网格"视图选项"弹层（固定 248dp 宽）内的 `GlassSegmented`（小/中/大）不截断。
 - 验收：不满意的项按 `docs/glass-material-notes.md` 的参数说明调 token，调后 `PaletteContrastTest` 仍全部通过（不放宽阈值）。

@@ -96,6 +96,8 @@ fun AndroidWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
         } else if (host == null) startCameraSetup() else controller.connect(identifier, host)
     }
     var gridOptions by remember { mutableStateOf(PreferencesManager.getWifiGridOptions(context)) }
+    // Frame timing of the viewer's details drawer ("AlphaViewer" in the Run log), only while it opens.
+    val onViewerDetailsVisibleChanged = rememberViewerFrameMetricsProbe(activity?.window)
     WifiRemoteScreen(model, onConnect = { connect(it) }, onConnectAutomatically = { connect(null) },
         autoConnectOnEntry = !entryConnectAttempted,
         isExperimentalNoticeAcknowledged = {
@@ -130,7 +132,8 @@ fun AndroidWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
             gridOptions = it
             PreferencesManager.setWifiGridOptions(context, it)
         },
-        onClose = close)
+        onClose = close,
+        onViewerDetailsVisibleChanged = onViewerDetailsVisibleChanged)
 }
 
 @Composable
