@@ -253,7 +253,6 @@
     <string name="guide_startup_step_disable">在相机的“网络”菜单中，将“关机时连接”设为“关”。菜单名称和位置因型号而异。这将在相机关机时禁用智能手机访问；相机开机时，请保持蓝牙开启以用于 GPS。</string>
     <string name="whats_new_version">版本 %1$s</string>
     <string name="whats_new_close">知道了</string>
-    <string name="whats_new_open">查看更新日志</string>
     <string name="whats_new_title">更新日志</string>
     <string name="whats_new_171_zv1">改进了索尼 ZV-1 和其他较旧索尼相机的 Wi-Fi 兼容性，包括照片传输。</string>
     <string name="whats_new_171_rx0">修复了索尼 RX0 II 等相机在关闭“始终开启”模式时，位置共享过程中反复断开蓝牙连接的问题。</string>
