@@ -40,10 +40,12 @@ class WifiPhotoViewerModelTest {
     // ---- extended read trigger --------------------------------------------------------------------
 
     @Test
-    fun theExtendedReadRunsOnlyWhileTheDetailsAreVisible() {
-        assertFalse(viewerWantsExtendedMetadata(portrait = true, drawerOpen = false), "portrait, drawer closed: basic only")
-        assertTrue(viewerWantsExtendedMetadata(portrait = true, drawerOpen = true), "opening the drawer starts the read")
-        assertTrue(viewerWantsExtendedMetadata(portrait = false, drawerOpen = false), "B / C always show the side panel")
+    fun theExtendedReadIsAskedForTheSettledPhotoWhateverTheDetailsShow() {
+        // No drawer argument at all: the read does not depend on the details being visible.
+        assertTrue(viewerWantsExtendedMetadata(transferBusy = false, swiping = false), "settled on a photo: read (after the debounce)")
+        assertFalse(viewerWantsExtendedMetadata(transferBusy = false, swiping = true), "being swiped away: no read")
+        assertFalse(viewerWantsExtendedMetadata(transferBusy = true, swiping = false), "downloading: the camera is busy")
+        assertFalse(viewerWantsExtendedMetadata(transferBusy = true, swiping = true))
     }
 
     // ---- details drawer gesture ---------------------------------------------------------------------
@@ -96,8 +98,34 @@ class WifiPhotoViewerModelTest {
 
     @Test
     fun stripShowsFormatAndTheDefaultFormatDownloadSizeOnce() {
-        assertEquals(ViewerInfoStrip("JPG + RAW", 6_600_000, noJpeg = false), viewerInfoStrip(pair, WifiFormatPolicy.JpegOnly))
-        assertEquals(54_600_000, viewerInfoStrip(pair, WifiFormatPolicy.Original).sizeBytes, "Original downloads every file: the sum")
+        // JPG default: only the JPG is downloaded, so the strip names only it — "JPG · 6.6 MB".
+        assertEquals(ViewerInfoStrip("JPG", 6_600_000, noJpeg = false), viewerInfoStrip(pair, WifiFormatPolicy.JpegOnly))
+        assertEquals(ViewerInfoStrip("JPG + RAW", 54_600_000, noJpeg = false), viewerInfoStrip(pair, WifiFormatPolicy.Original),
+            "Original downloads every file: all formats and the sum")
+    }
+
+    @Test
+    fun stripFormatLabelNamesTheFilesThatWouldBeDownloaded() {
+        assertEquals("JPG", stripFormatLabel(pair, WifiFormatPolicy.JpegOnly))
+        assertEquals("JPG + RAW", stripFormatLabel(pair, WifiFormatPolicy.Original))
+        assertEquals("JPG", stripFormatLabel(jpgOnly, WifiFormatPolicy.JpegOnly))
+        assertEquals("JPG", stripFormatLabel(jpgOnly, WifiFormatPolicy.Original))
+        assertEquals("RAW", stripFormatLabel(rawOnly, WifiFormatPolicy.Original))
+        // No JPG to download: the strip names what the capture has (shown as "Only RAW").
+        assertEquals("RAW", stripFormatLabel(rawOnly, WifiFormatPolicy.JpegOnly))
+        assertEquals("HEIF + RAW", stripFormatLabel(WifiCameraCapture("x", listOf(raw, heif)), WifiFormatPolicy.JpegOnly))
+        // The label is about the format choice, not what is left: saved / too-large files keep their names.
+        val tooLarge = WifiCameraCapture("c", listOf(raw, jpg.copy(downloadable = false)))
+        assertEquals("JPG", stripFormatLabel(tooLarge, WifiFormatPolicy.JpegOnly))
+        assertEquals("JPG", viewerInfoStrip(pair, WifiFormatPolicy.JpegOnly, setOf(WifiPhotoDownload(1))).formatText)
+        assertNull(stripFormatLabel(WifiCameraCapture("e", emptyList()), WifiFormatPolicy.Original))
+    }
+
+    @Test
+    fun downloadTargetsFollowThePlanOfThePolicy() {
+        assertEquals(listOf(jpg), viewerDownloadTargets(pair, WifiFormatPolicy.JpegOnly))
+        assertEquals(setOf(jpg, raw), viewerDownloadTargets(pair, WifiFormatPolicy.Original).toSet())
+        assertTrue(viewerDownloadTargets(rawOnly, WifiFormatPolicy.JpegOnly).isEmpty(), "no JPG: nothing planned")
     }
 
     @Test
@@ -133,10 +161,9 @@ class WifiPhotoViewerModelTest {
     @Test
     fun detailsListEveryFileWithItsOwnSizeJpgFirst() {
         val details = viewerDetails(pair, PhotoMetadataState.Idle)
-        assertEquals("DSC1.JPG", details.filename)
-        assertEquals("JPG + RAW", details.formatText)
+        // Format and size only: the file name is in the top bar.
         assertEquals(
-            listOf(ViewerFileEntry("JPG", "DSC1.JPG", 6_600_000), ViewerFileEntry("RAW", "DSC1.ARW", 48_000_000)),
+            listOf(ViewerFileEntry("JPG", 6_600_000), ViewerFileEntry("RAW", 48_000_000)),
             details.files,
         )
         assertEquals("7008×4672", details.resolutionText, "the JPEG's size, never the RAW object info")
@@ -150,7 +177,7 @@ class WifiPhotoViewerModelTest {
         assertNull(details.resolutionText, "RAW-only: no trusted pixel size")
         assertNull(details.capturedAt, "no capture time in the catalog")
         assertTrue(details.exif.isEmpty(), "RAW has no readable EXIF")
-        assertEquals(listOf(ViewerFileEntry("RAW", "DSC1.ARW", 48_000_000)), details.files)
+        assertEquals(listOf(ViewerFileEntry("RAW", 48_000_000)), details.files)
     }
 
     @Test
@@ -172,12 +199,13 @@ class WifiPhotoViewerModelTest {
         assertFalse(ready.loading)
         assertEquals(
             listOf(
+                // Display order: lens, focal length, then the exposure grid.
+                ViewerExifField.Lens to "FE 24-70mm F2.8 GM II",
+                ViewerExifField.FocalLength to "35mm",
                 ViewerExifField.Aperture to "f/2.8",
                 ViewerExifField.Shutter to "1/250s",
                 ViewerExifField.Iso to "ISO 400",
                 ViewerExifField.ExposureBias to "+0.3 EV",
-                ViewerExifField.FocalLength to "35mm",
-                ViewerExifField.Lens to "FE 24-70mm F2.8 GM II",
             ),
             ready.exif,
         )
@@ -185,7 +213,19 @@ class WifiPhotoViewerModelTest {
         val failed = viewerDetails(jpgOnly, PhotoMetadataState.Unavailable(1, PhotoMetadataFailureReason.Timeout, metadata(1)))
         assertFalse(failed.loading)
         assertTrue(failed.exif.isEmpty(), "a failed read hides the rows instead of leaving them empty")
-        assertEquals(listOf(ViewerFileEntry("JPG", "DSC1.JPG", 6_600_000)), failed.files, "the basic data stays")
+        assertEquals(listOf(ViewerFileEntry("JPG", 6_600_000)), failed.files, "the basic data stays")
+    }
+
+    @Test
+    fun placeholdersOnlyForFieldsTheReadMayStillFill() {
+        val idleDetails = viewerDetails(jpgOnly, PhotoMetadataState.Idle)
+        assertTrue(viewerPendingExifFields(idleDetails).isEmpty(), "no read pending: no placeholder")
+        val loading = viewerDetails(jpgOnly, PhotoMetadataState.Loading(1, metadata(1)))
+        val pending = viewerPendingExifFields(loading)
+        assertTrue(ViewerExifField.Aperture in pending && ViewerExifField.Lens in pending && ViewerExifField.Camera in pending)
+        assertFalse(ViewerExifField.FocalLength35mm in pending, "an optional row gets no placeholder (it may never appear)")
+        val ready = viewerDetails(jpgOnly, PhotoMetadataState.Ready(metadata(1, sampleExif)))
+        assertTrue(viewerPendingExifFields(ready).isEmpty())
     }
 
     @Test
@@ -193,7 +233,7 @@ class WifiPhotoViewerModelTest {
         assertTrue(viewerExifRows(null).isEmpty())
         assertTrue(viewerExifRows(metadata(1, PhotoExif())).isEmpty())
         assertEquals(
-            listOf(ViewerExifField.Shutter to "2.5s", ViewerExifField.Iso to "ISO 100", ViewerExifField.Camera to "ILCE-7M4"),
+            listOf(ViewerExifField.Camera to "ILCE-7M4", ViewerExifField.Shutter to "2.5s", ViewerExifField.Iso to "ISO 100"),
             viewerExifRows(metadata(1, PhotoExif(iso = 100, exposureTimeSeconds = 2.5, lensModel = " ", cameraModel = "ILCE-7M4"))),
         )
     }
@@ -212,6 +252,11 @@ class WifiPhotoViewerModelTest {
         assertEquals(
             listOf(ViewerExifField.FocalLength35mm to "40mm"),
             viewerExifRows(metadata(1, PhotoExif(focalLength35mm = 40))),
+        )
+        // Same as the actual focal length (full frame): no second row.
+        assertEquals(
+            listOf(ViewerExifField.FocalLength to "50mm"),
+            viewerExifRows(metadata(1, PhotoExif(focalLengthMm = 50.0, focalLength35mm = 50))),
         )
         // Neither: no focal row at all.
         assertTrue(viewerExifRows(metadata(1, PhotoExif())).none { it.first == ViewerExifField.FocalLength35mm })

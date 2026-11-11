@@ -892,6 +892,15 @@ class WifiRemoteController internal constructor(
         if (_owner.value.equals(identifier, true)) metadataLoader.cancel()
     }
 
+    /**
+     * Stops a pending / in-flight extended read without forgetting what is shown (a pending read
+     * falls back to the basic data): the viewer's pager started moving away from the photo. The
+     * next [loadMetadata] (the settled page) asks again; cached results are kept.
+     */
+    fun pauseMetadata(identifier: String) {
+        if (_owner.value.equals(identifier, true)) metadataLoader.interrupt()
+    }
+
     fun clearPhotoPreview(identifier: String) {
         if (!_owner.value.equals(identifier, true)) return
         photoPreviewJob?.cancel()

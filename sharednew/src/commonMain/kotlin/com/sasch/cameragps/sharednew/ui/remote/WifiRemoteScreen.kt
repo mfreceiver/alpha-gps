@@ -553,15 +553,21 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     // ---- Viewer metadata (M7) ---------------------------------------------------------------------
 
     /**
-     * Asks for the metadata of the capture the viewer shows. [extended] (a 64 KB read of the original,
-     * after the loader's 250 ms debounce) only while the details are visible — the portrait drawer is
-     * open or the wide layouts show their side panel; otherwise the free catalog data only, which also
-     * cancels a pending extended read (drawer closed). The controller cancels the previous unfinished
-     * read, so calling this after every settled swipe is enough. No-op while the viewer is closed.
+     * Asks for the metadata of the capture the viewer shows. With [extended] JPEGs also get their
+     * shooting parameters (a 64 KB read of the original, after the loader's 250 ms debounce); the
+     * viewer asks for it whenever a photo is shown and the pager is at rest, whether the details are
+     * visible or not ([viewerWantsExtendedMetadata]). Without it only the free catalog data, which
+     * also cancels a pending extended read. The controller cancels the previous unfinished read, so
+     * calling this after every settled swipe is enough. No-op while the viewer is closed.
      */
     internal fun showViewerMetadata(extended: Boolean) {
         val capture = viewedCapture() ?: return
         controller.loadMetadata(identifier, capture.metadataHandle, extended)
+    }
+
+    /** Stops a pending extended read but keeps what is shown (the pager started a swipe). */
+    internal fun pauseViewerMetadata() {
+        controller.pauseMetadata(identifier)
     }
 
     /** Stops any pending metadata read and resets it (viewer closed or left composition). */
@@ -587,7 +593,13 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
                      onGridOptionsChange: (WifiGridOptions) -> Unit = {},
                      onDownloadPhotos: (List<WifiPhotoDownload>) -> Unit = { downloads ->
                          viewModel.controller.downloadPhotos(viewModel.identifier, downloads)
-                     }
+                     },
+                     /**
+                      * The single-photo viewer's portrait details drawer was opened (true, called
+                      * from the opening gesture, before the drawer's first frame) or closed (false).
+                      * Diagnostics hook (frame timing); see [WifiPhotoViewer].
+                      */
+                     onViewerDetailsVisibleChanged: (Boolean) -> Unit = {},
 ) {
     var noticeAcknowledged by remember { mutableStateOf(isExperimentalNoticeAcknowledged()) }
     val controller = viewModel.controller
@@ -686,7 +698,10 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
             )
 
             viewModel.viewedPhotoIndex != null && ready && state.photoBrowser.open ->
-                WifiPhotoViewer(state, viewModel, onDownloadPhotos, defaultDownloadFormatJpeg)
+                WifiPhotoViewer(
+                    state, viewModel, onDownloadPhotos, defaultDownloadFormatJpeg,
+                    onDetailsVisibleChanged = onViewerDetailsVisibleChanged,
+                )
 
             state.photoBrowser.open -> Scaffold(
                 containerColor = Color.Transparent,

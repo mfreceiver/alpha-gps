@@ -342,15 +342,17 @@ ends. A browse/download interrupts a pending read; failures only yield `Unavaila
 preview or download state. RAW/HEIF stay basic.
 
 **Viewer use.** The full-screen viewer (`WifiPhotoViewer`) requests the shown capture's preview file
-through `WifiRemoteViewModel.showViewerMetadata(extended)` on entry, after every settled swipe and when
-the details open or close, and calls `stopViewerMetadata()` (→ `cancelMetadata`) when it closes.
-`extended` is true only while the photo details are visible (`viewerWantsExtendedMetadata`): always in
-the near-square / landscape layouts (side panel), in portrait only while the details drawer is open
-(swipe up from the lower part of the photo, or tap the info strip). Closing the drawer re-requests the
-basic data, which cancels a pending extended read; with the drawer closed the viewer never reads the
-original. The histogram is computed only while the details are visible, from the decoded preview
-bitmap on `Dispatchers.Default` (rows sampled so at most ~40 000 pixels are read). No request is made
-while a transfer is busy; `Unavailable` just hides the shooting parameter rows of the details.
+through `WifiRemoteViewModel.showViewerMetadata(extended = true)` on entry, after every settled swipe
+and after a download, whether or not the details are visible: the loader's 250 ms debounce makes it
+"read the header once the user stays on a photo", so the details usually show real values when opened.
+`viewerWantsExtendedMetadata(transferBusy, swiping)` gates it: no request while a transfer is busy, and
+a swipe that starts calls `pauseViewerMetadata()` (→ `pauseMetadata` → `interrupt`, the pending or
+in-flight read falls back to the basic data) because the photo is being left. Opening or closing the
+details drawer requests nothing (its flag is not an input of the request); a repeat request for a cached
+handle is served without a camera read. The viewer never prefetches neighbours or the whole day, and
+calls `stopViewerMetadata()` (→ `cancelMetadata`) when it closes. The histogram is computed inside the
+details (drawer / side panel) only, from the decoded preview bitmap on `Dispatchers.Default` (rows
+sampled so at most ~40 000 pixels are read); `Unavailable` just hides the shooting parameter rows.
 
 ## Coroutines and threads
 

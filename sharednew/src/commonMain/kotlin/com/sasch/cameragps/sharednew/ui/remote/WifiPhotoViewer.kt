@@ -1,8 +1,22 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.NonRestartableComposable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
+import com.sasch.cameragps.sharednew.remote.wifi.PhotoMetadataState
+import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -21,7 +35,6 @@ import cameragps.sharednew.generated.resources.b1_details_open
 import cameragps.sharednew.generated.resources.b1_details_title
 import cameragps.sharednew.generated.resources.b1_detail_captured
 import cameragps.sharednew.generated.resources.b1_detail_files
-import cameragps.sharednew.generated.resources.b1_detail_format
 import cameragps.sharednew.generated.resources.b1_detail_resolution
 import cameragps.sharednew.generated.resources.b1_exif_aperture
 import cameragps.sharednew.generated.resources.b1_exif_bias
@@ -116,7 +129,6 @@ import cameragps.sharednew.generated.resources.m7_viewer_metadata_loading
 import cameragps.sharednew.generated.resources.m7_viewer_only_format
 import cameragps.sharednew.generated.resources.m7_viewer_other_transfer
 import cameragps.sharednew.generated.resources.m7_viewer_selected_count
-import cameragps.sharednew.generated.resources.m7_viewer_shooting_params
 import cameragps.sharednew.generated.resources.wifi_remote_batch_progress
 import cameragps.sharednew.generated.resources.wifi_remote_browser_empty
 import cameragps.sharednew.generated.resources.wifi_remote_browser_failed
@@ -209,6 +221,12 @@ internal fun WifiPhotoViewer(
     viewModel: WifiRemoteViewModel,
     onDownload: (List<WifiPhotoDownload>) -> Unit,
     defaultDownloadFormatJpeg: Boolean = false,
+    /**
+     * The portrait details drawer was opened (true — called from the opening tap / swipe, before the
+     * drawer's first frame) or closed (false — also when the viewer leaves composition with the
+     * drawer open). Diagnostics only (the Android host times the drawer's frames).
+     */
+    onDetailsVisibleChanged: (Boolean) -> Unit = {},
 ) {
     val browser = state.photoBrowser
     val transfer = state.imageTransfer
@@ -217,26 +235,26 @@ internal fun WifiPhotoViewer(
     val controller = viewModel.controller
     val thumbnails by controller.thumbnails.collectAsState()
     val preview by controller.photoPreview.collectAsState()
-    val metadataState by controller.metadata.collectAsState()
+    // The drawer's open flag lives in a stable holder that this function never reads: only the
+    // background's semantics gate and the drawer layer (ViewerBody) observe it, so opening or
+    // closing the drawer does not recompose this scope, the pager or the filmstrip.
+    val visibilityCallback by rememberUpdatedState(onDetailsVisibleChanged)
+    val drawer = rememberSaveable(saver = ViewerDrawerState.saver { visibilityCallback(it) }) {
+        ViewerDrawerState(initiallyOpen = false) { visibilityCallback(it) }
+    }
     DisposableEffect(viewModel) {
         onDispose {
             controller.clearPhotoPreview(viewModel.identifier)
             // Closing (Back, the back arrow, disconnect) stops any pending EXIF read.
             viewModel.stopViewerMetadata()
+            if (drawer.open) visibilityCallback(false)
         }
     }
-    val portrait = currentWindowClass() == WindowClass.Portrait
-    var drawerOpen by rememberSaveable { mutableStateOf(false) }
-    // Basic metadata is free; the extended read only runs while the details are visible (drawer open,
-    // or the wide layouts' panel). Re-asked after every settled swipe (the controller cancels the
-    // previous read), after a download (which interrupts a pending read) and when the drawer opens or
-    // closes — closing re-asks for the basic data only, which cancels a pending extended read.
-    val detailsVisible = viewerWantsExtendedMetadata(portrait, drawerOpen)
-    LaunchedEffect(viewModel.viewedPhotoIndex, detailsVisible, browser.pageRevision, transfer.busy) {
-        if (!transfer.busy) viewModel.showViewerMetadata(extended = detailsVisible)
-    }
+    val windowClass = currentWindowClass()
+    val portrait = windowClass == WindowClass.Portrait
     CameraGpsTheme(darkTheme = true, glassRenderMode = LocalGlassRenderMode.current) {
         key(browser.offset) {
+            viewerCompositionProbe("viewer")
             val preceding = if (browser.offset > 0) 1 else 0
             val count = captures.size + preceding + if (browser.hasMore) 1 else 0
             val initialPage =
@@ -253,6 +271,21 @@ internal fun WifiPhotoViewer(
                     browser.offset until browser.offset + captures.size
             // Swiping and the filmstrip are locked while a download runs (design page 21 ⑥).
             val navigationEnabled = !changingPage && !transfer.busy
+
+            // Metadata of the shown photo, extended (EXIF) included whether or not the details are
+            // visible: asked on entry, after every settled swipe and after a download (which
+            // interrupts a pending read); the loader's 250 ms debounce makes it "read once the user
+            // stays on the photo". A swipe that starts pauses a pending read (the photo is being
+            // left). The pager's motion is observed in the effect, not in composition.
+            LaunchedEffect(viewModel.viewedPhotoIndex, browser.pageRevision, transfer.busy) {
+                snapshotFlow { pager.isScrollInProgress }.distinctUntilChanged().collect { swiping ->
+                    when {
+                        viewerWantsExtendedMetadata(transfer.busy, swiping) ->
+                            viewModel.showViewerMetadata(extended = true)
+                        swiping && !transfer.busy -> viewModel.pauseViewerMetadata()
+                    }
+                }
+            }
 
             // Thumbnails on demand: the shown capture, the visible filmstrip and a small margin —
             // never the whole day (the grid's loader and LRU cache serve them).
@@ -288,21 +321,12 @@ internal fun WifiPhotoViewer(
 
             val shownPreview = preview?.takeIf { it.handle == current?.preview?.handle }
             val shownImage = shownPreview?.image ?: current?.let { thumbnails[it.thumbnail.handle] }
-            var histogram by remember { mutableStateOf<FloatArray?>(null) }
-            LaunchedEffect(shownImage, detailsVisible) {
-                histogram = null
-                val image = shownImage
-                if (detailsVisible && image != null) {
-                    // Down-sampled and off the main thread: a preview can be several megapixels.
-                    histogram = withContext(Dispatchers.Default) { image.luminanceHistogram() }
-                }
-            }
             val info = current?.let { viewerInfoStrip(it, policy, browser.savedDownloads) }
-            val details = current?.let { viewerDetails(it, metadataState) }
             val download = current?.let {
                 viewerDownloadState(it, policy, browser.savedDownloads, transfer, browser.loading)
             }
             val selected = current != null && viewModel.isPhotoSelected(current.id)
+            val openDetails: (() -> Unit)? = if (portrait) remember(drawer) { { drawer.show() } } else null
             val parts = ViewerParts(
                 title = current?.name ?: stringResource(Res.string.wifi_remote_browser_title),
                 capturedAt = current?.let { viewerCaptureTimeText(it.preview.capturedAt) },
@@ -315,8 +339,9 @@ internal fun WifiPhotoViewer(
                 },
                 selectedCount = viewModel.selectedPhotoIds.size,
                 info = info,
-                details = details,
-                histogram = histogram,
+                capture = current,
+                image = shownImage,
+                metadata = controller.metadata,
                 download = download,
                 transfer = transfer,
                 selected = selected,
@@ -325,7 +350,7 @@ internal fun WifiPhotoViewer(
                 onToggleSelected = { value -> current?.let { viewModel.setPhotoSelected(it.id, value) } },
                 onDownload = { downloads -> viewModel.downloadSingleCapture(downloads, onDownload) },
                 onCancel = { controller.cancelPhotoOperation(viewModel.identifier) },
-                onOpenDetails = if (portrait) ({ drawerOpen = true }) else null,
+                onOpenDetails = openDetails,
             )
             val backdrop = rememberGlassBackdrop()
             // Focus home of the info strip: the details drawer returns focus here when it closes.
@@ -363,56 +388,61 @@ internal fun WifiPhotoViewer(
                 )
             }
             CompositionLocalProvider(LocalGlassBackdrop provides backdrop) {
-                // While the portrait details drawer is up it is modal: the viewer below (photo,
-                // download, selection, filmstrip) is hidden from accessibility services, exactly
-                // like a dialog behind a GlassBackground overlay host — this screen has none, so the
-                // isolation is applied here. The wide layouts' side panel is not modal and never
-                // hides the photo.
-                val drawerVisible = viewerHidesBackgroundSemantics(portrait, drawerOpen, parts.details != null)
-                Box(Modifier.fillMaxSize().background(Color.Black)) {
-                    Box(
-                        Modifier.fillMaxSize().then(
-                            if (drawerVisible) Modifier.clearAndSetSemantics { } else Modifier
-                        )
-                    ) {
-                        when (currentWindowClass()) {
-                            WindowClass.Portrait -> PortraitViewer(parts, photo, strip, film)
-                            WindowClass.NearSquare -> WideViewer(parts, photo, strip, film, landscape = false)
-                            WindowClass.Landscape -> WideViewer(parts, photo, strip, film, landscape = true)
-                        }
-                    }
-                    val shownDetails = parts.details
-                    AnimatedVisibility(
-                        visible = drawerVisible,
-                        enter = fadeIn(),
-                        exit = fadeOut(),
-                    ) {
-                        if (shownDetails != null) {
-                            ViewerDetailsDrawer(
-                                shownDetails, parts.histogram,
-                                onClose = {
-                                    drawerOpen = false
-                                    // Focus returns to the strip that opened the drawer.
-                                    requestFocusGuarded("details strip") { stripFocus.requestFocus() }
-                                },
-                            )
-                        }
-                    }
-                }
+                ViewerBody(windowClass, parts, drawer, stripFocus, photo, strip, film)
             }
         }
     }
 }
 
-/** Everything the three layouts place; built once per composition by [WifiPhotoViewer]. */
-private class ViewerParts(
+/**
+ * Open flag of the portrait details drawer. A stable holder rather than a plain `Boolean` so the
+ * composable that owns it ([WifiPhotoViewer]) never reads it: only the background's semantics gate
+ * and the drawer layer do, which keeps the pager and the filmstrip out of the recomposition when the
+ * drawer opens or closes. [show] / [hide] report the change to [onChanged] synchronously (diagnostics
+ * hook, before the next frame).
+ */
+@Stable
+internal class ViewerDrawerState(initiallyOpen: Boolean, private val onChanged: (Boolean) -> Unit = {}) {
+    var open by mutableStateOf(initiallyOpen)
+        private set
+
+    fun show() {
+        if (open) return
+        open = true
+        onChanged(true)
+    }
+
+    fun hide() {
+        if (!open) return
+        open = false
+        onChanged(false)
+    }
+
+    companion object {
+        fun saver(onChanged: (Boolean) -> Unit): Saver<ViewerDrawerState, Boolean> =
+            Saver(save = { it.open }, restore = { ViewerDrawerState(it, onChanged) })
+    }
+}
+
+/**
+ * Everything the three layouts place; built by [WifiPhotoViewer] when its data changes (not when
+ * the drawer opens). Immutable by contract — every field is read-only and never mutated after
+ * construction — so Compose may skip the layouts when the same instance is passed again.
+ *
+ * @property capture the shown capture; its details (metadata from [metadata], histogram of [image])
+ *   are derived inside the drawer / side panel, so a metadata result or the histogram only
+ *   recomposes the details, not the page.
+ */
+@Immutable
+internal class ViewerParts(
     val title: String,
     val capturedAt: String?,
     val position: String?,
     val selectedCount: Int,
     val info: ViewerInfoStrip?,
-    val details: ViewerDetails?,
-    val histogram: FloatArray?,
+    val capture: WifiCameraCapture?,
+    val image: ImageBitmap?,
+    val metadata: StateFlow<PhotoMetadataState>,
     val download: ViewerDownloadState?,
     val transfer: WifiImageTransferState,
     val selected: Boolean,
@@ -426,6 +456,52 @@ private class ViewerParts(
 )
 
 /**
+ * The viewer's screen below the theme: the layout for [windowClass] and, in portrait, the details
+ * drawer over it. Split out of [WifiPhotoViewer] so the drawer is an independent subtree: the drawer
+ * flag ([ViewerDrawerState.open]) is read only by [ViewerSemanticsGate] and [ViewerDetailsDrawerLayer];
+ * the layouts ([PortraitViewer] / [WideViewer]) receive the same arguments and are skipped.
+ */
+@Composable
+internal fun ViewerBody(
+    windowClass: WindowClass,
+    parts: ViewerParts,
+    drawer: ViewerDrawerState,
+    stripFocus: FocusRequester,
+    photo: @Composable (Modifier) -> Unit,
+    strip: @Composable (Modifier) -> Unit,
+    film: @Composable (Modifier) -> Unit,
+) {
+    val portrait = windowClass == WindowClass.Portrait
+    val hasDetails = parts.capture != null
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        // While the portrait details drawer is up it is modal: the viewer below (photo, download,
+        // selection, filmstrip) is hidden from accessibility services, exactly like a dialog behind
+        // a GlassBackground overlay host — this screen has none, so the isolation is applied here.
+        // The wide layouts' side panel is not modal and never hides the photo.
+        ViewerSemanticsGate(hidden = { viewerHidesBackgroundSemantics(portrait, drawer.open, hasDetails) }) {
+            when (windowClass) {
+                WindowClass.Portrait -> PortraitViewer(parts, photo, strip, film)
+                WindowClass.NearSquare -> WideViewer(parts, photo, strip, film, landscape = false)
+                WindowClass.Landscape -> WideViewer(parts, photo, strip, film, landscape = true)
+            }
+        }
+        if (portrait) ViewerDetailsDrawerLayer(drawer, parts, stripFocus)
+    }
+}
+
+/**
+ * Applies `clearAndSetSemantics` to [content] while [hidden] says so. [hidden] is read here, in this
+ * small scope, so a change re-runs only this function; [content] is the same lambda and the layouts
+ * inside it get unchanged arguments.
+ */
+@Composable
+private fun ViewerSemanticsGate(hidden: () -> Boolean, content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize().then(if (hidden()) Modifier.clearAndSetSemantics { } else Modifier)) {
+        content()
+    }
+}
+
+/**
  * A — tall portrait: top bar + status tags, photo with the strip over its bottom, filmstrip, actions.
  * An upward swipe that starts in the lower [DETAILS_SWIPE_ZONE_FRACTION] of the photo area (where the
  * strip lies) opens the details drawer; see [detailsSwipeUpToOpen].
@@ -437,6 +513,7 @@ private fun PortraitViewer(
     strip: @Composable (Modifier) -> Unit,
     film: @Composable (Modifier) -> Unit,
 ) {
+    viewerCompositionProbe("layout")
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
         ViewerTopBar(parts)
         ViewerStatusTags(parts, Modifier.padding(start = 16.dp, bottom = 4.dp))
@@ -473,6 +550,7 @@ private fun WideViewer(
     film: @Composable (Modifier) -> Unit,
     landscape: Boolean,
 ) {
+    viewerCompositionProbe("layout")
     BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
         val panelWidth: Dp = minOf(DetailsPanelWidth, maxWidth * 0.45f)
         Row(Modifier.fillMaxSize()) {
@@ -569,6 +647,7 @@ private fun ViewerPager(
     modifier: Modifier,
 ) {
     val browser = state.photoBrowser
+    viewerCompositionProbe("pager")
     if (captures.isEmpty()) {
         Box(modifier, contentAlignment = Alignment.Center) {
             Text(stringResource(Res.string.wifi_remote_browser_empty), color = AlphaTheme.colors.onPhoto, style = AlphaType.Body)
@@ -580,6 +659,7 @@ private fun ViewerPager(
         userScrollEnabled = userScrollEnabled,
         key = { page -> captures.getOrNull(page - preceding)?.id ?: "boundary:$page" },
     ) { page ->
+        viewerCompositionProbe("page")
         val capture = captures.getOrNull(page - preceding)
         val image = capture?.let(previewImage)
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -698,15 +778,59 @@ private fun Modifier.detailsSwipeUpToOpen(onOpen: (() -> Unit)?): Modifier {
     }
 }
 
+/** Enter animation of the portrait details drawer (scrim fade + sheet slide), ms. */
+const val VIEWER_DETAILS_ENTER_MILLIS = 280
+private const val VIEWER_DETAILS_EXIT_MILLIS = 200
+
 /**
- * Portrait details: a viewer-glass bottom drawer over a scrim. Closes on Back (before the viewer
- * itself), a tap on the scrim, the close button or a downward drag on its handle.
+ * The portrait details drawer as its own subtree: the only place besides the semantics gate that
+ * reads [ViewerDrawerState.open]. The enter / exit animation is one [Animatable] whose value is read
+ * only inside `graphicsLayer` blocks (scrim alpha, sheet translationY), so animating redraws two
+ * layers and recomposes nothing; the drawer stays composed until the exit animation has finished.
  */
 @Composable
-private fun ViewerDetailsDrawer(details: ViewerDetails, histogram: FloatArray?, onClose: () -> Unit) {
+private fun ViewerDetailsDrawerLayer(drawer: ViewerDrawerState, parts: ViewerParts, stripFocus: FocusRequester) {
+    val capture = parts.capture
+    val open = drawer.open && capture != null
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(open) {
+        progress.animateTo(
+            if (open) 1f else 0f,
+            if (open) tween(VIEWER_DETAILS_ENTER_MILLIS, easing = FastOutSlowInEasing)
+            else tween(VIEWER_DETAILS_EXIT_MILLIS, easing = FastOutLinearInEasing),
+        )
+    }
+    val leaving by remember { derivedStateOf { progress.value > 0f } }
+    if (capture == null || !(open || leaving)) return
+    val onClose = remember(drawer, stripFocus) {
+        {
+            drawer.hide()
+            // Focus returns to the strip that opened the drawer.
+            requestFocusGuarded("details strip") { stripFocus.requestFocus() }
+            Unit
+        }
+    }
+    ViewerDetailsDrawer(capture, parts.metadata, parts.image, open, progress = { progress.value }, onClose = onClose)
+}
+
+/**
+ * Portrait details: an opaque dark sheet ([AlphaColors.viewerSheet]) over a scrim — no blur, so
+ * nothing of the viewer shows through and opening it costs no backdrop pass. Closes on Back (before
+ * the viewer itself, only while [open]), a tap on the scrim, the close button or a downward drag on
+ * its title row. [progress] (0 → 1) drives the scrim alpha and the sheet's slide.
+ */
+@Composable
+private fun ViewerDetailsDrawer(
+    capture: WifiCameraCapture,
+    metadata: StateFlow<PhotoMetadataState>,
+    image: ImageBitmap?,
+    open: Boolean,
+    progress: () -> Float,
+    onClose: () -> Unit,
+) {
     NavigationBackHandler(
         state = rememberNavigationEventState(NavigationEventInfo.None),
-        isBackEnabled = true,
+        isBackEnabled = open,
         onBackCompleted = onClose,
     )
     val closeLabel = stringResource(Res.string.b1_details_close)
@@ -714,17 +838,20 @@ private fun ViewerDetailsDrawer(details: ViewerDetails, histogram: FloatArray?, 
     // The drawer is its own accessibility pane (like CapsuleDialog) and takes focus on entry.
     val sheetFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { requestFocusGuarded("details drawer") { sheetFocus.requestFocus() } }
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val maxSheetHeight = maxHeight * 0.75f
+    Box(Modifier.fillMaxSize()) {
         Box(
             Modifier.fillMaxSize()
+                .graphicsLayer { alpha = progress() }
                 .background(AlphaTheme.colors.scrim)
                 .pointerInput(onClose) { detectTapGestures { onClose() } }
         )
-        GlassSurface(
-            modifier = Modifier.align(Alignment.BottomCenter)
+        Box(
+            Modifier.align(Alignment.BottomCenter)
                 .widthIn(max = PortraitStripMaxWidth).fillMaxWidth()
-                .heightIn(max = maxSheetHeight)
+                .maxHeightFraction(DRAWER_MAX_HEIGHT_FRACTION)
+                .graphicsLayer { translationY = (1f - progress()) * size.height }
+                .clip(DrawerShape)
+                .background(AlphaTheme.colors.viewerSheet)
                 // Taps on the sheet's plain areas must not fall through to the scrim (which closes).
                 .pointerInput(Unit) { detectTapGestures { } }
                 .semantics {
@@ -733,48 +860,49 @@ private fun ViewerDetailsDrawer(details: ViewerDetails, histogram: FloatArray?, 
                 }
                 .focusRequester(sheetFocus)
                 .focusable(),
-            level = GlassLevel.Viewer,
-            shape = DrawerShape,
-            contentPadding = PaddingValues(0.dp),
         ) {
-            Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
-                Row(
-                    Modifier.fillMaxWidth().detailsDragDownToClose(onClose)
-                        .padding(start = 20.dp, end = 8.dp, top = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Box(
-                            Modifier.align(Alignment.CenterHorizontally).padding(start = 48.dp)
-                                .size(width = 36.dp, height = 4.dp)
-                                .background(AlphaTheme.colors.onPhotoMuted, AlphaShapes.capsule)
-                        )
+            // The sheet is opaque: its controls must not sample (blur) the photo behind it.
+            CompositionLocalProvider(LocalGlassBackdrop provides null) {
+                Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
+                    Row(
+                        Modifier.fillMaxWidth().detailsDragDownToClose(onClose)
+                            .padding(start = 20.dp, end = 12.dp, top = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
-                            stringResource(Res.string.b1_details_title), color = AlphaTheme.colors.onPhoto,
-                            style = AlphaType.Heading,
-                            modifier = Modifier.padding(top = 8.dp),
+                            title, color = AlphaTheme.colors.onPhoto, style = AlphaType.Heading,
+                            modifier = Modifier.weight(1f),
+                        )
+                        GlassIconButton(
+                            painterResource(Res.drawable.close_24px),
+                            contentDescription = closeLabel,
+                            onClick = onClose,
+                            container = GlassLevel.Viewer,
                         )
                     }
-                    GlassIconButton(
-                        painterResource(Res.drawable.close_24px),
-                        contentDescription = closeLabel,
-                        onClick = onClose,
-                        container = GlassLevel.Viewer,
-                    )
-                }
-                Column(
-                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
-                        .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    ViewerDetailsContent(details, histogram)
+                    Column(
+                        Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                            .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 20.dp),
+                        verticalArrangement = Arrangement.spacedBy(DetailsSpacing),
+                    ) {
+                        ViewerDetailsContent(capture, metadata, image)
+                    }
                 }
             }
         }
     }
 }
 
-/** Closes the drawer on a downward, clearly vertical drag ([detailsSwipeCloses]) of its handle row. */
+private const val DRAWER_MAX_HEIGHT_FRACTION = 0.75f
+
+/** Caps the height at [fraction] of the incoming maximum (a cheap layout modifier, no subcomposition). */
+private fun Modifier.maxHeightFraction(fraction: Float): Modifier = layout { measurable, constraints ->
+    val max = if (constraints.hasBoundedHeight) (constraints.maxHeight * fraction).toInt() else constraints.maxHeight
+    val placeable = measurable.measure(constraints.copy(minHeight = minOf(constraints.minHeight, max), maxHeight = max))
+    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+}
+
+/** Closes the drawer on a downward, clearly vertical drag ([detailsSwipeCloses]) of its title row. */
 private fun Modifier.detailsDragDownToClose(onClose: () -> Unit): Modifier = pointerInput(onClose) {
     val distance = DETAILS_SWIPE_DISTANCE_DP.dp.toPx()
     awaitEachGesture {
@@ -793,50 +921,70 @@ private fun Modifier.detailsDragDownToClose(onClose: () -> Unit): Modifier = poi
     }
 }
 
+private val DetailsSpacing = 10.dp
+
+/** Row height reserved by a details row and its placeholder, so a value replacing it does not jump. */
+private val DetailRowHeight = 24.dp
+private val HistogramWidth = 132.dp
+private val HistogramHeight = 64.dp
+
 /**
- * The details shared by the portrait drawer and the wide side panel: name and capture time, format
- * and every file with its own size, resolution, the shooting parameters read from EXIF (placeholder
- * bars while the read is pending) and the histogram of the shown preview. What is unknown is left out.
+ * The details shared by the portrait drawer and the wide side panel, derived here (not in the page)
+ * so a metadata result or the histogram recomposes only the details: capture time, resolution,
+ * camera, lens, focal length (and the 35 mm equivalent when it differs), aperture / shutter / ISO /
+ * exposure bias in a compact two-column grid, then each file's format and size next to the
+ * histogram of the shown preview. Unknown values are left out; while the extended read is pending
+ * the fields it may still fill show placeholders of the same height.
  */
 @Composable
-private fun ColumnScope.ViewerDetailsContent(details: ViewerDetails, histogram: FloatArray?) {
-    details.filename?.let {
-        Text(it, color = AlphaTheme.colors.onPhoto, style = AlphaType.Label, maxLines = 2, overflow = TextOverflow.Ellipsis)
+private fun ColumnScope.ViewerDetailsContent(
+    capture: WifiCameraCapture,
+    metadata: StateFlow<PhotoMetadataState>,
+    image: ImageBitmap?,
+) {
+    val metadataState by metadata.collectAsState()
+    val details = remember(capture, metadataState) { viewerDetails(capture, metadataState) }
+    val histogram by produceState<FloatArray?>(null, image) {
+        value = null
+        // Down-sampled and off the main thread: a preview can be several megapixels.
+        value = image?.let { withContext(Dispatchers.Default) { it.luminanceHistogram() } }
     }
+    val pending = viewerPendingExifFields(details)
+    val values = details.exif.toMap()
     details.capturedAt?.let { DetailRow(stringResource(Res.string.b1_detail_captured), it) }
-    details.formatText?.let { DetailRow(stringResource(Res.string.b1_detail_format), it) }
-    if (details.files.isNotEmpty()) PanelBlock(stringResource(Res.string.b1_detail_files)) {
-        details.files.forEach { file ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(file.format, color = AlphaTheme.colors.onPhoto, style = AlphaType.Label, modifier = Modifier.width(44.dp))
-                Text(
-                    file.filename, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-                )
-                if (file.bytes > 0) Text(formatByteSize(file.bytes), color = AlphaTheme.colors.onPhoto, style = AlphaType.Caption, maxLines = 1)
-            }
-        }
-    }
     details.resolutionText?.let { DetailRow(stringResource(Res.string.b1_detail_resolution), it) }
-    if (details.loading) {
-        PanelBlock(stringResource(Res.string.m7_viewer_shooting_params)) {
-            val loading = stringResource(Res.string.m7_viewer_metadata_loading)
-            Column(
-                Modifier.fillMaxWidth().semantics { contentDescription = loading },
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                PlaceholderBar(Modifier.fillMaxWidth(0.8f))
-                PlaceholderBar(Modifier.fillMaxWidth(0.5f))
-            }
-        }
-    } else if (details.exif.isNotEmpty()) {
-        PanelBlock(stringResource(Res.string.m7_viewer_shooting_params)) {
-            details.exif.forEach { (field, value) -> DetailRow(exifFieldLabel(field), value) }
+    ViewerExifField.entries.filter { !it.inGrid }.forEach { field ->
+        val value = values[field]
+        when {
+            value != null -> DetailRow(exifFieldLabel(field), value)
+            field in pending -> PlaceholderRow(exifFieldLabel(field))
         }
     }
-    histogram?.let {
-        PanelBlock(stringResource(Res.string.m7_viewer_histogram)) {
-            HistogramGraph(it, Modifier.fillMaxWidth().height(72.dp))
+    val grid = ViewerExifField.entries.filter { it.inGrid && (it in values || it in pending) }
+    grid.chunked(2).forEach { pair ->
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            pair.forEach { field -> ExifGridCell(exifFieldLabel(field), values[field], Modifier.weight(1f)) }
+            if (pair.size == 1) Spacer(Modifier.weight(1f))
+        }
+    }
+    Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (details.files.isNotEmpty()) {
+                Text(stringResource(Res.string.b1_detail_files), color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption)
+                details.files.forEach { file ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(file.format, color = AlphaTheme.colors.onPhoto, style = AlphaType.Label, maxLines = 1)
+                        if (file.bytes > 0) Text(formatByteSize(file.bytes), color = AlphaTheme.colors.onPhoto, style = AlphaType.Body, maxLines = 1)
+                    }
+                }
+            }
+        }
+        if (image != null) Column(Modifier.width(HistogramWidth), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(Res.string.m7_viewer_histogram), color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption)
+            // Fixed size whether or not the bins are computed yet: no jump when they arrive.
+            Box(Modifier.size(HistogramWidth, HistogramHeight)) {
+                histogram?.let { HistogramGraph(it, Modifier.fillMaxSize()) }
+            }
         }
     }
 }
@@ -858,16 +1006,51 @@ private fun exifFieldLabel(field: ViewerExifField): String = stringResource(
 /** "Label        value" on one line; the label soft, the value white and right-aligned. */
 @Composable
 private fun DetailRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = DetailRowHeight),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         Text(label, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption)
         Spacer(Modifier.weight(1f))
         Text(value, color = AlphaTheme.colors.onPhoto, style = AlphaType.Body, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 
+/** A [DetailRow] whose value is still being read: same height, a bar instead of the value. */
+@Composable
+private fun PlaceholderRow(label: String) {
+    Row(
+        Modifier.fillMaxWidth().height(DetailRowHeight),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(label, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption)
+        Spacer(Modifier.weight(1f))
+        PlaceholderBar(Modifier.width(96.dp))
+    }
+}
+
+/** One cell of the exposure grid: label above, value (or its placeholder, same height) below. */
+@Composable
+private fun ExifGridCell(label: String, value: String?, modifier: Modifier) {
+    Column(modifier) {
+        Text(label, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption, maxLines = 1)
+        Box(Modifier.fillMaxWidth().height(DetailRowHeight), contentAlignment = Alignment.CenterStart) {
+            if (value != null) Text(value, color = AlphaTheme.colors.onPhoto, style = AlphaType.Body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            else PlaceholderBar(Modifier.fillMaxWidth(0.6f))
+        }
+    }
+}
+
 @Composable
 private fun PlaceholderBar(modifier: Modifier) {
-    Box(modifier.height(10.dp).clip(RoundedCornerShape(5.dp)).background(AlphaTheme.colors.onPhoto.copy(alpha = 0.14f)))
+    val loading = stringResource(Res.string.m7_viewer_metadata_loading)
+    Box(
+        modifier.height(10.dp).clip(RoundedCornerShape(5.dp))
+            .background(AlphaTheme.colors.onPhoto.copy(alpha = 0.14f))
+            .semantics { contentDescription = loading }
+    )
 }
 
 @Composable
@@ -898,23 +1081,15 @@ private fun ViewerDetailsPanel(parts: ViewerParts, modifier: Modifier) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(
                 Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(DetailsSpacing),
             ) {
-                parts.details?.let { ViewerDetailsContent(it, parts.histogram) }
+                parts.capture?.let { ViewerDetailsContent(it, parts.metadata, parts.image) }
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { ViewerDownloadArea(parts) }
                 ViewerSelectionToggle(parts)
             }
         }
-    }
-}
-
-@Composable
-private fun PanelBlock(label: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption)
-        content()
     }
 }
 
@@ -1059,6 +1234,7 @@ private fun ViewerFilmstrip(
     onSelect: (Int) -> Unit,
     modifier: Modifier,
 ) {
+    viewerCompositionProbe("filmstrip")
     if (captures.size < 2) return
     LazyRow(
         state = state,
@@ -1112,3 +1288,17 @@ internal fun requestFocusGuarded(what: String, request: () -> Unit): Boolean =
         focusLog.w { "focus request ($what) skipped: ${failure::class.simpleName}: ${failure.message}" }
         false
     }
+
+/**
+ * Test hook: called with a slot name ("viewer" = the page scope, "layout", "pager", "page", "filmstrip") each time that slot composes, so
+ * a JVM Compose test can count recompositions of the real viewer. Null (and free) in the app.
+ */
+internal val LocalViewerCompositionProbe = staticCompositionLocalOf<((String) -> Unit)?> { null }
+
+// Non-restartable, hence never skipped: it runs whenever the calling scope (re)composes.
+@Composable
+@NonRestartableComposable
+private fun viewerCompositionProbe(slot: String) {
+    val probe = LocalViewerCompositionProbe.current ?: return
+    SideEffect { probe(slot) }
+}
