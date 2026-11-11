@@ -39,11 +39,7 @@ private fun viewerFormatRank(name: String): Int =
  * Format line of a capture, spelled out: "JPG", "RAW", "JPG + RAW", "HEIF + RAW" (JPG, HEIF, RAW
  * order; unknown types by extension). Null when nothing is known. Format names are not localized.
  */
-internal fun viewerFormatText(capture: WifiCameraCapture): String? {
-    val names = capture.files.map { it.viewerFormatName() }.filter { it.isNotBlank() }.distinct()
-        .sortedBy(::viewerFormatRank)
-    return names.takeIf { it.isNotEmpty() }?.joinToString(" + ")
-}
+internal fun viewerFormatText(capture: WifiCameraCapture): String? = viewerFormatText(capture.files)
 
 /** Metadata of [handle] in [state], or null when the state belongs to another photo (stale swipe). */
 internal fun PhotoMetadataState.metadataFor(handle: Long): PhotoMetadata? = when (this) {
@@ -54,9 +50,11 @@ internal fun PhotoMetadataState.metadataFor(handle: Long): PhotoMetadata? = when
 }
 
 /**
- * The single-layer info strip under the photo: "JPG + RAW · 24.6 MB".
+ * The single-layer info strip under the photo: "JPG · 8.1 MB" under JPG only, "JPG + RAW · 54.6 MB"
+ * under Original (see [stripFormatLabel]).
  *
- * @property formatText "JPG + RAW" etc.; with [noJpeg] the strip shows it as "Only RAW".
+ * @property formatText the formats a download fetches ([stripFormatLabel]); with [noJpeg] the strip
+ *   shows the capture's own formats as "Only RAW".
  * @property sizeBytes what the default download format would fetch ([captureDownloadSize], the same
  *   number as the grid's size tag and the batch button): JPG only → the JPEG; Original → every file.
  *   A capture without a JPEG under JPG only shows the size of its originals (what the manual
@@ -85,36 +83,72 @@ internal fun viewerInfoStrip(
     val size = captureDownloadSize(capture, policy, saved)
     // Only the NoJpeg exception carries a size that will not download (see CaptureDownloadSize).
     return ViewerInfoStrip(
-        viewerFormatText(capture), size.bytes,
+        stripFormatLabel(capture, policy), size.bytes,
         noJpeg = size.reason == WifiSkipReason.NoJpeg,
     )
 }
 
-/** One file of a capture in the details: its format ("JPG" / "RAW" / "HEIF"), name and own size. */
-internal data class ViewerFileEntry(val format: String, val filename: String, val bytes: Long)
-
-/** A shooting parameter row of the details; the label is localized by the UI, values are not. */
-internal enum class ViewerExifField {
-    Aperture, Shutter, Iso, ExposureBias, FocalLength,
-    /** 35 mm-equivalent focal length; a separate row, also shown when the actual one is missing. */
-    FocalLength35mm, Lens, Camera
+/**
+ * The files a download of [capture] under [policy] aims at — chosen by the download planner itself
+ * ([planDownloads]), before the per-file exclusions (already saved, over the download limit) that
+ * only decide whether the bytes still have to be fetched. Empty when the policy takes nothing from
+ * this capture (JPG only over a RAW / HEIF-only capture). A new policy only changes the planner.
+ */
+internal fun viewerDownloadTargets(capture: WifiCameraCapture, policy: WifiFormatPolicy): List<WifiCameraPhoto> {
+    val candidates = capture.copy(files = capture.files.map { it.copy(downloadable = true) })
+    val planned = planDownloads(listOf(candidates), policy, emptySet()).files.map { it.handle }.toSet()
+    return capture.files.filter { it.handle in planned }
 }
 
 /**
- * Everything the details drawer (portrait) / side panel (wide layouts) shows for one capture. Every
- * value is optional: what cannot be read is left out, nothing is shown as an empty row.
+ * Format part of the info strip, derived from what the default download format fetches
+ * ([viewerDownloadTargets]) so it never contradicts the size next to it: JPG only over a JPG + RAW
+ * capture → "JPG"; Original → every format ("JPG + RAW"). When the policy takes nothing from the
+ * capture (no JPEG under JPG only) it is the capture's own formats, which the strip marks as
+ * "Only RAW" ([ViewerInfoStrip.noJpeg]). Null when no format is known.
+ */
+internal fun stripFormatLabel(capture: WifiCameraCapture, policy: WifiFormatPolicy): String? {
+    val targets = viewerDownloadTargets(capture, policy)
+    return viewerFormatText(if (targets.isEmpty()) capture.files else targets)
+}
+
+private fun viewerFormatText(files: List<WifiCameraPhoto>): String? {
+    val names = files.map { it.viewerFormatName() }.filter { it.isNotBlank() }.distinct()
+        .sortedBy(::viewerFormatRank)
+    return names.takeIf { it.isNotEmpty() }?.joinToString(" + ")
+}
+
+/** One file of a capture in the details: its format ("JPG" / "RAW" / "HEIF") and own size. */
+internal data class ViewerFileEntry(val format: String, val bytes: Long)
+
+/**
+ * A shooting parameter of the details; the label is localized by the UI, values are not. Declared in
+ * display order: the one-per-line rows first, then the compact two-column grid ([inGrid]).
+ */
+internal enum class ViewerExifField(val inGrid: Boolean = false) {
+    Camera, Lens, FocalLength,
+    /** 35 mm-equivalent focal length; only shown when it differs from the actual one. */
+    FocalLength35mm,
+    Aperture(inGrid = true), Shutter(inGrid = true), Iso(inGrid = true), ExposureBias(inGrid = true),
+}
+
+/**
+ * Everything the details drawer (portrait) / side panel (wide layouts) shows for one capture, in
+ * display order: capture time, resolution, camera, lens, focal length(s), the exposure grid, then the
+ * file sizes next to the histogram. The file name (top bar) and the format line (info strip) are not
+ * repeated. Every value is optional: what cannot be read is left out, nothing is shown as an empty
+ * row.
  *
- * @property files each file with its own size (the strip shows only the download total).
- * @property exif shooting parameters in display order, only those that were read.
- * @property loading the extended read of this photo is pending (placeholder rows).
+ * @property files each file's format with its own size (the strip shows only the download total).
+ * @property exif shooting parameters in [ViewerExifField] order, only those that were read.
+ * @property loading the extended read of this photo is pending: the EXIF rows it may fill show
+ *   placeholders of the same height (see [viewerPendingExifFields]).
  */
 internal data class ViewerDetails(
-    val filename: String?,
     val capturedAt: String?,
-    val formatText: String?,
-    val files: List<ViewerFileEntry>,
     val resolutionText: String?,
     val exif: List<Pair<ViewerExifField, String>>,
+    val files: List<ViewerFileEntry>,
     val loading: Boolean,
 )
 
@@ -122,18 +156,33 @@ internal data class ViewerDetails(
 internal fun viewerExifRows(metadata: PhotoMetadata?): List<Pair<ViewerExifField, String>> {
     val exif = metadata?.exif ?: return emptyList()
     val shutter = exif.exposureTimeText?.let { if (it.endsWith("s")) it else it + "s" }
-    return listOf(
+    val focal = exif.focalLengthText
+    // The equivalent is written like focalLengthText ("50mm") and left out when it says the same.
+    val focal35 = exif.focalLength35mm?.let { PhotoExif.decimal(it.toDouble(), 0) + "mm" }?.takeIf { it != focal }
+    val values = mapOf(
+        ViewerExifField.Camera to exif.cameraModel?.trim(),
+        ViewerExifField.Lens to exif.lensModel?.trim(),
+        ViewerExifField.FocalLength to focal,
+        ViewerExifField.FocalLength35mm to focal35,
         ViewerExifField.Aperture to exif.apertureText,
         ViewerExifField.Shutter to shutter,
         ViewerExifField.Iso to exif.isoText,
         ViewerExifField.ExposureBias to exif.exposureBiasText,
-        ViewerExifField.FocalLength to exif.focalLengthText,
-        // A separate row whenever the camera reports it, next to the actual focal length
-        // (focalLengthText is "50mm"; the equivalent is written the same way).
-        ViewerExifField.FocalLength35mm to exif.focalLength35mm?.let { PhotoExif.decimal(it.toDouble(), 0) + "mm" },
-        ViewerExifField.Lens to exif.lensModel?.trim(),
-        ViewerExifField.Camera to exif.cameraModel?.trim(),
-    ).mapNotNull { (field, value) -> value?.takeIf { it.isNotBlank() }?.let { field to it } }
+    )
+    return ViewerExifField.entries.mapNotNull { field ->
+        values[field]?.takeIf { it.isNotBlank() }?.let { field to it }
+    }
+}
+
+/**
+ * The EXIF fields that show a placeholder while [ViewerDetails.loading]: those the read may still
+ * fill. Fields that already have a value keep it; the 35 mm equivalent gets no placeholder (it is
+ * often equal to the focal length and then left out), so the rows below do not jump when it is.
+ */
+internal fun viewerPendingExifFields(details: ViewerDetails): List<ViewerExifField> {
+    if (!details.loading) return emptyList()
+    val known = details.exif.map { it.first }.toSet()
+    return ViewerExifField.entries.filter { it != ViewerExifField.FocalLength35mm && it !in known }
 }
 
 internal fun viewerDetails(capture: WifiCameraCapture, metadataState: PhotoMetadataState): ViewerDetails {
@@ -153,14 +202,12 @@ internal fun viewerDetails(capture: WifiCameraCapture, metadataState: PhotoMetad
         }
     }
     val files = capture.files.sortedBy { viewerFormatRank(it.viewerFormatName()) }
-        .map { ViewerFileEntry(it.viewerFormatName(), it.filename, it.size) }
+        .map { ViewerFileEntry(it.viewerFormatName(), it.size) }
     return ViewerDetails(
-        filename = capture.preview.filename.takeIf { it.isNotBlank() },
         capturedAt = viewerCaptureTimeText(capture.preview.capturedAt),
-        formatText = viewerFormatText(capture),
-        files = files,
         resolutionText = if (hasDeveloped) resolution else null,
         exif = viewerExifRows(metadata),
+        files = files,
         loading = metadataState is PhotoMetadataState.Loading && metadataState.handle == capture.metadataHandle,
     )
 }
@@ -330,8 +377,14 @@ internal fun detailsSwipeCloses(dx: Float, dy: Float, distance: Float): Boolean 
     dy >= distance && dy >= kotlin.math.abs(dx) * DETAILS_SWIPE_STEEPNESS
 
 /**
- * Whether the viewer wants the extended (EXIF) read: only while the details are visible — always in
- * the wide layouts (side panel), in portrait only while the drawer is open.
+ * Whether the viewer asks for the extended (EXIF) read of the shown photo. It no longer depends on
+ * the details being visible: as soon as a photo is shown and the pager is at rest the viewer asks,
+ * and the loader's debounce (250 ms) turns that into "read once the user stayed on the photo" — so
+ * the drawer usually opens with the parameters already there, and opening / closing it never starts
+ * or cancels a read. While the pager moves ([swiping]) a pending read is stopped (the photo is being
+ * left; the settled page asks again), and while a download or other transfer runs ([transferBusy])
+ * nothing is asked (the download interrupts the read; the viewer asks again once it is idle).
+ * Neighbouring photos and the rest of the day are never read ahead.
  */
-internal fun viewerWantsExtendedMetadata(portrait: Boolean, drawerOpen: Boolean): Boolean =
-    !portrait || drawerOpen
+internal fun viewerWantsExtendedMetadata(transferBusy: Boolean, swiping: Boolean): Boolean =
+    !transferBusy && !swiping

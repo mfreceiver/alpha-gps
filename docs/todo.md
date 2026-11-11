@@ -31,9 +31,14 @@
 - 依据：wave2/wifi 包（M4/M5/M6）自报需真机验证（Compose 手势/弹层/窗口适配与真实相机目录无法在 JVM 验证）。
 
 ### 19. 真机冒烟：0.2.0 照片预览页（M7 全屏查看器）
-- 做什么：装新版后验证：①顶栏仅 返回/文件名/拍摄时间（第二行）/“k / N”（该日内）；②底部单层玻璃信息条“格式 · 大小”（无叠加深色标签），大小只出现一次且与网格标签同口径（JPG-only 为 JPG 大小，Original 为全部文件之和），J+R 显示“JPG + RAW”，RAW-only 在 JPG-only 下显示“仅 RAW”；③详情抽屉：竖屏从照片下部约 35% 区域（含信息条）上滑或点按信息条呼出玻璃底部抽屉，下拉把手/点遮罩/✕/返回键关闭（返回键先关抽屉），左右翻页不误触发；抽屉含文件名、拍摄时间、格式、各文件各自大小、分辨率、光圈/快门/ISO/曝光补偿/焦距/镜头/相机、直方图，读不到的项不出现；抽屉关闭时 `adb logcat` 无元数据部分读取，打开后约 250ms 读原片头部，开着抽屉快速横滑不堆积请求，250ms 内关闭不发起读取；B/C 宽屏右侧面板内容与抽屉一致；设置页已无直方图/拍摄参数/镜头三开关；④单张“下载”为玻璃主按钮（非不透明浅蓝），按默认格式直接下载，下载中玻璃进度叠层可取消、横滑与胶片条锁定，完成后按钮变灰“已保存”；JPG-only 下 RAW-only 照片标“仅 RAW”、提示“此照片没有 JPG”并可手动“下载 RAW”；批量下载进行中进入预览按钮禁用并提示；下载中按 Home 不断 Wi-Fi（M1 例外）；⑤右下方形复选框与网格选择共享；胶片条缩略图完整显示不裁剪，返回网格保留选择；⑥胶片条当前项高亮、点击跳转，长日（>100 张）快速拖动 `adb logcat -s AlphaThumb` 只见可见±4 的 batch；⑦窗口三档：竖屏（A）、折叠屏展开/平板近方形（B，右侧 360dp 详情面板）、横屏（C，顶栏叠在图上、底部单行），信息条不拉伸；旋转后停留在同一张；⑧TalkBack：详情抽屉打开时焦点进入抽屉并朗读标题、背后照片/胶片条不可达，关闭（✕/遮罩/返回键）后焦点回到信息条（sharednew 的 androidHostTest 已有 Robolectric + compose ui-test，但本页抽屉的焦点/语义没有对应 Compose 用例，TalkBack 朗读与焦点回位需真机验证）。
+- 做什么：装新版后验证：①顶栏仅 返回/文件名/拍摄时间（第二行）/“k / N”（该日内）；②底部单层玻璃信息条“格式 · 大小”（无叠加深色标签），大小只出现一次且与网格标签同口径（JPG-only 为 JPG 大小，Original 为全部文件之和），格式只写将被下载的文件（JPG-only 下 J+R 显示“JPG · JPG 大小”，Original 下“JPG + RAW · 总和”），RAW-only 在 JPG-only 下显示“仅 RAW”；③详情抽屉：竖屏从照片下部约 35% 区域（含信息条）上滑或点按信息条呼出不透明深色底部抽屉，在标题行下拉/点遮罩/✕/返回键关闭（返回键先关抽屉），左右翻页不误触发；抽屉依次含拍摄时间、分辨率、相机、镜头、焦距、等效焦距（与焦距不同时）、光圈/快门/ISO/曝光补偿（两列）、各格式大小与右侧直方图，无文件名与“格式”行，读不到的项不出现；扩展 EXIF 与抽屉无关：在某张照片停留约 250ms 后 `adb logcat` 见一次原片头部读取，快速横滑不堆积请求、滑走即取消，下载中不读，开关抽屉不再发起读取；B/C 宽屏右侧面板内容与抽屉一致；设置页已无直方图/拍摄参数/镜头三开关；④单张“下载”为玻璃主按钮（非不透明浅蓝），按默认格式直接下载，下载中玻璃进度叠层可取消、横滑与胶片条锁定，完成后按钮变灰“已保存”；JPG-only 下 RAW-only 照片标“仅 RAW”、提示“此照片没有 JPG”并可手动“下载 RAW”；批量下载进行中进入预览按钮禁用并提示；下载中按 Home 不断 Wi-Fi（M1 例外）；⑤右下方形复选框与网格选择共享；胶片条缩略图完整显示不裁剪，返回网格保留选择；⑥胶片条当前项高亮、点击跳转，长日（>100 张）快速拖动 `adb logcat -s AlphaThumb` 只见可见±4 的 batch；⑦窗口三档：竖屏（A）、折叠屏展开/平板近方形（B，右侧 360dp 详情面板）、横屏（C，顶栏叠在图上、底部单行），信息条不拉伸；旋转后停留在同一张；⑧TalkBack：详情抽屉打开时焦点进入抽屉并朗读标题、背后照片/胶片条不可达，关闭（✕/遮罩/返回键）后焦点回到信息条（sharednew 的 androidHostTest 已有 Robolectric + compose ui-test，但本页抽屉的焦点/语义没有对应 Compose 用例，TalkBack 朗读与焦点回位需真机验证）。
 - 验收：逐项无异常；预览不重复旋转（EXIF 方向正确）；读取/下载/直方图不阻塞主线程；退后台/划卡语义与 M1 一致。
 - 依据：wave3/m7 实现与 sol 对 0c9b324..ef196de 的复审（Compose 手势/窗口适配/真实相机部分读取无法在 JVM 验证）；`docs/wifi-architecture.md` “Live status and photo metadata” 的 Viewer use 段。
+
+### 33. 真机核对：预览页详情抽屉观感与卡顿（批 P）
+- 做什么：装含批 P 的版本，竖屏预览页点信息条/上滑打开详情抽屉：①面板不透明深色（#1B1F24），下层信息条/下载按钮/胶片条完全看不到；无顶部拖动横条；“照片详情”在左、✕ 在右且收在面板内；②遮罩淡入 + 面板自下滑入/滑出，无整层闪烁；③内容顺序与两列排版（拍摄参数两列、各格式大小与直方图并排）在 360dp 宽与字体 200% 下不截断、不重叠，尽量不滚动；④读取中占位行与真值等高，数据到达时无明显跳动；⑤首次打开与第二次打开的顺滑度对比（配合 #34 的帧日志）。
+- 验收：观感可接受；不满意项在 `WifiPhotoViewer.kt` 的抽屉参数（`VIEWER_DETAILS_ENTER_MILLIS`、行高、直方图尺寸）或 `viewerSheet` token 调整，`PaletteContrastTest` 仍全过。
+- 依据：批 P 只能在 JVM 验证重组范围与读取时机（`ViewerDetailsDrawerComposeTest`），渲染与帧耗时需真机。
 
 ### 23. 真机核对：0.3.0 B0 玻璃材质与新组件
 - 做什么：装含 B0 的版本（亮/暗各一遍，Android 12 与 14+ 各一台）打开调试预览或已迁移页面，核对：①背景彩色光斑可见但不抢眼；卡片/浮条/对话框能明显看出毛玻璃（双向边缘光、顶部高光带、双层阴影、细噪点），文字清晰；②API 31/32 低端机长列表滚动不掉帧（噪点 + 每卡片模糊）；③对话框/菜单/面板/Snackbar 背后的页面模糊随滚动刷新；④动态字体 200% 下 GlassSegmented/StatusBadge/GlassTopBar 标题不截断；⑤TalkBack：Snackbar 播报、RevealValueRow 状态、图标长按 tooltip 不被朗读；⑥暗色开关/复选框选中态（浅蓝底 + 深蓝滑块/勾）观感可接受。⑦（页面迁移收尾并入）设备详情标题改左对齐后观感；⑧Welcome 页：`WelcomeScreenTest` 几何断言（375×627 slide 不滚动；412×860 标题与 slide 顶部 >80dp；该 androidTest 目前仅编译、未运行，需在设备/模拟器上跑一遍）；⑨设置页单选行与开关行观感：`GlassRadio` 视觉圈 20dp，设置页由整行 `SharedRadioOption`（≥48dp、整行 selectable，`GlassRadio(onClick = null)`）承担点击，独立使用的 `GlassRadio(onClick ≠ null)` 点击区为 48dp——核对整行点按、选中圈外观与 `GlassSwitch` 行高一致；⑩弹出菜单内 `GlassSegmented` 宽度；⑪网格复选框在很亮缩略图上的可见性；⑫预览页下载按钮对比度（见 #26）；⑬排障页返回按钮无障碍标签由 Close 变为 Back（TalkBack 朗读）；⑭信息值字号 14→15 后各行/弹窗折行；⑮`LocationPermissionBoxTest` 使用已弃用的 `createComposeRule`（既有编译警告，换成新 API 或保留并记录）；⑯TalkBack 聚焦 `GlassTextField`（重命名相机、手动加入 Wi-Fi 的 SSID/密码、IP）读出标签名称、空值时 placeholder 提示、错误时错误文本，且标签/说明不重复朗读；在设备/模拟器上跑 `GlassTextFieldSemanticsTest`（目前仅编译）；⑰弹层焦点：外接键盘/方向键打开网格"视图选项"弹层与各对话框/底部面板，焦点进入弹层、Tab/方向键到不了背后页面、关闭后回到打开它的按钮（触屏关闭后不会强制聚焦 opener；全局焦点框/IME/TalkBack 待设备验证）；在设备/模拟器上跑 `GlassOverlayFocusTest`（目前仅编译）；⑱字体 200% 下网格"视图选项"弹层（固定 248dp 宽）内的 `GlassSegmented`（小/中/大）不截断。
@@ -81,7 +86,7 @@
 ### 29. 预览页背景色抽 viewerBackground token
 - 做什么：预览页背景 `Color.Black` 抽成 `viewerBackground` token（`ui/theme/Color.kt`，`AlphaColors`），预览页与相关 Viewer 玻璃/对比度测试引用它。
 - 验收：`WifiPhotoViewer.kt` 无字面 `Color.Black` 背景；`PaletteContrastTest` 的 Viewer 背景取值引用 token，测试通过。
-- 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiPhotoViewer.kt:372`。
+- 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiPhotoViewer.kt:476`（`ViewerBody`）。
 
 ### 30. Wi-Fi 连接叠层分段 StepRing 保留自定义
 - 做什么：连接叠层用自绘分段 `StepRing` 表达 4 步当前所处位置，不是 `GlassProgress*`（后者不表达分段）。如需统一进度控件，需先设计分段进度形态（`GlassProgressSteps` 之类）再迁移；否则保持现状并在设计文档确认。
