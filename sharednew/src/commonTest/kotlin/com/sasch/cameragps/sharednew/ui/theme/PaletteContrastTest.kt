@@ -201,11 +201,23 @@ class PaletteContrastTest {
      * Everything Viewer chrome can sit on, in either theme (the Viewer does not follow the theme):
      * Viewer glass (70 %) over a white / black / grey photo with and without the sheen, the bare
      * black viewer background (portrait download row, letterbox) and the solid Viewer fill (94 %)
-     * on black.
+     * on black, plus the opaque details sheet ([AlphaColors.viewerSheet]) and the unblurred Viewer
+     * glass of its close button on it (with and without the sheen).
      */
     private fun viewerSurfaces(c: AlphaColors): List<Color> {
         val solid = Contrast.over(GlassTokens.of(GlassLevel.Viewer, c.isDark).solidFill, Color.Black)
-        return glassBackgrounds(GlassLevel.Viewer, c) + Color.Black + solid
+        return glassBackgrounds(GlassLevel.Viewer, c) + Color.Black + solid + c.viewerSheet +
+            glassBackgrounds(GlassLevel.Viewer, c, under = listOf(c.viewerSheet))
+    }
+
+    @Test
+    fun viewerSheetIsOpaqueAndSetOffTheBlackViewer() {
+        listOf(light, dark).forEach { c ->
+            assertEquals(1f, c.viewerSheet.alpha, "the details sheet must not show the viewer through")
+            // A visible (if quiet) edge against the black viewer behind the scrim.
+            assertTrue(Contrast.ratio(c.viewerSheet, Color.Black) >= 1.2, "sheet vs black ${Contrast.ratio(c.viewerSheet, Color.Black)}")
+        }
+        assertEquals(light.viewerSheet, dark.viewerSheet, "the Viewer is dark in both themes")
     }
 
     @Test
