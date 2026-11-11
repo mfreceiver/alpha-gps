@@ -120,6 +120,7 @@ class CameraSessionOrchestrator(
         scope = scope,
         isTransmissionAllowed = isTransmissionAllowed,
         onPacketQueued = { id -> liveStatus.onGpsQueued(id) },
+        onFixObserved = { fix -> liveStatus.onPhoneLocationFix(fix) },
     )
 
     /**

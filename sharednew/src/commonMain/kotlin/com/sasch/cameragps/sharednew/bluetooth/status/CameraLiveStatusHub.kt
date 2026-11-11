@@ -1,6 +1,7 @@
 package com.sasch.cameragps.sharednew.bluetooth.status
 
 import com.sasch.cameragps.sharednew.bluetooth.BleSessionPhase
+import com.sasch.cameragps.sharednew.bluetooth.location.PhoneLocationFix
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSession
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionRegistry
 import kotlinx.coroutines.CoroutineScope
@@ -8,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -46,7 +48,8 @@ interface CameraStatusPersistence {
  * show the last counters and write time; they are only dropped by [forget].
  *
  * Recorders are called by the orchestrator on its confined dispatcher; the hub itself holds no
- * locks. No coordinates or other location data pass through here — only counts and timestamps.
+ * locks. No coordinates pass through here — only counts, timestamps and the phone's fix accuracy
+ * radius ([phoneLocation]).
  */
 class CameraLiveStatusHub(
     registry: CameraSessionRegistry,
@@ -76,6 +79,20 @@ class CameraLiveStatusHub(
     }
 
     fun statusOf(address: String): CameraLiveStatus? = statuses.value[address.uppercase()]
+
+    private val _phoneLocation = MutableStateFlow<PhoneLocationFix?>(null)
+
+    /**
+     * Phone-level (not per camera): accuracy radius and time of the phone's latest location fix as
+     * the location manager last saw it; null before the first fix and after a shutdown. No
+     * coordinates. Staleness is the reader's call (it compares the fix time with its own clock).
+     */
+    val phoneLocation: StateFlow<PhoneLocationFix?> = _phoneLocation.asStateFlow()
+
+    /** Fed by the location manager's display side channel; never affects transmission. */
+    internal fun onPhoneLocationFix(fix: PhoneLocationFix?) {
+        _phoneLocation.value = fix
+    }
 
     // ---- Recorders (internal: fed by the orchestrator and Wi-Fi controller) ----
 
