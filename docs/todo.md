@@ -55,7 +55,7 @@
 - 验收：不满意的项按 `docs/glass-material-notes.md` 的参数说明调 token，调后 `PaletteContrastTest` 仍全部通过（不放宽阈值）。
 - 依据：B0 只能在 JVM 做对比度矩阵与纯逻辑测试，渲染观感/性能/无障碍需真机（`docs/glass-material-notes.md` §7）；⑦–⑮ 来自 P1–P3 页面迁移批次的自报（`docs/ui-audit-2026-11.md`）；⑯–⑱ 来自 0.3.0 样式统一复审（sharednew androidHostTest 已有 Robolectric + compose ui-test（`sharednew/build.gradle.kts`），弹层焦点已有 JVM 真实 Compose 用例（`OverlayFocusComposeTest`）；其余语义/TalkBack、以及设备上的 Compose 层测试在 `app/src/androidTest/.../ui/components/`，仅编译、待真机跑）。
 
-### 33. 真机核对：设备列表 ⓘ、相机信息弹窗与设备页状态卡（批 Q）
+### 36. 真机核对：设备列表 ⓘ、相机信息弹窗与设备页状态卡（批 Q）
 - 做什么：装含批 Q 的版本（亮/暗各一遍）核对：①设备列表：卡片无垃圾桶/箭头（左滑删除已移除），点卡片任意处进入设备页，右端 ⓘ（48dp）只打开“相机信息”弹窗、不进入设备页；对**未连接/不在范围**的相机，弹窗内重命名、保持活跃、连接/取消、移除（二次确认）都可用，移除后列表立即刷新、弹窗关闭；从列表断开（二次确认）后再进设备页仍保持断开；旋转屏幕弹窗保持；②弹窗：名称 + ✎ 在左，连接控制胶囊在右（已连接=断开、连接中=取消、未连接=连接），超长名称省略号不挤压按钮；无蓝牙地址行；状态行左侧无对号；“自动校时与区域调整”一行，相机关掉其一时显示哪项未启用；③设备页状态卡：标题下正常无副标题，相机关闭位置联动/位置写入失败/时间校正失败或被拒时出现一行琥珀色说明；右侧蓝牙图标为品牌蓝（亮 #0082FC / 暗 #4DA6FF，目视可辨）、外环弧长随信号档 100/75/50/25%（每 10 秒更新，切换不闪烁），未连接灰色图标无环；电量块（横向电池 + 百分比）在用过照片传输后出现，>30 分钟灰显并带“x 分钟前获取”，从未读到或 >24 小时整块隐藏；④位置传输三格：定位信号显示 `±N m`（强 ≤10 绿、≤30 琥珀、>30 红），室内/关定位/超过 2 分钟无新定位显示“—”；定位写入计数；最近写入；⑤TalkBack：列表卡片读名称+状态并带“打开相机页”操作，ⓘ 读“相机信息：<名称>”；状态卡读标题与异常说明、蓝牙信号档、电量。
 - 验收：逐项无异常；设备页可见时 RSSI 仍按 10 秒更新（`acquireSignalMonitoring` 租约），定位精度暴露不改变 GPS 发送节奏（对照 `adb logcat` 写入间隔与改动前一致）。
 - 依据：批 Q 提交（`SharedDeviceList.kt`、`AssociatedDevicesList.kt` 的 `DeviceInfoDialogHost`、`DeviceInfoDialogs.kt`、`DeviceStatusVisuals.kt`、`LocationTransmissionManager.latestFix` → `CameraLiveStatusHub.phoneLocation`）；JVM 已覆盖：`DeviceListInfoComposeTest`（Robolectric：整卡点击/ⓘ 互不触发、弹窗按状态切换按钮）、`DeviceStatusCardLogicTest`、`DeviceIndicatorsTest`、`PaletteContrastTest.bluetoothBlueIconReadableOnCardGlass`；渲染观感、Canvas 圆环/电池、TalkBack 朗读与真实 CDM/BLE 行为需真机。
