@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,6 +83,9 @@ import cameragps.sharednew.generated.resources.wifi_remote_batch_summary
 import cameragps.sharednew.generated.resources.wifi_remote_batch_summary_no_skip
 import cameragps.sharednew.generated.resources.wifi_remote_preview_photo
 import cameragps.sharednew.generated.resources.wifi_remote_skip_no_jpg
+import cameragps.sharednew.generated.resources.r_batch_download_ask
+import cameragps.sharednew.generated.resources.r_skip_no_raw
+import cameragps.sharednew.generated.resources.r_tile_size_not_downloaded_raw
 import cameragps.sharednew.generated.resources.wifi_remote_skip_saved
 import cameragps.sharednew.generated.resources.wifi_remote_skip_too_large
 import cameragps.sharednew.generated.resources.d1_tile_too_large
@@ -105,10 +109,13 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiTransferFailureReason
+import com.sasch.cameragps.sharednew.remote.wifi.WifiDownloadFormatSetting
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
+import com.sasch.cameragps.sharednew.remote.wifi.policy
 import com.sasch.cameragps.sharednew.remote.wifi.WifiSkipReason
 import com.sasch.cameragps.sharednew.remote.wifi.formatBadge
 import com.sasch.cameragps.sharednew.remote.wifi.captureDownloadSize
+import com.sasch.cameragps.sharednew.remote.wifi.isMissingFormat
 import com.sasch.cameragps.sharednew.remote.wifi.formatByteSize
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import com.sasch.cameragps.sharednew.remote.wifi.shouldShowBatchSummary
@@ -138,13 +145,14 @@ import org.jetbrains.compose.resources.stringResource
 internal fun WifiPhotoBrowser(
     state: WifiRemoteState, viewModel: WifiRemoteViewModel,
     onDownload: (List<WifiPhotoDownload>) -> Unit,
-    defaultDownloadFormatJpeg: Boolean = false,
+    downloadFormat: WifiDownloadFormatSetting = WifiDownloadFormatSetting.Default,
     gridOptions: WifiGridOptions = WifiGridOptions(),
 ) {
     val controller = viewModel.controller
     val identifier = viewModel.identifier
     val browser = state.photoBrowser
-    val policy = WifiFormatPolicy.of(defaultDownloadFormatJpeg)
+    // Null = "ask each time": the batch asks for JPG / RAW / JPG+RAW when the button is tapped.
+    val policy = downloadFormat.policy
     val thumbnails by controller.thumbnails.collectAsState()
     val thumbnailsLoading by controller.thumbnailsLoading.collectAsState()
     val captures = remember(browser.photos) { groupCameraPhotos(browser.photos) }
@@ -235,8 +243,11 @@ internal fun WifiPhotoBrowser(
         }
     }
     // The batch covers the whole cross-day selection snapshot under the settings' download format:
-    // JPG-only fetches the JPGs (captures without one are skipped and counted), Original everything.
-    val plan = viewModel.batchPlan(policy, state)
+    // JPG-only fetches the JPGs, RAW-only the RAWs (captures without one are skipped and counted),
+    // JPG+RAW everything. "Ask each time" plans JPG+RAW for the button (is there anything at all?) and
+    // lets the chooser plan each format.
+    val plan = viewModel.batchPlan(policy ?: WifiFormatPolicy.Original, state)
+    var askingBatchFormat by remember { mutableStateOf(false) }
     val summary = viewModel.batchSummary
     // Completion is latched in the ViewModel (noteBatchCompletion), so a preview round-trip — which
     // clears the transfer result — keeps the finished batch line. A busy/failed/cancelled transfer
@@ -405,7 +416,8 @@ internal fun WifiPhotoBrowser(
                     }
                 }
                 if (selecting && !transfer.busy) {
-                    if (plan.skippedCount > 0) Text(
+                    // Under "ask each time" the skips depend on the format: the chooser lists them.
+                    if (policy != null && plan.skippedCount > 0) Text(
                         stringResource(
                             Res.string.wifi_remote_batch_skip_hint,
                             plan.skippedCount, skipReasonsText(plan.skipped)
@@ -421,6 +433,9 @@ internal fun WifiPhotoBrowser(
                     CapsuleButton(
                         text = when {
                             plan.files.isEmpty() -> stringResource(Res.string.wifi_remote_batch_download_none)
+                            policy == null -> stringResource(
+                                Res.string.r_batch_download_ask, viewModel.selectedPhotoIds.size
+                            )
                             policy == WifiFormatPolicy.JpegOnly -> stringResource(
                                 Res.string.wifi_remote_batch_download_jpg,
                                 plan.files.size, formatByteSize(plan.totalBytes)
@@ -430,7 +445,15 @@ internal fun WifiPhotoBrowser(
                                 plan.files.size, formatByteSize(plan.totalBytes)
                             )
                         },
-                        onClick = { viewModel.requestBatchDownload(policy, state, onDownload) },
+                        onClick = {
+                            when {
+                                policy != null -> viewModel.requestBatchDownload(policy, state, onDownload)
+                                // Nothing to fetch in any format: record the "downloaded 0" result.
+                                plan.files.isEmpty() ->
+                                    viewModel.requestBatchDownload(WifiFormatPolicy.Original, state, onDownload)
+                                else -> askingBatchFormat = true
+                            }
+                        },
                         icon = painterResource(Res.drawable.download_24px),
                         role = CapsuleRole.GlassPrimary,
                         size = CapsuleSize.Large,
@@ -439,6 +462,21 @@ internal fun WifiPhotoBrowser(
                 }
             }
         }
+    }
+    // The batch format chooser (in-page dialog). It follows the live selection and closes by itself
+    // when there is no longer anything to ask about (selection ended, a transfer started, setting changed).
+    val askOpen = askingBatchFormat && policy == null && selecting && !busy && !transfer.busy && plan.files.isNotEmpty()
+    if (askOpen) {
+        WifiFormatChooserDialog(
+            options = batchChooserOptions(viewModel.batchChoices(state)),
+            onConfirm = { chosen ->
+                askingBatchFormat = false
+                viewModel.requestBatchDownload(chosen, state, onDownload)
+            },
+            onDismiss = { askingBatchFormat = false },
+        )
+    } else if (askingBatchFormat) {
+        SideEffect { askingBatchFormat = false }
     }
 }
 
@@ -460,7 +498,8 @@ private fun PhotoGridTile(
     busy: Boolean,
     actionsEnabled: Boolean,
     options: WifiGridOptions,
-    policy: WifiFormatPolicy,
+    /** Null = "ask each time": no size (nothing is assumed), only the saved / over-limit marks. */
+    policy: WifiFormatPolicy?,
     saved: Set<WifiPhotoDownload>,
     shape: RoundedCornerShape,
     viewModel: WifiRemoteViewModel,
@@ -508,7 +547,7 @@ private fun PhotoGridTile(
                 // The same saved-aware plan as the floating button: the tag shows what a download
                 // will fetch; a capture whose files are all saved shows its saved state instead of a
                 // size (nothing more will be downloaded); the tags' byte counts match the button's plan.
-                val size = captureDownloadSize(capture, policy, saved)
+                val size = captureDownloadSize(capture, policy ?: WifiFormatPolicy.Original, saved)
                 when (size.reason) {
                     WifiSkipReason.AlreadySaved -> InfoTag(
                         stringResource(Res.string.d1_tile_saved),
@@ -522,11 +561,13 @@ private fun PhotoGridTile(
                         style = InfoTagStyle.OnPhoto,
                         icon = painterResource(Res.drawable.m2_warning_24px),
                     )
-                    else -> formatSizeTag(size.bytes)?.let { text ->
+                    else -> formatSizeTag(size.bytes)?.takeIf { policy != null }?.let { text ->
                         val description = stringResource(
-                            if (size.reason == WifiSkipReason.NoJpeg) {
-                                Res.string.b1_tile_size_not_downloaded
-                            } else Res.string.b1_tile_size,
+                            when (size.reason) {
+                                WifiSkipReason.NoJpeg -> Res.string.b1_tile_size_not_downloaded
+                                WifiSkipReason.NoRaw -> Res.string.r_tile_size_not_downloaded_raw
+                                else -> Res.string.b1_tile_size
+                            },
                             text
                         )
                         InfoTag(
@@ -534,8 +575,9 @@ private fun PhotoGridTile(
                             modifier = Modifier.align(tileCorner(TileElement.SizeTag).alignment).padding(inset)
                                 .semantics { contentDescription = description },
                             style = InfoTagStyle.OnPhoto,
-                            // Not part of a JPG-only download (RAW-only): marked, never implied.
-                            icon = if (size.reason == WifiSkipReason.NoJpeg) {
+                            // Not part of a JPG-only (RAW-only) or RAW-only (JPG-only) download: marked,
+                            // never implied.
+                            icon = if (size.reason?.isMissingFormat == true) {
                                 painterResource(Res.drawable.m2_warning_24px)
                             } else null,
                         )
@@ -609,6 +651,7 @@ internal fun skipReasonsText(skipped: Map<WifiSkipReason, Int>): String =
         stringResource(
             when (reason) {
                 WifiSkipReason.NoJpeg -> Res.string.wifi_remote_skip_no_jpg
+                WifiSkipReason.NoRaw -> Res.string.r_skip_no_raw
                 WifiSkipReason.AlreadySaved -> Res.string.wifi_remote_skip_saved
                 WifiSkipReason.TooLarge -> Res.string.wifi_remote_skip_too_large
             }, count

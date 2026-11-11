@@ -205,8 +205,27 @@ class WifiFormatPolicyTest {
 
     @Test
     fun policyFollowsTheSetting() {
-        assertEquals(WifiFormatPolicy.JpegOnly, WifiFormatPolicy.of(true))
-        assertEquals(WifiFormatPolicy.Original, WifiFormatPolicy.of(false))
+        assertNull(WifiDownloadFormatSetting.Ask.policy, "ask each time: no fixed plan")
+        assertEquals(WifiFormatPolicy.JpegOnly, WifiDownloadFormatSetting.Jpg.policy)
+        assertEquals(WifiFormatPolicy.RawOnly, WifiDownloadFormatSetting.Raw.policy)
+        assertEquals(WifiFormatPolicy.Original, WifiDownloadFormatSetting.JpgRaw.policy)
+    }
+
+    @Test
+    fun storedSettingValuesRoundTripAndOldValuesKeepTheirMeaning() {
+        for (setting in WifiDownloadFormatSetting.entries) {
+            assertEquals(setting, WifiDownloadFormatSetting.fromStorage(setting.storageValue))
+        }
+        // Values written by 0.3.0 and earlier: "original" = every format, "jpeg" = JPG only.
+        assertEquals(WifiDownloadFormatSetting.JpgRaw, WifiDownloadFormatSetting.fromStorage("original"))
+        assertEquals(WifiDownloadFormatSetting.Jpg, WifiDownloadFormatSetting.fromStorage("jpeg"))
+        // Missing / unknown: the new default, ask each time.
+        assertEquals(WifiDownloadFormatSetting.Ask, WifiDownloadFormatSetting.Default)
+        assertEquals(WifiDownloadFormatSetting.Ask, WifiDownloadFormatSetting.fromStorage(null))
+        assertEquals(WifiDownloadFormatSetting.Ask, WifiDownloadFormatSetting.fromStorage("heif"))
+        assertEquals(WifiDownloadFormatSetting.Ask, WifiDownloadFormatSetting.fromStorage("JPEG"), "case-sensitive")
+        assertEquals(WifiDownloadFormatSetting.Ask, WifiDownloadFormatSetting.fromStorage(""))
+        assertEquals(4, WifiDownloadFormatSetting.entries.map { it.storageValue }.toSet().size, "distinct values")
     }
 
     @Test
@@ -261,7 +280,7 @@ class WifiFormatPolicyTest {
             "some saved" to setOf(WifiPhotoDownload(6), WifiPhotoDownload(1)), // jpgOnly, one file of jpgRaw
             "raw jpeg saved" to setOf(WifiPhotoDownload(4)),                   // JPG of rawJpg (Original mode too)
         )
-        for (policy in listOf(jpegOnly, original)) {
+        for (policy in WifiFormatPolicy.entries) {
             for ((name, saved) in savedCases) {
                 // What the tags count: a tile contributes its bytes only when something will be
                 // fetched (reason == null); saved/too-large tiles show a state instead of a size.
@@ -331,5 +350,117 @@ class WifiFormatPolicyTest {
             CaptureDownloadSize(0, WifiSkipReason.AlreadySaved),
             captureDownloadSize(heifRaw, jpegOnly, setOf(WifiPhotoDownload(8), WifiPhotoDownload(9))),
         )
+    }
+
+    // --- RAW only -----------------------------------------------------------------------
+
+    private val rawOnlyPolicy = WifiFormatPolicy.RawOnly
+
+    @Test
+    fun rawOnlyDownloadsOnlyTheRawAndSkipsPhotosWithoutOne() {
+        val plan = planDownloads(listOf(jpgRaw, jpgOnly, rawJpg, heifOnly, rawOnly, multi), rawOnlyPolicy, emptySet())
+        assertEquals(listOf(2L, 3L, 5L, 10L), handles(plan), "selection order, RAW files only — never a JPG/HEIF")
+        assertTrue(plan.files.all { it.mimeType == rawMime })
+        assertEquals(mapOf(WifiSkipReason.NoRaw to 2), plan.skipped, "JPG-only and HEIF-only are skipped, not replaced")
+        assertEquals(WifiBatchSummary(4, mapOf(WifiSkipReason.NoRaw to 2)), plan.toSummary())
+        assertEquals(30000L + 1000 + 40000 + 1000, plan.totalBytes)
+    }
+
+    @Test
+    fun rawOnlyOverPhotosWithoutRawSkipsEverything() {
+        val plan = planDownloads(listOf(jpgOnly, heifOnly), rawOnlyPolicy, emptySet())
+        assertTrue(plan.files.isEmpty())
+        assertEquals(WifiSkipReason.NoRaw, plan.mainSkipReason)
+        assertEquals(WifiBatchSummary(0, mapOf(WifiSkipReason.NoRaw to 2)), plan.toSummary())
+        assertTrue(WifiSkipReason.NoRaw.isMissingFormat)
+        assertTrue(WifiSkipReason.NoJpeg.isMissingFormat)
+        assertFalse(WifiSkipReason.TooLarge.isMissingFormat)
+        assertFalse(WifiSkipReason.AlreadySaved.isMissingFormat)
+    }
+
+    @Test
+    fun rawOnlySkipsSavedAndOversizedRawsWithTheirOwnReasons() {
+        val bigRaw = file(70, rawMime, 600_000_000, downloadable = false)
+        val big = capture("big", file(71, jpegMime, 100), bigRaw)
+        val plan = planDownloads(listOf(jpgRaw, big, rawOnly), rawOnlyPolicy, setOf(WifiPhotoDownload(2)))
+        assertEquals(listOf(5L), handles(plan))
+        assertEquals(mapOf(WifiSkipReason.AlreadySaved to 1, WifiSkipReason.TooLarge to 1), plan.skipped)
+    }
+
+    @Test
+    fun rawOnlyCaptureSizeIsTheRawOrTheMissingRawException() {
+        assertEquals(CaptureDownloadSize(30000, null), captureDownloadSize(jpgRaw, rawOnlyPolicy))
+        assertEquals(CaptureDownloadSize(40000, null), captureDownloadSize(rawOnly, rawOnlyPolicy))
+        // No RAW: like JPG-only's NoJpeg — the originals' size with the reason (tile warns, never fetches).
+        assertEquals(CaptureDownloadSize(1500, WifiSkipReason.NoRaw), captureDownloadSize(jpgOnly, rawOnlyPolicy))
+        assertEquals(CaptureDownloadSize(900, WifiSkipReason.NoRaw), captureDownloadSize(heifOnly, rawOnlyPolicy))
+        // The JPG of a JPG-only capture already saved: shown as saved.
+        assertEquals(
+            CaptureDownloadSize(0, WifiSkipReason.AlreadySaved),
+            captureDownloadSize(jpgOnly, rawOnlyPolicy, setOf(WifiPhotoDownload(6))),
+        )
+    }
+
+    @Test
+    fun aMixedSkipPrefersTooLargeThenNoJpegThenNoRaw() {
+        assertEquals(
+            WifiSkipReason.NoRaw,
+            WifiDownloadPlan(emptyList(), mapOf(WifiSkipReason.NoRaw to 1, WifiSkipReason.AlreadySaved to 1)).mainSkipReason,
+        )
+        assertEquals(
+            WifiSkipReason.TooLarge,
+            WifiDownloadPlan(emptyList(), mapOf(WifiSkipReason.NoRaw to 1, WifiSkipReason.TooLarge to 1)).mainSkipReason,
+        )
+    }
+
+    // --- ask each time ----------------------------------------------------------------
+
+    @Test
+    fun batchChoicesAreJpgRawAndBothEachWithItsOwnPlan() {
+        val selection = listOf(jpgRaw, jpgOnly, rawOnly)
+        val choices = batchFormatChoices(selection, emptySet())
+        assertEquals(listOf(WifiFormatPolicy.JpegOnly, WifiFormatPolicy.RawOnly, WifiFormatPolicy.Original), choices.map { it.policy })
+        for (choice in choices) assertEquals(planDownloads(selection, choice.policy, emptySet()), choice.plan)
+        val (jpg, raw, both) = choices
+        assertEquals(listOf(1L, 6L), handles(jpg.plan)); assertEquals(mapOf(WifiSkipReason.NoJpeg to 1), jpg.plan.skipped)
+        assertEquals(listOf(2L, 5L), handles(raw.plan)); assertEquals(mapOf(WifiSkipReason.NoRaw to 1), raw.plan.skipped)
+        assertEquals(listOf(1L, 2L, 6L, 5L), handles(both.plan)); assertEquals(0, both.plan.skippedCount)
+        assertTrue(choices.all { it.available })
+    }
+
+    @Test
+    fun aBatchChoiceThatFetchesNothingIsListedButUnavailable() {
+        val choices = batchFormatChoices(listOf(jpgOnly, heifOnly), emptySet())
+        assertEquals(3, choices.size)
+        assertEquals(listOf(true, false, true), choices.map { it.available }, "no RAW anywhere")
+        assertEquals(WifiSkipReason.NoRaw, choices[1].plan.mainSkipReason)
+    }
+
+    @Test
+    fun singleChoicesListOnlyTheFormatsThePhotoHas() {
+        assertEquals(
+            listOf(WifiFormatPolicy.JpegOnly, WifiFormatPolicy.RawOnly, WifiFormatPolicy.Original),
+            singleFormatChoices(jpgRaw, emptySet()).map { it.policy },
+        )
+        // One format only: one choice — the viewer downloads directly without asking.
+        assertEquals(listOf(WifiFormatPolicy.JpegOnly), singleFormatChoices(jpgOnly, emptySet()).map { it.policy })
+        assertEquals(listOf(WifiFormatPolicy.RawOnly), singleFormatChoices(rawOnly, emptySet()).map { it.policy })
+        assertEquals(listOf(WifiFormatPolicy.Original), singleFormatChoices(heifOnly, emptySet()).map { it.policy })
+        // HEIF + RAW: RAW alone or both (HEIF is not offered on its own, as with the fixed settings).
+        assertEquals(
+            listOf(WifiFormatPolicy.RawOnly, WifiFormatPolicy.Original),
+            singleFormatChoices(heifRaw, emptySet()).map { it.policy },
+        )
+        val sizes = singleFormatChoices(jpgRaw, emptySet()).map { it.plan.totalBytes }
+        assertEquals(listOf(2000L, 30000L, 32000L), sizes)
+    }
+
+    @Test
+    fun singleChoicesLeaveOutSavedOrOversizedFiles() {
+        // JPG already saved: "JPG + RAW" would fetch only the RAW — same as "RAW", one choice, no question.
+        assertEquals(listOf(WifiFormatPolicy.RawOnly), singleFormatChoices(jpgRaw, setOf(WifiPhotoDownload(1))).map { it.policy })
+        assertTrue(singleFormatChoices(jpgRaw, setOf(WifiPhotoDownload(1), WifiPhotoDownload(2))).isEmpty())
+        val bigRaw = capture("bigRaw", file(80, jpegMime, 100), file(81, rawMime, 600_000_000, downloadable = false))
+        assertEquals(listOf(WifiFormatPolicy.JpegOnly), singleFormatChoices(bigRaw, emptySet()).map { it.policy })
     }
 }

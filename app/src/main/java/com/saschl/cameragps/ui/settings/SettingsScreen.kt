@@ -22,6 +22,7 @@ import cameragps.sharednew.generated.resources.a1_settings_logs_title
 import cameragps.sharednew.generated.resources.battery_optimization_settings_title
 import cameragps.sharednew.generated.resources.event_sounds_open_section_description
 import cameragps.sharednew.generated.resources.event_sounds_title
+import cameragps.sharednew.generated.resources.m9_photo_transfer_title
 import cameragps.sharednew.generated.resources.settings
 import com.sasch.cameragps.sharednew.ui.components.glass.isScrolledUnderTopBar
 import com.sasch.cameragps.sharednew.ui.settings.SharedLanguageSettingsCard
@@ -110,7 +111,9 @@ private fun SettingsOverviewScreen(
             state = scrollState,
         ) {
             AppControlsInlineSection()
-            PhotoTransferSettingsCard()
+            SettingsCard(title = stringResource(Res.string.m9_photo_transfer_title)) {
+                DownloadFormatSettingsRows()
+            }
             SharedSettingsNavRow(
                 title = stringResource(Res.string.event_sounds_title),
                 description = stringResource(Res.string.event_sounds_open_section_description),

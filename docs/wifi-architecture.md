@@ -274,9 +274,14 @@ The Wi-Fi screen enters the grouped browser automatically once the session is re
   idle without a viewport. Because a day can now be long, decoded thumbnails beyond 300 are evicted
   oldest-first (never the current demand) and are fetched again when scrolled back to.
 - **Selection and download.** Long-press selects; dragging after a long-press selects a contiguous
-  range within the day. The floating download button follows the settings' default format: JPG-only
-  plans one JPG per capture (captures without one are skipped and counted), Original downloads every
-  file — there is no format sheet. The batch summary is recorded before the batch is submitted, so a
+  range within the day. The floating download button follows the settings' download format
+  (`WifiDownloadFormatSetting`, key `wifi_default_download_format`): JPG plans one JPG per capture,
+  RAW one RAW (ARW) per capture — captures without that format are skipped and counted (`NoJpeg` /
+  `NoRaw`), never replaced by another format — and JPG + RAW downloads every original file. "Ask each
+  time" (the default since 0.3.1) opens an in-page chooser (JPG / RAW / JPG + RAW, each planned by the
+  same `planDownloads` with its count, size and skips) before the batch starts, and the viewer asks the
+  same way only when the photo has more than one format; the pick is used once and not stored. The
+  batch summary is recorded before the batch is submitted, so a
   summary latched by an earlier batch can neither reappear nor settle on the new batch's result.
 
 ## Downloading and saving

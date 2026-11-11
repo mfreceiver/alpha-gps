@@ -11,7 +11,10 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
 import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
+import com.sasch.cameragps.sharednew.remote.wifi.WifiSkipReason
 import com.sasch.cameragps.sharednew.remote.wifi.captureDownloadSize
+import com.sasch.cameragps.sharednew.remote.wifi.formatByteSize
+import com.sasch.cameragps.sharednew.remote.wifi.singleFormatChoices
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -99,8 +102,8 @@ class WifiPhotoViewerModelTest {
     @Test
     fun stripShowsFormatAndTheDefaultFormatDownloadSizeOnce() {
         // JPG default: only the JPG is downloaded, so the strip names only it — "JPG · 6.6 MB".
-        assertEquals(ViewerInfoStrip("JPG", 6_600_000, noJpeg = false), viewerInfoStrip(pair, WifiFormatPolicy.JpegOnly))
-        assertEquals(ViewerInfoStrip("JPG + RAW", 54_600_000, noJpeg = false), viewerInfoStrip(pair, WifiFormatPolicy.Original),
+        assertEquals(ViewerInfoStrip("JPG", 6_600_000, missingFormat = false), viewerInfoStrip(pair, WifiFormatPolicy.JpegOnly))
+        assertEquals(ViewerInfoStrip("JPG + RAW", 54_600_000, missingFormat = false), viewerInfoStrip(pair, WifiFormatPolicy.Original),
             "Original downloads every file: all formats and the sum")
     }
 
@@ -143,17 +146,108 @@ class WifiPhotoViewerModelTest {
     @Test
     fun aFullySavedCaptureHidesItsStripSizeInsteadOfThePhotoTotal() {
         val strip = viewerInfoStrip(pair, WifiFormatPolicy.Original, setOf(WifiPhotoDownload(1), WifiPhotoDownload(2)))
-        assertFalse(strip.noJpeg)
+        assertFalse(strip.missingFormat)
         assertEquals(0L, strip.sizeBytes, "everything saved: no size, the download area says Saved")
     }
 
     @Test
     fun rawOnlyUnderJpegOnlyIsMarkedAndShowsTheRawSize() {
         val strip = viewerInfoStrip(rawOnly, WifiFormatPolicy.JpegOnly)
-        assertTrue(strip.noJpeg, "shown as \"Only RAW\", never downloaded silently")
+        assertTrue(strip.missingFormat, "shown as \"Only RAW\", never downloaded silently")
         assertEquals("RAW", strip.formatText)
         assertEquals(48_000_000, strip.sizeBytes)
-        assertFalse(viewerInfoStrip(rawOnly, WifiFormatPolicy.Original).noJpeg)
+        assertFalse(viewerInfoStrip(rawOnly, WifiFormatPolicy.Original).missingFormat)
+    }
+
+    @Test
+    fun rawOnlyStripNamesTheRawAndItsSize() {
+        assertEquals(ViewerInfoStrip("RAW", 48_000_000, missingFormat = false), viewerInfoStrip(pair, WifiFormatPolicy.RawOnly))
+        assertEquals(listOf(raw), viewerDownloadTargets(pair, WifiFormatPolicy.RawOnly))
+        assertEquals("RAW", stripFormatLabel(pair, WifiFormatPolicy.RawOnly))
+        assertEquals("RAW", stripFormatLabel(WifiCameraCapture("x", listOf(raw, heif)), WifiFormatPolicy.RawOnly))
+    }
+
+    @Test
+    fun jpgOnlyCaptureUnderRawOnlyIsMarkedOnlyJpgAndNeverFetchedSilently() {
+        val strip = viewerInfoStrip(jpgOnly, WifiFormatPolicy.RawOnly)
+        assertTrue(strip.missingFormat, "shown as \"Only JPG\"")
+        assertEquals("JPG", strip.formatText)
+        assertEquals(6_600_000, strip.sizeBytes)
+        assertTrue(viewerDownloadTargets(jpgOnly, WifiFormatPolicy.RawOnly).isEmpty())
+        val state = viewerDownloadState(jpgOnly, WifiFormatPolicy.RawOnly, emptySet(), idle, false)
+        assertEquals(ViewerDownloadPhase.NoRaw, state.phase)
+        assertEquals("JPG", state.manualFormat, "manual \"Download JPG\" button")
+        assertEquals(listOf(WifiPhotoDownload(1)), state.downloads)
+        assertTrue(state.enabled)
+        assertFalse(state.asks)
+        val saved = viewerDownloadState(jpgOnly, WifiFormatPolicy.RawOnly, setOf(WifiPhotoDownload(1)), idle, false)
+        assertEquals(ViewerDownloadPhase.Saved, saved.phase)
+    }
+
+    @Test
+    fun rawOnlyReadyDownloadsTheRaw() {
+        val state = viewerDownloadState(pair, WifiFormatPolicy.RawOnly, emptySet(), idle, false)
+        assertEquals(ViewerDownloadPhase.Ready, state.phase)
+        assertEquals(listOf(WifiPhotoDownload(2)), state.downloads)
+        assertFalse(state.asks)
+    }
+
+    @Test
+    fun askStripListsEveryFormatWithItsSizeAndNoTotal() {
+        val strip = viewerInfoStrip(pair, null)
+        assertEquals("JPG ${formatByteSize(6_600_000)} / RAW ${formatByteSize(48_000_000)}", strip.formatText)
+        assertEquals(0L, strip.sizeBytes, "no default assumed: no single size")
+        assertFalse(strip.missingFormat)
+        assertEquals("JPG ${formatByteSize(6_600_000)}", viewerInfoStrip(jpgOnly, null).formatText)
+        assertEquals(
+            "HEIF ${formatByteSize(5_000_000)} / RAW ${formatByteSize(48_000_000)}",
+            stripFormatLabel(WifiCameraCapture("x", listOf(raw, heif)), null),
+        )
+        assertEquals(setOf(jpg, raw), viewerDownloadTargets(pair, null).toSet())
+        assertNull(stripFormatLabel(WifiCameraCapture("e", emptyList()), null))
+    }
+
+    @Test
+    fun askWithSeveralFormatsOpensTheChooser() {
+        val state = viewerDownloadState(pair, null, emptySet(), idle, false)
+        assertEquals(ViewerDownloadPhase.Ready, state.phase)
+        assertTrue(state.asks)
+        assertTrue(state.enabled)
+        assertEquals(listOf(WifiFormatPolicy.JpegOnly, WifiFormatPolicy.RawOnly, WifiFormatPolicy.Original), state.choices.map { it.policy })
+        assertEquals(singleFormatChoices(pair, emptySet()), state.choices)
+        // The chooser rows: format names with what each fetches.
+        assertEquals(listOf("JPG", "RAW", "JPG + RAW"), state.choices.map { it.formatText() })
+        assertEquals(listOf(listOf(WifiPhotoDownload(1)), listOf(WifiPhotoDownload(2))), state.choices.take(2).map { it.plan.downloads })
+    }
+
+    @Test
+    fun askWithOneFormatDownloadsDirectly() {
+        for (capture in listOf(jpgOnly, rawOnly)) {
+            val state = viewerDownloadState(capture, null, emptySet(), idle, false)
+            assertEquals(ViewerDownloadPhase.Ready, state.phase, capture.id)
+            assertFalse(state.asks, "one format: no question")
+            assertEquals(capture.files.map { WifiPhotoDownload(it.handle) }, state.downloads)
+        }
+        // JPG already saved: only the RAW is left — downloaded without asking.
+        val rest = viewerDownloadState(pair, null, setOf(WifiPhotoDownload(1)), idle, false)
+        assertFalse(rest.asks)
+        assertEquals(listOf(WifiPhotoDownload(2)), rest.downloads)
+        // Everything saved / too large: the usual states.
+        assertEquals(
+            ViewerDownloadPhase.Saved,
+            viewerDownloadState(pair, null, setOf(WifiPhotoDownload(1), WifiPhotoDownload(2)), idle, false).phase,
+        )
+        val huge = WifiCameraCapture("x", listOf(jpg.copy(downloadable = false)))
+        assertEquals(ViewerDownloadPhase.TooLarge, viewerDownloadState(huge, null, emptySet(), idle, false).phase)
+        // Busy transfers win over asking.
+        val batch = WifiImageTransferState(WifiImageTransferStatus.Downloading, filename = "OTHER.JPG", totalFiles = 5)
+        assertEquals(ViewerDownloadPhase.OtherTransfer, viewerDownloadState(pair, null, emptySet(), batch, false).phase)
+    }
+
+    @Test
+    fun missingFormatSizesUseTheSkipReasonOfThePolicy() {
+        assertEquals(WifiSkipReason.NoRaw, captureDownloadSize(jpgOnly, WifiFormatPolicy.RawOnly).reason)
+        assertEquals(WifiSkipReason.NoJpeg, captureDownloadSize(rawOnly, WifiFormatPolicy.JpegOnly).reason)
     }
 
     // ---- details -----------------------------------------------------------------------------------

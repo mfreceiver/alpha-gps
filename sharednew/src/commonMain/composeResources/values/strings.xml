@@ -611,4 +611,19 @@
     <string name="q_bt_signal_unknown">unknown</string>
     <string name="q_list_info_a11y">Camera info: %1$s</string>
     <string name="q_list_open_device">Open camera page</string>
+    <string name="r_settings_group_general">General</string>
+    <string name="r_settings_group_background">Notifications &amp; background</string>
+    <string name="r_settings_group_help">Help &amp; diagnostics</string>
+    <string name="r_download_format">Download format</string>
+    <string name="r_download_format_hint">Used by single-photo and batch downloads.</string>
+    <string name="r_format_ask">Ask each time</string>
+    <string name="r_format_ask_desc">Choose JPG, RAW or both when you download.</string>
+    <string name="r_format_raw_desc">Only the RAW is downloaded. Photos without a RAW are skipped and listed in the summary; no JPG is fetched instead.</string>
+    <string name="r_format_jpg_raw_desc">Every original file of the photo (JPG, HEIF and RAW).</string>
+    <string name="r_ask_title">Download format</string>
+    <string name="r_ask_batch_option_desc">%1$d files · %2$s</string>
+    <string name="r_batch_download_ask">Download %1$d selected</string>
+    <string name="r_skip_no_raw">%1$d without RAW</string>
+    <string name="r_tile_size_not_downloaded_raw">%1$s MB, not included in RAW-only downloads</string>
+    <string name="r_viewer_no_raw">This photo has no RAW.</string>
 </resources>

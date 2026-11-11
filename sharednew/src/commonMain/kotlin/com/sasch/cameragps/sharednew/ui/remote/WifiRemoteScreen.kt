@@ -64,6 +64,9 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiBatchSummary
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
 import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
+import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatChoice
+import com.sasch.cameragps.sharednew.remote.wifi.WifiDownloadFormatSetting
+import com.sasch.cameragps.sharednew.remote.wifi.batchFormatChoices
 import com.sasch.cameragps.sharednew.remote.wifi.WifiDownloadPlan
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoBrowserState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
@@ -343,6 +346,10 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     internal fun batchPlan(policy: WifiFormatPolicy, state: WifiRemoteState): WifiDownloadPlan =
         planDownloads(selectedPhotos.values.toList(), policy, state.photoBrowser.savedDownloads)
 
+    /** "Ask each time": the JPG / RAW / JPG+RAW choices for the current selection, each with its own plan. */
+    internal fun batchChoices(state: WifiRemoteState): List<WifiFormatChoice> =
+        batchFormatChoices(selectedPhotos.values.toList(), state.photoBrowser.savedDownloads)
+
     /**
      * The floating download action for the selection. Downloads straight away in the format the
      * settings name — JPG-only fetches the plan's JPEGs (captures without one are skipped and
@@ -588,7 +595,7 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
                      networkPermissionMessage: String = stringResource(Res.string.wifi_remote_permission),
                      openingSessionMessage: String = stringResource(Res.string.wifi_remote_opening),
                      onAppSettings: (() -> Unit)? = null,
-                     defaultDownloadFormatJpeg: Boolean = false,
+                     downloadFormat: WifiDownloadFormatSetting = WifiDownloadFormatSetting.Default,
                      gridOptions: WifiGridOptions = WifiGridOptions(),
                      onGridOptionsChange: (WifiGridOptions) -> Unit = {},
                      onDownloadPhotos: (List<WifiPhotoDownload>) -> Unit = { downloads ->
@@ -699,7 +706,7 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
 
             viewModel.viewedPhotoIndex != null && ready && state.photoBrowser.open ->
                 WifiPhotoViewer(
-                    state, viewModel, onDownloadPhotos, defaultDownloadFormatJpeg,
+                    state, viewModel, onDownloadPhotos, downloadFormat,
                     onDetailsVisibleChanged = onViewerDetailsVisibleChanged,
                 )
 
@@ -713,7 +720,7 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
                 Box(Modifier.fillMaxSize().padding(padding)) {
                     browserStateHolder.SaveableStateProvider("photos") {
                         WifiPhotoBrowser(
-                            state, viewModel, onDownloadPhotos, defaultDownloadFormatJpeg, gridOptions
+                            state, viewModel, onDownloadPhotos, downloadFormat, gridOptions
                         )
                     }
                 }

@@ -116,6 +116,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
+import cameragps.sharednew.generated.resources.r_viewer_no_raw
 import cameragps.sharednew.generated.resources.arrow_back_24px
 import cameragps.sharednew.generated.resources.check_24px
 import cameragps.sharednew.generated.resources.download_24px
@@ -157,7 +158,8 @@ import cameragps.sharednew.generated.resources.wifi_remote_viewer_select
 import cameragps.sharednew.generated.resources.wifi_remote_viewer_transfer_wait
 import com.diamondedge.logging.logging
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
-import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
+import com.sasch.cameragps.sharednew.remote.wifi.WifiDownloadFormatSetting
+import com.sasch.cameragps.sharednew.remote.wifi.policy
 import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
@@ -220,7 +222,7 @@ internal fun WifiPhotoViewer(
     state: WifiRemoteState,
     viewModel: WifiRemoteViewModel,
     onDownload: (List<WifiPhotoDownload>) -> Unit,
-    defaultDownloadFormatJpeg: Boolean = false,
+    downloadFormat: WifiDownloadFormatSetting = WifiDownloadFormatSetting.Default,
     /**
      * The portrait details drawer was opened (true — called from the opening tap / swipe, before the
      * drawer's first frame) or closed (false — also when the viewer leaves composition with the
@@ -230,7 +232,8 @@ internal fun WifiPhotoViewer(
 ) {
     val browser = state.photoBrowser
     val transfer = state.imageTransfer
-    val policy = WifiFormatPolicy.of(defaultDownloadFormatJpeg)
+    /** Null = "ask each time": the download button opens the format chooser. */
+    val policy = downloadFormat.policy
     val captures = remember(browser.photos) { groupCameraPhotos(browser.photos) }
     val controller = viewModel.controller
     val thumbnails by controller.thumbnails.collectAsState()
@@ -729,8 +732,8 @@ private fun ViewerInfoStripBar(
         ) {
             val format = info.formatText
             if (format != null) Text(
-                if (info.noJpeg) stringResource(Res.string.m7_viewer_only_format, format) else format,
-                color = viewerFormatColor(info.noJpeg, AlphaTheme.colors),
+                if (info.missingFormat) stringResource(Res.string.m7_viewer_only_format, format) else format,
+                color = viewerFormatColor(info.missingFormat, AlphaTheme.colors),
                 style = AlphaType.Label, maxLines = 1,
             )
             if (format != null && info.sizeBytes > 0) {
@@ -1098,9 +1101,25 @@ private fun ViewerDetailsPanel(parts: ViewerParts, modifier: Modifier) {
 private fun ViewerDownloadArea(parts: ViewerParts) {
     val download = parts.download ?: return
     val transfer = parts.transfer
+    // "Ask each time": the button opens the in-page format chooser; the pick is used for this download only.
+    var asking by remember(parts.capture?.id) { mutableStateOf(false) }
+    if (asking && download.asks) {
+        val options = singleChooserOptions(download.choices)
+        WifiFormatChooserDialog(
+            options = options,
+            onConfirm = { policy ->
+                asking = false
+                download.choices.firstOrNull { it.policy == policy }?.let { parts.onDownload(it.plan.downloads) }
+            },
+            onDismiss = { asking = false },
+        )
+    } else if (asking) {
+        SideEffect { asking = false }
+    }
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         val hint = when (download.phase) {
             ViewerDownloadPhase.NoJpeg -> stringResource(Res.string.wifi_remote_photo_no_jpg)
+            ViewerDownloadPhase.NoRaw -> stringResource(Res.string.r_viewer_no_raw)
             ViewerDownloadPhase.OtherTransfer -> stringResource(Res.string.m7_viewer_other_transfer)
             ViewerDownloadPhase.TooLarge -> stringResource(Res.string.wifi_remote_download_too_large)
             else -> viewerTransferNotice(transfer)
@@ -1121,7 +1140,7 @@ private fun ViewerDownloadArea(parts: ViewerParts) {
                 icon = painterResource(Res.drawable.check_24px), enabled = false,
                 glass = true, glassLevel = GlassLevel.Viewer,
             )
-            ViewerDownloadPhase.NoJpeg -> CapsuleButton(
+            ViewerDownloadPhase.NoJpeg, ViewerDownloadPhase.NoRaw -> CapsuleButton(
                 text = stringResource(Res.string.m7_viewer_download_format, download.manualFormat.orEmpty()),
                 onClick = { parts.onDownload(download.downloads) },
                 role = CapsuleRole.Secondary,
@@ -1131,7 +1150,7 @@ private fun ViewerDownloadArea(parts: ViewerParts) {
             )
             else -> CapsuleButton(
                 text = stringResource(Res.string.wifi_remote_download),
-                onClick = { parts.onDownload(download.downloads) },
+                onClick = { if (download.asks) asking = true else parts.onDownload(download.downloads) },
                 // Frosted Viewer glass tinted with the accent (not an opaque light-blue fill).
                 role = CapsuleRole.GlassPrimary,
                 icon = painterResource(Res.drawable.download_24px),

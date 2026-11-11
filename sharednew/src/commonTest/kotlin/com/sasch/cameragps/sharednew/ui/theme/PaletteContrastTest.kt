@@ -254,15 +254,15 @@ class PaletteContrastTest {
         // and danger (#BA1A1A) were ≈ 1.0–3.3:1 here.
         listOf(light, dark).forEach { c ->
             val bgs = viewerSurfaces(c)
-            listOf(true, false).forEach { noJpeg ->
-                val r = minRatio(viewerFormatColor(noJpeg, c), bgs)
-                assertTrue(r >= Contrast.AA_TEXT, "info strip format noJpeg=$noJpeg dark=${c.isDark}: $r")
+            listOf(true, false).forEach { missingFormat ->
+                val r = minRatio(viewerFormatColor(missingFormat, c), bgs)
+                assertTrue(r >= Contrast.AA_TEXT, "info strip format missingFormat=$missingFormat dark=${c.isDark}: $r")
             }
             ViewerDownloadPhase.entries.forEach { phase ->
                 val r = minRatio(viewerDownloadHintColor(phase, c), bgs)
                 assertTrue(r >= Contrast.AA_TEXT, "download hint $phase dark=${c.isDark}: $r")
             }
-            assertEquals(c.onPhotoWarning, viewerFormatColor(noJpeg = true, c))
+            assertEquals(c.onPhotoWarning, viewerFormatColor(missingFormat = true, c))
             assertEquals(c.onPhotoDanger, viewerDownloadHintColor(ViewerDownloadPhase.Ready, c))
             assertEquals(c.onPhotoDanger, iconButtonTint(IconEmphasis.Danger, c, enabled = true, onViewer = true))
             // Still distinguishable from plain onPhoto text (they carry the warning / error meaning).
