@@ -41,6 +41,7 @@
 | 照片上警示/错误 | `onPhotoWarning`(#FFE08A) / `onPhotoDanger`(#FFDAD6)，亮暗主题同值 | Viewer 与照片上的警示、错误文字与图标（如"仅 RAW"、下载失败提示、Viewer 上 Danger 图标按钮）；Viewer 上**不用** `warningText`/`danger`/`success` | 4.5（文字）/ 3（图标） |
 | 蓝牙品牌色 | `bluetoothBlue`（亮 #0082FC 品牌蓝 / 暗 #4DA6FF，暗色提亮以在深色卡片玻璃上 ≥3:1） | **仅**设备页状态卡的蓝牙图标（信号环中心）；是识别色不是状态色，信号强弱由环的颜色/弧长表达 | 3（图标，`PaletteContrastTest.bluetoothBlueIconReadableOnCardGlass`） |
 
+- 面板底色（非文字角色）：`viewerSheet`（#1B1F24，不透明，亮暗同值）——预览页竖屏详情抽屉的面板底。抽屉不用玻璃/模糊：面板不透明盖住下层，只做遮罩淡入 + 面板 `graphicsLayer` 位移；面板上文字只用 `onPhoto*` 角色，`PaletteContrastTest` 把它与其上的 Viewer 玻璃按钮一起列入 Viewer 底色矩阵。
 - `warning`（原浅琥珀 #F9A825）只作装饰，不能当文字或图标色。
 - Container 类颜色（primaryContainer、errorContainer…）不作为文字底色；需要色块用玻璃 tint（`GlassSurface(tint = …)`）。
 - 状态 → 颜色统一走 `statusToneColor(tone, colors, forText)` / `statusIconColor(tone, colors)`（`StatusTone { Neutral, Active, Success, Warning, Error, Accent }`）。
