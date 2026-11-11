@@ -69,6 +69,28 @@ internal fun viewerFrameLine(summary: ViewerFrameSummary, firstOpen: Boolean, re
         "command=${w.commandNanos.toMs().fmt()} swap=${w.swapNanos.toMs().fmt()} gpu=${w.gpuNanos.toMs().fmt()}]"
 }
 
+/**
+ * The frames of ONE drawer opening. Every opening gets its own buffer; the worker thread's callbacks
+ * hold the buffer of the opening they were registered for, and [closeAndTake] seals it. A callback that
+ * arrives after the opening has finished (the worker may still be draining) is dropped by [add] — checked
+ * under the same lock as the seal — so it can never land in a later opening's samples.
+ */
+internal class ViewerFrameBuffer {
+    private val samples = ArrayList<ViewerFrameSample>(64)
+    private var closed = false
+
+    /** Any thread. Returns whether the sample was kept (false once this opening has been sealed). */
+    fun add(sample: ViewerFrameSample): Boolean = synchronized(this) {
+        if (closed) false else samples.add(sample)
+    }
+
+    /** Seals the buffer and returns what it collected; later [add]s are rejected. */
+    fun closeAndTake(): List<ViewerFrameSample> = synchronized(this) {
+        closed = true
+        samples.toList()
+    }
+}
+
 private fun Long.toMs(): Double = this / 1_000_000.0
 private fun Double.fmt(): String = "%.1f".format(java.util.Locale.ROOT, this)
 
@@ -80,7 +102,7 @@ private fun Double.fmt(): String = "%.1f".format(java.util.Locale.ROOT, this)
  */
 internal class ViewerFrameMetricsProbe(private val window: Window) {
     private val main = Handler(Looper.getMainLooper())
-    private val samples = ArrayList<ViewerFrameSample>(64)
+    private var buffer: ViewerFrameBuffer? = null
     private var thread: HandlerThread? = null
     private var listener: Window.OnFrameMetricsAvailableListener? = null
     private var firstOpen = false
@@ -94,11 +116,10 @@ internal class ViewerFrameMetricsProbe(private val window: Window) {
     private fun start() {
         finish("reopened")
         firstOpen = processFirstOpen.compareAndSet(false, true)
-        synchronized(samples) { samples.clear() }
+        val opening = ViewerFrameBuffer()
         val worker = HandlerThread("AlphaViewerFrames").apply { start() }
         val callback = Window.OnFrameMetricsAvailableListener { _, metrics, _ ->
-            val sample = metrics.toSample()
-            synchronized(samples) { samples += sample }
+            opening.add(metrics.toSample())
         }
         try {
             window.addOnFrameMetricsAvailableListener(callback, Handler(worker.looper))
@@ -108,6 +129,7 @@ internal class ViewerFrameMetricsProbe(private val window: Window) {
             return
         }
         thread = worker
+        buffer = opening
         listener = callback
         main.postDelayed(timeout, VIEWER_DETAILS_ENTER_MILLIS + VIEWER_FRAME_TAIL_MILLIS)
     }
@@ -123,7 +145,8 @@ internal class ViewerFrameMetricsProbe(private val window: Window) {
         }
         thread?.quitSafely()
         thread = null
-        val taken = synchronized(samples) { samples.toList().also { samples.clear() } }
+        val taken = buffer?.closeAndTake().orEmpty()
+        buffer = null
         val period = refreshPeriodNanos()
         Timber.tag(VIEWER_FRAME_LOG_TAG).i(viewerFrameLine(summarizeViewerFrames(taken, period), firstOpen, period, endedBy))
     }
