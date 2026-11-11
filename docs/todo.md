@@ -45,6 +45,11 @@
 - 验收：记录各场景的 frames/janky/worst/p90；若首次打开最差帧仍明显（例如 >50ms），按 worst[] 中占比最大的阶段（layout/draw/command/gpu）决定下一步。
 - 依据：批 P 新增诊断；JVM 无法测帧耗时。
 
+### 35. 真机核对 Baseline Profile 效果
+- 做什么：release APK 已含 `assets/dexopt/baseline.prof(m)`（手写通配规则 `app/src/main/baseline-prof.txt`，AGP 展开 + R8 改写后编译；androidx.profileinstaller 1.4.0 已随 Compose 依赖进入 release）。侧载安装后 profile 由 profileinstaller 在首次启动后写入，真正生效要等系统后台 dexopt（空闲+充电）；要立即生效可 `adb shell cmd package compile -m speed-profile -f cn.vectory.alphagps`。核对：`adb shell dumpsys package dexopt | grep -A3 cn.vectory.alphagps` 显示 speed-profile；对比生效前后 #34 日志中“首次打开”的 worst/p90。
+- 验收：有生效前后的对比数据；若无改善，记录数据后再评估规则范围（不盲目扩大）。
+- 依据：本机无法验证首次打开的实际改善（只验证了规则进入合并/编译产物与 APK）。
+
 ### 23. 真机核对：0.3.0 B0 玻璃材质与新组件
 - 做什么：装含 B0 的版本（亮/暗各一遍，Android 12 与 14+ 各一台）打开调试预览或已迁移页面，核对：①背景彩色光斑可见但不抢眼；卡片/浮条/对话框能明显看出毛玻璃（双向边缘光、顶部高光带、双层阴影、细噪点），文字清晰；②API 31/32 低端机长列表滚动不掉帧（噪点 + 每卡片模糊）；③对话框/菜单/面板/Snackbar 背后的页面模糊随滚动刷新；④动态字体 200% 下 GlassSegmented/StatusBadge/GlassTopBar 标题不截断；⑤TalkBack：Snackbar 播报、RevealValueRow 状态、图标长按 tooltip 不被朗读；⑥暗色开关/复选框选中态（浅蓝底 + 深蓝滑块/勾）观感可接受。⑦（页面迁移收尾并入）设备详情标题改左对齐后观感；⑧Welcome 页：`WelcomeScreenTest` 几何断言（375×627 slide 不滚动；412×860 标题与 slide 顶部 >80dp；该 androidTest 目前仅编译、未运行，需在设备/模拟器上跑一遍）；⑨设置页单选行与开关行观感：`GlassRadio` 视觉圈 20dp，设置页由整行 `SharedRadioOption`（≥48dp、整行 selectable，`GlassRadio(onClick = null)`）承担点击，独立使用的 `GlassRadio(onClick ≠ null)` 点击区为 48dp——核对整行点按、选中圈外观与 `GlassSwitch` 行高一致；⑩弹出菜单内 `GlassSegmented` 宽度；⑪网格复选框在很亮缩略图上的可见性；⑫预览页下载按钮对比度（见 #26）；⑬排障页返回按钮无障碍标签由 Close 变为 Back（TalkBack 朗读）；⑭信息值字号 14→15 后各行/弹窗折行；⑮`LocationPermissionBoxTest` 使用已弃用的 `createComposeRule`（既有编译警告，换成新 API 或保留并记录）；⑯TalkBack 聚焦 `GlassTextField`（重命名相机、手动加入 Wi-Fi 的 SSID/密码、IP）读出标签名称、空值时 placeholder 提示、错误时错误文本，且标签/说明不重复朗读；在设备/模拟器上跑 `GlassTextFieldSemanticsTest`（目前仅编译）；⑰弹层焦点：外接键盘/方向键打开网格"视图选项"弹层与各对话框/底部面板，焦点进入弹层、Tab/方向键到不了背后页面、关闭后回到打开它的按钮（触屏关闭后不会强制聚焦 opener；全局焦点框/IME/TalkBack 待设备验证）；在设备/模拟器上跑 `GlassOverlayFocusTest`（目前仅编译）；⑱字体 200% 下网格"视图选项"弹层（固定 248dp 宽）内的 `GlassSegmented`（小/中/大）不截断。
 - 验收：不满意的项按 `docs/glass-material-notes.md` 的参数说明调 token，调后 `PaletteContrastTest` 仍全部通过（不放宽阈值）。

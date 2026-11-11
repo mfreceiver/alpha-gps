@@ -1,0 +1,23 @@
+# AlphaGPS hand-written Baseline Profile (ART human-readable profile format, HRF).
+# Merged by AGP with the libraries' own profiles, rewritten by R8 for the release build, expanded
+# against the release dex and packaged as assets/dexopt/baseline.prof(m); installed on a sideloaded
+# install by androidx.profileinstaller. Wildcards: `**` = any number of package / name characters,
+# `*` = any characters within one segment. H = hot, S = startup, P = post-startup.
+#
+# Scope: the Compose UI of both modules (photo viewer, photo grid, device pages, glass components,
+# theme) and the viewer's metadata path. Keep it to UI / first-interaction code: every rule costs
+# install-time compile work and space.
+
+# shared UI: viewer, grid, device list / detail, glass components, theme, dialogs, settings
+HSPLcom/sasch/cameragps/sharednew/ui/**;->**(**)**
+Lcom/sasch/cameragps/sharednew/ui/**;
+
+# viewer metadata (EXIF head read and parsing, read on every settled photo)
+HSPLcom/sasch/cameragps/sharednew/remote/wifi/PhotoMetadata*;->**(**)**
+Lcom/sasch/cameragps/sharednew/remote/wifi/PhotoMetadata*;
+HSPLcom/sasch/cameragps/sharednew/remote/wifi/ExifMetadataParser*;->**(**)**
+Lcom/sasch/cameragps/sharednew/remote/wifi/ExifMetadataParser*;
+
+# app UI: Android screens (device page, remote screen host, settings, help)
+HSPLcom/saschl/cameragps/ui/**;->**(**)**
+Lcom/saschl/cameragps/ui/**;
