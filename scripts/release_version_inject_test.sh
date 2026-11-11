@@ -23,9 +23,9 @@ TMP=$(mktemp -d)
 trap 'rm -rf -- "$TMP"' EXIT
 mkdir -p "$TMP/shim" "$TMP/work"
 # 沙箱 HOME：伪造 gradle.properties 与 keystore 占位（keytool 已被 shim，只需文件存在）
-mkdir -p "$TMP/home/.gradle" "$TMP/home/.config/dshdroid/signing"
+mkdir -p "$TMP/home/.gradle" "$TMP/home/.config/alphagps/signing"
 printf 'DSH_KEYSTORE_PASSWORD=x\nDSH_KEY_PASSWORD=x\n' > "$TMP/home/.gradle/gradle.properties"
-printf 'placeholder\n' > "$TMP/home/.config/dshdroid/signing/dshdroid.jks"
+printf 'placeholder\n' > "$TMP/home/.config/alphagps/signing/release.jks"
 
 # 主仓库参数外置（scripts/release.local.env 不入库）：沙箱用环境变量注入占位值。
 export ALPHAGPS_PRIMARY_HOST=forge.example.com:443
@@ -134,7 +134,7 @@ check "输出人工恢复提示" grep -q "人工" "$TMP/restore.log"
 setup_sandbox() { # $1=gradlew-body
   local SB=$TMP/sandbox
   rm -rf -- "$SB"
-  mkdir -p "$SB/scripts" "$SB/app" "$SB/home/jdk/bin" "$SB/home/.gradle" "$SB/home/.config/dshdroid/signing"
+  mkdir -p "$SB/scripts" "$SB/app" "$SB/home/jdk/bin" "$SB/home/.gradle" "$SB/home/.config/alphagps/signing"
   cp -- "$HERE/release_build.sh" "$HERE/release_version_inject.sh" "$HERE/release_lib.sh" "$SB/scripts/"
   cp -- "$BUILD" "$SB/app/build.gradle.kts"
   # 沙箱 gradle.properties：versionCode key 必须存在（release_build.sh 严格解析它取
@@ -144,7 +144,7 @@ setup_sandbox() { # $1=gradlew-body
   printf '#!/usr/bin/env bash\nexit 0\n' > "$SB/home/jdk/bin/java"; chmod +x "$SB/home/jdk/bin/java"
   # 沙箱 HOME：伪造 gradle.properties 与 keystore 占位（keytool 已被 shim，只需文件存在）
   printf 'DSH_KEYSTORE_PASSWORD=x\nDSH_KEY_PASSWORD=x\n' > "$SB/home/.gradle/gradle.properties"
-  printf 'placeholder\n' > "$SB/home/.config/dshdroid/signing/dshdroid.jks"
+  printf 'placeholder\n' > "$SB/home/.config/alphagps/signing/release.jks"
   ( cd "$SB" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm init )
   # 本地 bare 仓库充当主仓库远端 "primary"，ls-remote 走本地路径，无网络
   rm -rf -- "$TMP/primary.git"

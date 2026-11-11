@@ -309,7 +309,7 @@ setup_wiring_sandbox() { # $1=沙箱根
   local SB=$1
   rm -rf -- "$SB"
   mkdir -p "$SB/scripts" "$SB/app" "$SB/home/jdk/bin" "$SB/home/.gradle" \
-           "$SB/home/.config/dshdroid/signing" "$SB/sdk/build-tools/33.0.0"
+           "$SB/home/.config/alphagps/signing" "$SB/sdk/build-tools/33.0.0"
   cp -- "$HERE/release_build.sh" "$HERE/release_version_inject.sh" "$HERE/release_lib.sh" \
         "$HERE/release_assert_apk.sh" "$SB/scripts/"
   # 固定模板（与真实仓库 versionCode/versionName 解耦）：gradle.properties 为单一来源
@@ -353,7 +353,7 @@ GW
   sha_col=$(sed 's/../&:/g; s/:$//' <<<"$pin")
   printf '#!/usr/bin/env bash\nif [[ "${1:-}" == -list ]]; then printf "  SHA256: %%s\\n" "%s"; exit 0; fi\nexit 1\n' \
     "$sha_col" > "$SB/home/jdk/bin/keytool"; chmod +x "$SB/home/jdk/bin/keytool"
-  printf '#!/usr/bin/env bash\nif [[ "${1:-} ${2:-}" == "verify --print-certs" ]]; then printf "Signer #1 certificate DN: CN=dshdroid\\nSigner #1 certificate SHA-256 digest: %s\\n" "%s"; exit 0; fi\n[[ "${1:-}" == verify ]] && exit 0\nexit 1\n' \
+  printf '#!/usr/bin/env bash\nif [[ "${1:-} ${2:-}" == "verify --print-certs" ]]; then printf "Signer #1 certificate DN: CN=release\\nSigner #1 certificate SHA-256 digest: %s\\n" "%s"; exit 0; fi\n[[ "${1:-}" == verify ]] && exit 0\nexit 1\n' \
     "$pin" > "$SB/sdk/build-tools/33.0.0/apksigner"
   chmod +x "$SB/sdk/build-tools/33.0.0/apksigner"
   cat > "$SB/sdk/build-tools/33.0.0/aapt" <<'AAPT'
@@ -367,7 +367,7 @@ AAPT
   chmod +x "$SB/sdk/build-tools/33.0.0/aapt"
   printf 'sdk.dir=%s\n' "$SB/sdk" > "$SB/local.properties"
   printf 'DSH_KEYSTORE_PASSWORD=x\nDSH_KEY_PASSWORD=x\n' > "$SB/home/.gradle/gradle.properties"
-  printf 'placeholder\n' > "$SB/home/.config/dshdroid/signing/dshdroid.jks"
+  printf 'placeholder\n' > "$SB/home/.config/alphagps/signing/release.jks"
   ( cd "$SB" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm init )
   rm -rf -- "$TMP/wprimary.git"; git init -q --bare "$TMP/wprimary.git"
   ( cd "$SB" && git remote add primary "$TMP/wprimary.git" )

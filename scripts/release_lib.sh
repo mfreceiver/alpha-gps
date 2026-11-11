@@ -379,21 +379,29 @@ assert_code_monotonic() {
 # ── 本地发布配置（主仓库参数外置；不入库）──────────────────────────────────────
 # 主发布仓库的主机/仓库路径/git 远端名不写进任何入库文件，改从本机 scripts/release.local.env
 # （已 .gitignore）或环境变量读取。文件格式：每行 `KEY=VALUE`；允许空行与以 '#' 开头的整行
-# 注释（注释内容可含中文，不被解释）；仅允许下列四个键；值只含 [A-Za-z0-9._:/-]；同键不得
+# 注释（注释内容可含中文，不被解释）；仅允许下列六个键；值只含 [A-Za-z0-9._:/-]；同键不得
 # 重复；不得含 CR/NUL/引号/空白/'$'/反引号/非 ASCII 值等。脚本**不 source 该文件**——逐行解析、逐值校验后再赋值，
 # 文件内容永远不会被当作 shell 代码执行（比“校验后 source”更严格）。
 #   ALPHAGPS_PRIMARY_HOST    主仓库 host[:port]
 #   ALPHAGPS_PRIMARY_REPO    主仓库 owner/repo
 #   ALPHAGPS_PRIMARY_REMOTE  本机 git 远端名（主仓库）
 #   ALPHAGPS_GITHUB_REMOTE   本机 git 远端名（GitHub；可选，默认 github）
-# 同名环境变量优先于文件（同样经过校验）。
+#   ALPHAGPS_SIGNING_KEYSTORE 签名 keystore 路径（可选；缺省用 release_build.sh 内置默认）。须为绝对路径，
+#                            或以 '~/' 开头（脚本把开头的 '~/' 替换为 $HOME/；这是唯一的展开，不做任何
+#                            shell 展开）；路径段只含 [A-Za-z0-9._-]，不含 '..'/空段
+#   ALPHAGPS_SIGNING_ALIAS   签名 key alias（可选；缺省用内置默认）；形态 [A-Za-z0-9][A-Za-z0-9._-]*
+# 同名环境变量优先于文件（同样经过校验）。配置了签名两键时覆盖调用方预设的
+# SIGNING_KEYSTORE_PATH / SIGNING_KEY_ALIAS；未配置则保持调用方的默认值不变。
 
 RL_CFG_EXAMPLE='示例（写入 scripts/release.local.env，该文件不入库；也可改用同名环境变量）：
   ALPHAGPS_PRIMARY_HOST=forge.example.com:443
   ALPHAGPS_PRIMARY_REPO=owner/alphagps
   ALPHAGPS_PRIMARY_REMOTE=origin
   # 可选（默认 github）：
-  # ALPHAGPS_GITHUB_REMOTE=github'
+  # ALPHAGPS_GITHUB_REMOTE=github
+  # 可选（签名 keystore / alias 不在内置默认位置时）：
+  # ALPHAGPS_SIGNING_KEYSTORE=~/.config/alphagps/signing/release.jks
+  # ALPHAGPS_SIGNING_ALIAS=release'
 
 # rl_cfg_py file <路径> → stdout 每行 KEY=VALUE（已校验）；rl_cfg_py value <KEY> <VALUE> → rc 0/1。
 # 任一违规 → stderr FAIL + 非零。
@@ -408,6 +416,9 @@ SHAPE = {
     "ALPHAGPS_PRIMARY_REPO": re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*"),
     "ALPHAGPS_PRIMARY_REMOTE": _remote,
     "ALPHAGPS_GITHUB_REMOTE": _remote,
+    # 绝对路径；开头的 '~/' 在下面先折成 '/'（见 check_value），其余字符一律按白名单校验
+    "ALPHAGPS_SIGNING_KEYSTORE": re.compile(r"/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*"),
+    "ALPHAGPS_SIGNING_ALIAS": re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*"),
 }
 
 def die(msg):
@@ -417,6 +428,8 @@ def die(msg):
 def check_value(key, val):
     if key not in SHAPE:
         die(f"不允许的键 '{key}'（仅允许 {', '.join(SHAPE)}）")
+    if key == "ALPHAGPS_SIGNING_KEYSTORE" and val.startswith("~/"):
+        val = val[1:]  # 仅允许开头的 '~/'（bash 侧替换为 $HOME/）；'~user'、中间的 '~' 仍被下面拒绝
     if not CHARS.fullmatch(val):
         die(f"{key} 的值含非法字符（仅允许 [A-Za-z0-9._:/-]，且非空）")
     if ".." in val:
@@ -463,11 +476,13 @@ PY
 
 # rl_load_release_config <env文件路径> <need_primary: 1|0>
 #   解析顺序：同名环境变量（非空）> 文件 > 默认值（仅 GITHUB_REMOTE=github）。
-#   设置全局：PRIMARY_HOST / PRIMARY_REPO / PRIMARY_REMOTE / GITHUB_REMOTE。
+#   设置全局：PRIMARY_HOST / PRIMARY_REPO / PRIMARY_REMOTE / GITHUB_REMOTE；
+#   另：配置了 ALPHAGPS_SIGNING_KEYSTORE（'~/' 前缀→$HOME/）/ ALPHAGPS_SIGNING_ALIAS 时才覆盖
+#   SIGNING_KEYSTORE_PATH / SIGNING_KEY_ALIAS（未配置则不动调用方预设的默认值）。
 #   need_primary=1 且主仓库三项任一缺失 → fail-closed 并打印占位示例（绝不回退到任何内置真实值）。
 #   文件不存在不是错误（全部由环境变量提供即可）；文件存在但非法 → fail-closed。
 rl_load_release_config() {
-  local file=${1:-} need=${2:-1} line k v src missing=""
+  local file=${1:-} need=${2:-1} line k v src missing="" cfg_ks="" cfg_alias=
   local -A fileval=()
   local parsed
   if [[ -n "$file" && ( -e "$file" || -L "$file" ) ]]; then
@@ -480,7 +495,8 @@ rl_load_release_config() {
     done <<<"$parsed"
   fi
   PRIMARY_HOST=""; PRIMARY_REPO=""; PRIMARY_REMOTE=""; GITHUB_REMOTE=""
-  for k in ALPHAGPS_PRIMARY_HOST ALPHAGPS_PRIMARY_REPO ALPHAGPS_PRIMARY_REMOTE ALPHAGPS_GITHUB_REMOTE; do
+  for k in ALPHAGPS_PRIMARY_HOST ALPHAGPS_PRIMARY_REPO ALPHAGPS_PRIMARY_REMOTE ALPHAGPS_GITHUB_REMOTE \
+           ALPHAGPS_SIGNING_KEYSTORE ALPHAGPS_SIGNING_ALIAS; do
     v=${!k:-}; src=env
     if [[ -z "$v" ]]; then v=${fileval[$k]:-}; src=file; fi
     if [[ -n "$v" && "$src" == env ]]; then
@@ -491,8 +507,18 @@ rl_load_release_config() {
       ALPHAGPS_PRIMARY_REPO)   PRIMARY_REPO=$v ;;
       ALPHAGPS_PRIMARY_REMOTE) PRIMARY_REMOTE=$v ;;
       ALPHAGPS_GITHUB_REMOTE)  GITHUB_REMOTE=$v ;;
+      ALPHAGPS_SIGNING_KEYSTORE) cfg_ks=$v ;;
+      ALPHAGPS_SIGNING_ALIAS)  cfg_alias=$v ;;
     esac
   done
+  if [[ -n "$cfg_ks" ]]; then
+    if [[ "$cfg_ks" == "~/"* ]]; then
+      [[ "${HOME:-}" == /* ]] || { rl_fail "本地发布配置: ALPHAGPS_SIGNING_KEYSTORE 使用 '~/' 但 HOME 不是绝对路径，fail-closed"; return 1; }
+      cfg_ks=${HOME%/}/${cfg_ks#"~/"}
+    fi
+    SIGNING_KEYSTORE_PATH=$cfg_ks
+  fi
+  [[ -z "$cfg_alias" ]] || SIGNING_KEY_ALIAS=$cfg_alias
   [[ -n "$GITHUB_REMOTE" ]] || GITHUB_REMOTE=github
   if [[ "$need" == 1 ]]; then
     [[ -n "$PRIMARY_HOST" ]]   || missing+=" ALPHAGPS_PRIMARY_HOST"

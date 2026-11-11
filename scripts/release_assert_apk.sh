@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# alpha-gps APK 断言（移植自 dshdroid/scripts/release_assert_apk.sh，fail-closed 全硬门）：
+# alpha-gps APK 断言（移植自另一个内部项目的发版脚本，fail-closed 全硬门）：
 #   apksigner: verify 通过 + 单一签名者 + 证书 SHA256 与期望一致 + 拒绝 debug 主体
 #   aapt badging: package=cn.vectory.alphagps（app/build.gradle.kts applicationId）、
 #                 INTERNET 权限、versionName/versionCode 与期望一致

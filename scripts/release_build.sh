@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# alpha-gps 发版脚本（精简移植自 dshdroid/scripts/release_build.sh，保留 fail-closed 精神）：
+# alpha-gps 发版脚本（精简移植自另一个内部项目的发版脚本，保留 fail-closed 精神）：
 #   - 版本注入：app/build.gradle.kts 的 versionName 硬编码（无 v 前缀，如 "0.1.0"），构建前
 #     sed 改写、构建后（含失败）自动还原；versionCode 实际值来自产物 manifest，
 #     预期值来自仓库根 gradle.properties 的 alphagps.versionCode（平面文件严格解析，
@@ -15,6 +15,9 @@
 #     重算 sha256 对账。GitHub 失败**不回滚**主仓库，退出码 40（区别于主仓库失败的 1）。
 #   - 主仓库参数（host/repo/本机远端名）不入库：scripts/release.local.env 或 ALPHAGPS_PRIMARY_*
 #     环境变量（见 scripts/release.local.env.example）；缺失 fail-closed
+#   - 签名 keystore 路径/alias 默认 ~/.config/alphagps/signing/release.jks / release；本机位置不同时由
+#     scripts/release.local.env（或环境变量）的 ALPHAGPS_SIGNING_KEYSTORE / ALPHAGPS_SIGNING_ALIAS 覆盖
+#     （值校验见 release_lib.sh；口令仍只来自 ~/.gradle/gradle.properties，经 env 传递）
 #   - 硬红线：release 资产只上传本次 APK；任何 *.jks/*.keystore/*.p12/*.pass/*.key
 #     绝不上传；口令/token 只经 stdin/curl 配置流传递，绝不进 argv/日志
 #   - GitHub 推送目的地：验证远端的**全部**有效目的地（fetch 与 push 两侧、含 insteadOf/pushurl/
@@ -45,8 +48,10 @@ REPO_PROPS="$REPO_ROOT/gradle.properties"
 OUT_APK_DIR="$REPO_ROOT/app/build/outputs/apk/release"
 BUILD_GRADLE="$REPO_ROOT/app/build.gradle.kts"
 GRADLE_PROPS=$HOME/.gradle/gradle.properties
-SIGNING_KEYSTORE_PATH=$HOME/.config/dshdroid/signing/dshdroid.jks
-SIGNING_KEY_ALIAS=dshdroid
+# 签名 keystore / alias 的默认值；可被 release.local.env 或环境变量 ALPHAGPS_SIGNING_KEYSTORE /
+# ALPHAGPS_SIGNING_ALIAS 覆盖（在下面 rl_load_release_config 之后生效，见 release_lib.sh）
+SIGNING_KEYSTORE_PATH=$HOME/.config/alphagps/signing/release.jks
+SIGNING_KEY_ALIAS=release
 PINNED_CERT_SHA256="18ff24c56bc52533c75ec709ea53497aa4323dac13c511979ac0a5fd7f9d97d7"
 # 本仓库 versionName 硬编码无 v 前缀（如 "0.1.0"），产物内嵌 versionName = v$VERSION_NAME
 # 主发布仓库参数（PRIMARY_HOST / PRIMARY_REPO / PRIMARY_REMOTE）不内置于仓库：从不入库的
@@ -72,6 +77,9 @@ GitHub 选项（仅在会执行 GitHub 步骤的模式下有效）:
         主仓库已成功且不回滚，用 --publish-github-only 重跑）
 配置: 主仓库 host/repo/远端名见 scripts/release.local.env（不入库）；GitHub 远端名默认 github，需先
       git remote add github https://github.com/mfreceiver/alpha-gps.git
+      签名 keystore 默认 ~/.config/alphagps/signing/release.jks、alias 默认 release；本机不同则在
+      scripts/release.local.env 设 ALPHAGPS_SIGNING_KEYSTORE（绝对路径或 ~/ 开头）/ ALPHAGPS_SIGNING_ALIAS
+      （格式见 scripts/release.local.env.example；同名环境变量优先）
 USAGE
 }
 ALLOW_DIRTY=0; PUBLISH=0; PUBLISH_ONLY=0; PUBLISH_GH_ONLY=0

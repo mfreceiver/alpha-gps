@@ -434,7 +434,7 @@ GH_TOKEN_VALUE=ghp_FAKEtoken123
 make_sb() { # $1=名称 → $TMP/$1（沙箱仓库）；同时建 $TMP/$1-primary.git 与 $TMP/$1-github.git
   local SB=$TMP/$1
   rm -rf -- "$SB" "$SB-primary.git" "$SB-github.git"
-  mkdir -p "$SB/scripts" "$SB/app" "$SB/home/jdk/bin" "$SB/home/.gradle" "$SB/home/.config/dshdroid/signing" \
+  mkdir -p "$SB/scripts" "$SB/app" "$SB/home/jdk/bin" "$SB/home/.gradle" "$SB/home/.config/alphagps/signing" \
            "$SB/sdk/build-tools/33.0.0" "$SB/release"
   cp -- "$HERE/release_build.sh" "$HERE/release_version_inject.sh" "$HERE/release_lib.sh" "$HERE/release_assert_apk.sh" "$SB/scripts/"
   printf 'org.gradle.jvmargs=-Xmx1m\nalphagps.versionCode=%s\n' "$FIXTURE_CODE" > "$SB/gradle.properties"
@@ -446,7 +446,7 @@ make_sb() { # $1=名称 → $TMP/$1（沙箱仓库）；同时建 $TMP/$1-primar
   sha_col=$(sed 's/../&:/g; s/:$//' <<<"$pin")
   printf '#!/usr/bin/env bash\nif [[ "${1:-}" == -list ]]; then printf "  SHA256: %%s\\n" "%s"; exit 0; fi\nexit 1\n' \
     "$sha_col" > "$SB/home/jdk/bin/keytool"; chmod +x "$SB/home/jdk/bin/keytool"
-  printf '#!/usr/bin/env bash\nif [[ "${1:-} ${2:-}" == "verify --print-certs" ]]; then printf "Signer #1 certificate DN: CN=dshdroid\\nSigner #1 certificate SHA-256 digest: %s\\n" "%s"; exit 0; fi\n[[ "${1:-}" == verify ]] && exit 0\nexit 1\n' \
+  printf '#!/usr/bin/env bash\nif [[ "${1:-} ${2:-}" == "verify --print-certs" ]]; then printf "Signer #1 certificate DN: CN=release\\nSigner #1 certificate SHA-256 digest: %s\\n" "%s"; exit 0; fi\n[[ "${1:-}" == verify ]] && exit 0\nexit 1\n' \
     "$pin" > "$SB/sdk/build-tools/33.0.0/apksigner"; chmod +x "$SB/sdk/build-tools/33.0.0/apksigner"
   cat > "$SB/sdk/build-tools/33.0.0/aapt" <<'AAPT'
 #!/usr/bin/env bash
@@ -459,7 +459,7 @@ AAPT
   chmod +x "$SB/sdk/build-tools/33.0.0/aapt"
   printf 'sdk.dir=%s\n' "$SB/sdk" > "$SB/local.properties"
   printf 'DSH_KEYSTORE_PASSWORD=x\nDSH_KEY_PASSWORD=x\n' > "$SB/home/.gradle/gradle.properties"
-  printf 'placeholder\n' > "$SB/home/.config/dshdroid/signing/dshdroid.jks"
+  printf 'placeholder\n' > "$SB/home/.config/alphagps/signing/release.jks"
   printf 'https://ghuser:%s@github.com\nhttps://puser:ppw@forge.example.com:443\n' "$GH_TOKEN_VALUE" > "$SB/home/.git-credentials"
   printf '[credential]\n\thelper = store --file=%s/home/.git-credentials\n' "$SB" > "$SB/home/.gitconfig"
   ( cd "$SB" && git init -q && git add -A . && git -c user.email=t@t -c user.name=t commit -qm init && git tag v0.1.1 )
