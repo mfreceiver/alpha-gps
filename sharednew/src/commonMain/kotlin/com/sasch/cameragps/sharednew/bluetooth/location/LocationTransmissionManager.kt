@@ -45,8 +45,21 @@ class LocationTransmissionManager(
     private val isTransmissionAllowed: () -> Boolean = { true },
     /** Called with the device identifier each time a location packet was accepted into the BLE queue (never the packet). */
     private val onPacketQueued: (String) -> Unit = {},
+    /**
+     * Display only: called with the accuracy/time of every fix the source delivers (before any
+     * gating) and with null on [shutdown]. Never influences what is sent or when.
+     */
+    private val onFixObserved: (PhoneLocationFix?) -> Unit = {},
 ) {
     private val log = logging()
+
+    private val _latestFix = MutableStateFlow<PhoneLocationFix?>(null)
+
+    /**
+     * Read-only quality of the phone's latest fix (accuracy radius + fix time, no coordinates),
+     * whether or not the gating below used it. Display only; never read by the send logic.
+     */
+    val latestFix: StateFlow<PhoneLocationFix?> = _latestFix
 
     private val _events = Channel<LocationEvent>(Channel.UNLIMITED)
     val events: Flow<LocationEvent> = _events.receiveAsFlow()
@@ -91,6 +104,12 @@ class LocationTransmissionManager(
     fun shutdown() {
         stopUpdates()
         latest = null
+        publishFix(null)
+    }
+
+    private fun publishFix(fix: PhoneLocationFix?) {
+        _latestFix.value = fix
+        onFixObserved(fix)
     }
 
     private fun startIfNeeded() {
@@ -142,6 +161,8 @@ class LocationTransmissionManager(
     }
 
     private fun onNewLocation(location: GeoLocation) {
+        // Display side channel first; the gating and sending below are unchanged.
+        publishFix(PhoneLocationFix(location.horizontalAccuracyMeters, location.timestampMillis))
         if (!isTransmissionAllowed()) return
         val current = latest
         if (!shouldUpdateLocation(location, current)) return

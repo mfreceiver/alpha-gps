@@ -95,15 +95,41 @@ class LocationTransmissionStateTest {
         assertEquals(listOf("A", "A"), f.queued)
     }
 
+    @Test
+    fun exposesTheLatestFixAccuracyWithoutChangingWhatIsSent() = runTest {
+        val f = Fixture(backgroundScope)
+        assertEquals(null, f.manager.latestFix.value)
+        f.manager.onDeviceReady("A")
+        runCurrent()
+        val first = fix()
+        f.source.locations.emit(first)
+        runCurrent()
+        assertEquals(PhoneLocationFix(5.0, first.timestampMillis), f.manager.latestFix.value)
+        assertEquals(f.manager.latestFix.value, f.fixes.last())
+        assertEquals(listOf("A"), f.queued)
+        // Seen even while sending is not allowed (the gate decides sending, not what the phone sees).
+        f.allowed = false
+        val second = GeoLocation(52.52, 13.405, 42.0, first.timestampMillis + 1_000)
+        f.source.locations.emit(second)
+        runCurrent()
+        assertEquals(PhoneLocationFix(42.0, second.timestampMillis), f.manager.latestFix.value)
+        assertEquals(listOf("A"), f.queued)
+        f.manager.shutdown()
+        assertEquals(null, f.manager.latestFix.value)
+        assertEquals(null, f.fixes.last())
+    }
+
     private class Fixture(scope: CoroutineScope) {
         val source = FakeSource()
         val port = FakePort()
         val ready = mutableSetOf("A")
         var allowed = true
         val queued = mutableListOf<String>()
+        val fixes = mutableListOf<PhoneLocationFix?>()
         val manager = LocationTransmissionManager(
             source, { ready }, { null }, port, scope, { allowed },
             onPacketQueued = { queued += it },
+            onFixObserved = { fixes += it },
         )
     }
 
