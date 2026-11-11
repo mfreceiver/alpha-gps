@@ -15,6 +15,10 @@
 #   场景 11 入库示例 release.local.env.example 可被解析，.gitignore 忽略真实文件
 #   场景 12 release_build.sh 接线：缺配置 → 非零退出且在任何构建/签名步骤之前；--help 无需配置
 #   场景 13 变异验证：弱实现（值字符校验被删 / 重复键检查被删）必须放行对应坏输入
+#   场景 14 可选键 ALPHAGPS_SIGNING_KEYSTORE / ALPHAGPS_SIGNING_ALIAS（库层）：未配置保持调用方默认值；
+#           配置后生效（'~/'→$HOME/、绝对路径）；env 优先于文件；非法值/形态 fail-closed；不执行；变异验证
+#   场景 15 release_build.sh 接线：默认 / 配置 / env 覆盖三种情形下传给 keytool 的 -keystore / -alias；
+#           非法配置在签名预检之前终止；--help 提及两键
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)
@@ -208,6 +212,161 @@ bash -c 'source "$1"; rl_cfg_py file "$2"' _ "$MUTLIB" "$TMP/mutB.env" >/dev/nul
 check "变异B（删重复键检查）放行重复键（rc=0）" test "$RC" -eq 0
 bash -c 'source "$1"; rl_cfg_py file "$2"' _ "$LIB" "$TMP/mutB.env" >/dev/null 2>&1; RC=$?
 check "真实库拒绝重复键" test "$RC" -ne 0
+
+echo "== 场景 14: 签名 keystore/alias 可选键（库层） =="
+DEF_KS=/def/home/.config/alphagps/signing/release.jks; DEF_AL=release
+# sload <文件> [VAR=val ...] → 干净子 shell（HOME=/home/user）里预置默认值后加载，打印 SIGNING_KEYSTORE_PATH|SIGNING_KEY_ALIAS
+sload() {
+  local file=$1; shift
+  env -u ALPHAGPS_PRIMARY_HOST -u ALPHAGPS_PRIMARY_REPO -u ALPHAGPS_PRIMARY_REMOTE -u ALPHAGPS_GITHUB_REMOTE \
+      -u ALPHAGPS_SIGNING_KEYSTORE -u ALPHAGPS_SIGNING_ALIAS HOME=/home/user "$@" \
+    bash -c 'source "$1"; SIGNING_KEYSTORE_PATH=$2; SIGNING_KEY_ALIAS=$3; rl_load_release_config "$4" 1 || exit 1; printf "%s|%s\n" "$SIGNING_KEYSTORE_PATH" "$SIGNING_KEY_ALIAS"' _ "$LIB" "$DEF_KS" "$DEF_AL" "$file"
+}
+sign_file() { # $1=路径 $2...=追加行（原样）；先写合法主仓库三项
+  local f=$1; shift; good_file "$f"; printf '%s\n' "$@" >> "$f"
+}
+sign_rejects() { # sign_rejects <desc> <追加行> <应被点名的键> [VAR=val ...(env)]
+  local desc=$1 line=$2 key=$3; shift 3
+  sign_file "$TMP/s.env" "$line"
+  sload "$TMP/s.env" "$@" >"$TMP/sout" 2>"$TMP/serr"; local rc=$?
+  check "拒绝: $desc" test "$rc" -ne 0
+  check "拒绝: $desc → stderr 含 FAIL 且点名 $key" bash -c 'grep -q FAIL "$1" && grep -q "$2" "$1"' _ "$TMP/serr" "$key"
+  check "拒绝: $desc → 无标准输出（不输出被污染的值）" test ! -s "$TMP/sout"
+}
+good_file "$TMP/g14.env"
+OUT=$(sload "$TMP/g14.env" 2>"$TMP/err"); RC=$?
+check "未配置 → 保持调用方默认 keystore/alias" test "$RC" -eq 0 -a "$OUT" == "$DEF_KS|$DEF_AL"
+sign_file "$TMP/c14.env" 'ALPHAGPS_SIGNING_KEYSTORE=~/.config/custom/my.jks' 'ALPHAGPS_SIGNING_ALIAS=myalias'
+OUT=$(sload "$TMP/c14.env" 2>"$TMP/err"); RC=$?
+check "配置后生效：'~/' → \$HOME/，alias 取配置值" test "$RC" -eq 0 -a "$OUT" == "/home/user/.config/custom/my.jks|myalias"
+sign_file "$TMP/c14b.env" 'ALPHAGPS_SIGNING_KEYSTORE=/opt/keys/release.jks'
+OUT=$(sload "$TMP/c14b.env" 2>"$TMP/err"); RC=$?
+check "绝对路径原样生效；只配 keystore 时 alias 仍为默认" test "$RC" -eq 0 -a "$OUT" == "/opt/keys/release.jks|$DEF_AL"
+sign_file "$TMP/c14c.env" 'ALPHAGPS_SIGNING_ALIAS=only-alias.1'
+OUT=$(sload "$TMP/c14c.env" 2>"$TMP/err"); RC=$?
+check "只配 alias 时 keystore 仍为默认" test "$RC" -eq 0 -a "$OUT" == "$DEF_KS|only-alias.1"
+OUT=$(sload "$TMP/c14.env" 'ALPHAGPS_SIGNING_ALIAS=envalias' 'ALPHAGPS_SIGNING_KEYSTORE=~/x/y.jks' 2>"$TMP/err"); RC=$?
+check "env 优先于文件（env 里的 '~/' 字面量同样替换为 \$HOME/）" test "$RC" -eq 0 -a "$OUT" == "/home/user/x/y.jks|envalias"
+OUT=$(sload "$TMP/c14.env" 'ALPHAGPS_SIGNING_ALIAS=' 'ALPHAGPS_SIGNING_KEYSTORE=' 2>"$TMP/err"); RC=$?
+check "env 为空串视为未设置 → 取文件值" test "$RC" -eq 0 -a "$OUT" == "/home/user/.config/custom/my.jks|myalias"
+OUT=$(sload "$TMP/c14.env" HOME=/home/user/ 2>"$TMP/err"); RC=$?
+check "HOME 带尾部 '/' 不产生双斜杠" test "$RC" -eq 0 -a "$OUT" == "/home/user/.config/custom/my.jks|myalias"
+OUT=$(sload "$TMP/c14.env" HOME=rel/home 2>"$TMP/err"); RC=$?
+check "使用 '~/' 但 HOME 非绝对路径 → fail-closed" test "$RC" -ne 0 -a "$(grep -c FAIL "$TMP/err")" -ge 1
+OUT=$(sload "$TMP/c14b.env" HOME=rel/home 2>"$TMP/err"); RC=$?
+check "绝对 keystore 路径不依赖 HOME" test "$RC" -eq 0 -a "$OUT" == "/opt/keys/release.jks|$DEF_AL"
+# 非法 keystore 值
+sign_rejects "keystore 含 \$HOME 展开" 'ALPHAGPS_SIGNING_KEYSTORE=$HOME/.config/x.jks' ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore 含 \${HOME} 展开" 'ALPHAGPS_SIGNING_KEYSTORE=${HOME}/x.jks' ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore '~user/' 形式" 'ALPHAGPS_SIGNING_KEYSTORE=~root/x.jks' ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore 单独 '~'" 'ALPHAGPS_SIGNING_KEYSTORE=~' ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore 仅 '~/'（无文件名）" 'ALPHAGPS_SIGNING_KEYSTORE=~/' ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore 路径中间的 '~'" 'ALPHAGPS_SIGNING_KEYSTORE=/a/~/x.jks' ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore 相对路径" 'ALPHAGPS_SIGNING_KEYSTORE=keys/x.jks' ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore 前导 '-'" 'ALPHAGPS_SIGNING_KEYSTORE=-x.jks' ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore 含 '..'（~/ 形式）" 'ALPHAGPS_SIGNING_KEYSTORE=~/../x.jks' ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore 含 '..'（绝对形式）" 'ALPHAGPS_SIGNING_KEYSTORE=/a/../x.jks' ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore 空路径段 '//'" 'ALPHAGPS_SIGNING_KEYSTORE=/a//x.jks' ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore 以 '/' 结尾" 'ALPHAGPS_SIGNING_KEYSTORE=/a/b/' ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore 含空格" 'ALPHAGPS_SIGNING_KEYSTORE=~/a b.jks' ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore 含命令替换" 'ALPHAGPS_SIGNING_KEYSTORE=~/$(id).jks' ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore 含反引号" 'ALPHAGPS_SIGNING_KEYSTORE=~/`id`.jks' ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore 含引号" "ALPHAGPS_SIGNING_KEYSTORE='~/x.jks'" ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore 含分号" 'ALPHAGPS_SIGNING_KEYSTORE=~/a;b.jks' ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore 含 ':'（白名单字符但形态不允许）" 'ALPHAGPS_SIGNING_KEYSTORE=~/a:b.jks' ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore 含非 ASCII" 'ALPHAGPS_SIGNING_KEYSTORE=~/密钥.jks' ALPHAGPS_SIGNING_KEYSTORE
+sign_rejects "keystore 空值" 'ALPHAGPS_SIGNING_KEYSTORE=' ALPHAGPS_SIGNING_KEYSTORE
+# 非法 alias 值
+sign_rejects "alias 含空格" 'ALPHAGPS_SIGNING_ALIAS=my alias' ALPHAGPS_SIGNING_ALIAS
+sign_rejects "alias 前导 '-'（keytool 选项注入）" 'ALPHAGPS_SIGNING_ALIAS=-storepass' ALPHAGPS_SIGNING_ALIAS
+sign_rejects "alias 含 '/'" 'ALPHAGPS_SIGNING_ALIAS=a/b' ALPHAGPS_SIGNING_ALIAS
+sign_rejects "alias 含 ':'" 'ALPHAGPS_SIGNING_ALIAS=a:b' ALPHAGPS_SIGNING_ALIAS
+sign_rejects "alias 含 \$ 展开" 'ALPHAGPS_SIGNING_ALIAS=$USER' ALPHAGPS_SIGNING_ALIAS
+sign_rejects "alias 含分号" 'ALPHAGPS_SIGNING_ALIAS=a;b' ALPHAGPS_SIGNING_ALIAS
+sign_rejects "alias 含非 ASCII" 'ALPHAGPS_SIGNING_ALIAS=别名' ALPHAGPS_SIGNING_ALIAS
+sign_rejects "alias 空值" 'ALPHAGPS_SIGNING_ALIAS=' ALPHAGPS_SIGNING_ALIAS
+sign_rejects "alias 含 '..'" 'ALPHAGPS_SIGNING_ALIAS=a..b' ALPHAGPS_SIGNING_ALIAS
+sign_rejects "重复 keystore 键" 'ALPHAGPS_SIGNING_KEYSTORE=/a/x.jks
+ALPHAGPS_SIGNING_KEYSTORE=/b/y.jks' ALPHAGPS_SIGNING_KEYSTORE
+# 非法 env 值（经 env 通道，同样校验、点名变量）
+good_file "$TMP/e14.env"
+for bad in '$HOME/x.jks' '~root/x.jks' 'rel/x.jks' '/a/../b.jks' '/a b/c.jks'; do
+  sload "$TMP/e14.env" "ALPHAGPS_SIGNING_KEYSTORE=$bad" >"$TMP/sout" 2>"$TMP/serr"; RC=$?
+  check "env keystore 非法值 [$bad] → 非零、点名变量、无输出" \
+    bash -c 'test "$1" -ne 0 && grep -q ALPHAGPS_SIGNING_KEYSTORE "$2" && test ! -s "$3"' _ "$RC" "$TMP/serr" "$TMP/sout"
+done
+for bad in '-x' 'a b' 'a;b' 'a/b'; do
+  sload "$TMP/e14.env" "ALPHAGPS_SIGNING_ALIAS=$bad" >"$TMP/sout" 2>"$TMP/serr"; RC=$?
+  check "env alias 非法值 [$bad] → 非零、点名变量、无输出" \
+    bash -c 'test "$1" -ne 0 && grep -q ALPHAGPS_SIGNING_ALIAS "$2" && test ! -s "$3"' _ "$RC" "$TMP/serr" "$TMP/sout"
+done
+# 文件内容绝不被执行
+rm -f "$TMP/pwned14"
+sign_file "$TMP/inj14.env" "ALPHAGPS_SIGNING_KEYSTORE=~/\$(touch $TMP/pwned14).jks" "ALPHAGPS_SIGNING_ALIAS=\`touch $TMP/pwned14\`"
+sload "$TMP/inj14.env" >/dev/null 2>&1; RC=$?
+check "命令替换/反引号被拒且 marker 未生成（未执行）" test "$RC" -ne 0 -a ! -e "$TMP/pwned14"
+# 变异：删形态校验后，':' 类值被放行（证明上面的 ':' 用例有效）；真实库拒绝
+sed 's/if not SHAPE\[key\].fullmatch(val):/if False:/' "$LIB" > "$TMP/release_lib_mut14.sh"
+printf 'ALPHAGPS_SIGNING_ALIAS=a:b\n' > "$TMP/mut14.env"
+bash -c 'source "$1"; rl_cfg_py file "$2"' _ "$TMP/release_lib_mut14.sh" "$TMP/mut14.env" >/dev/null 2>&1; RC=$?
+check "变异C（删形态校验）放行 alias 'a:b'（rc=0 才证明形态用例有效）" test "$RC" -eq 0
+bash -c 'source "$1"; rl_cfg_py file "$2"' _ "$LIB" "$TMP/mut14.env" >/dev/null 2>&1; RC=$?
+check "真实库拒绝同一输入" test "$RC" -ne 0
+# 变异：删 '~/' 折叠 → 合法的 '~/' 值被拒（证明折叠分支是用例 '~/ → $HOME/' 生效所必需）
+# 变异须语法有效（把折叠语句换成 pass，保持 if 体不空），并以控制组证明拒绝来自折叠缺失而非 Python 语法错误
+sed 's/val = val\[1:\]/pass/' "$LIB" > "$TMP/release_lib_mut14b.sh"
+printf 'ALPHAGPS_SIGNING_KEYSTORE=~/x.jks\n' > "$TMP/mut14b.env"
+printf 'ALPHAGPS_SIGNING_KEYSTORE=/opt/key.jks\n' > "$TMP/mut14c.env"
+bash -c 'source "$1"; rl_cfg_py file "$2"' _ "$TMP/release_lib_mut14b.sh" "$TMP/mut14b.env" >/dev/null 2>"$TMP/mut14b.err"; RC=$?
+check "变异D（折叠换成 pass）拒绝合法 '~/x.jks'（rc≠0 且非 Python 语法错误，才证明折叠用例有效）" \
+  bash -c 'test "$1" -ne 0 && ! grep -qi "IndentationError\|SyntaxError" "$2"' _ "$RC" "$TMP/mut14b.err"
+bash -c 'source "$1"; rl_cfg_py file "$2"' _ "$TMP/release_lib_mut14b.sh" "$TMP/mut14c.env" >/dev/null 2>&1; RC=$?
+check "变异D 控制组：合法绝对路径 '/opt/key.jks' 在变异库中仍通过（排除语法错误假阳性）" test "$RC" -eq 0
+bash -c 'source "$1"; rl_cfg_py file "$2"' _ "$LIB" "$TMP/mut14b.env" >/dev/null 2>&1; RC=$?
+check "真实库接受 '~/x.jks'" test "$RC" -eq 0
+
+echo "== 场景 15: release_build.sh 接线（keytool 实参 / 预检前终止 / --help） =="
+SB=$TMP/sb15; mkdir -p "$SB/scripts" "$SB/home/.gradle" "$SB/bin"
+cp -- "$HERE/release_build.sh" "$HERE/release_version_inject.sh" "$HERE/release_lib.sh" "$HERE/release_assert_apk.sh" "$SB/scripts/"
+printf 'DSH_KEYSTORE_PASSWORD=x\nDSH_KEY_PASSWORD=x\n' > "$SB/home/.gradle/gradle.properties"
+# 假 keytool：只记录 argv（不记录环境，口令走 env 不会出现），然后失败以止步于签名预检
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "%s/keytool.args"\nexit 1\n' "$SB" > "$SB/bin/keytool"
+chmod +x "$SB/bin/keytool"
+run15() { # run15 <日志> [VAR=val ...]
+  local log=$1; shift
+  rm -f "$SB/keytool.args"
+  ( cd "$SB" && env -u ALPHAGPS_PRIMARY_HOST -u ALPHAGPS_PRIMARY_REPO -u ALPHAGPS_PRIMARY_REMOTE -u ALPHAGPS_GITHUB_REMOTE \
+      -u ALPHAGPS_SIGNING_KEYSTORE -u ALPHAGPS_SIGNING_ALIAS HOME="$SB/home" PATH="$SB/bin:$PATH" "$@" \
+      timeout 30 bash scripts/release_build.sh 0.1.3 --allow-dirty ) > "$log" 2>&1
+}
+good_file "$SB/scripts/release.local.env"
+run15 "$TMP/w15a.log"; RC=$?
+check "默认：keystore 缺失时报内置默认路径（\$HOME/.config/alphagps/signing/release.jks）" \
+  bash -c 'test "$1" -ne 0 && grep -qF "keystore 不存在或不可读: $2/home/.config/alphagps/signing/release.jks" "$3"' _ "$RC" "$SB" "$TMP/w15a.log"
+mkdir -p "$SB/home/.config/alphagps/signing" "$SB/home/.config/custom"
+: > "$SB/home/.config/alphagps/signing/release.jks"; : > "$SB/home/.config/custom/my.jks"
+run15 "$TMP/w15b.log"; RC=$?
+check "默认：keytool 收到默认 -keystore 与 -alias release" \
+  bash -c 'grep -qF -- "-keystore $1/home/.config/alphagps/signing/release.jks " "$1/keytool.args" && grep -qE -- "-alias release( |$)" "$1/keytool.args"' _ "$SB"
+check "默认：失败信息含 alias 'release'" grep -qF "alias 'release'" "$TMP/w15b.log"
+sign_file "$SB/scripts/release.local.env" 'ALPHAGPS_SIGNING_KEYSTORE=~/.config/custom/my.jks' 'ALPHAGPS_SIGNING_ALIAS=myalias'
+run15 "$TMP/w15c.log"; RC=$?
+check "配置：keytool 收到 \$HOME 展开后的自定义 -keystore 与 -alias myalias" \
+  bash -c 'grep -qF -- "-keystore $1/home/.config/custom/my.jks " "$1/keytool.args" && grep -qE -- "-alias myalias( |$)" "$1/keytool.args"' _ "$SB"
+check "配置：不再使用默认路径/alias" bash -c '! grep -qF "alphagps/signing/release.jks" "$1/keytool.args" && ! grep -qE -- "-alias release( |$)" "$1/keytool.args"' _ "$SB"
+run15 "$TMP/w15d.log" ALPHAGPS_SIGNING_ALIAS=envalias; RC=$?
+check "env 覆盖文件：-alias envalias，keystore 仍取文件值" \
+  bash -c 'grep -qE -- "-alias envalias( |$)" "$1/keytool.args" && grep -qF -- "-keystore $1/home/.config/custom/my.jks " "$1/keytool.args"' _ "$SB"
+sign_file "$SB/scripts/release.local.env" 'ALPHAGPS_SIGNING_KEYSTORE=$HOME/.config/custom/my.jks'
+run15 "$TMP/w15e.log"; RC=$?
+check "非法 keystore 配置 → 非零，且在签名预检/keytool 之前终止" \
+  bash -c 'test "$1" -ne 0 && grep -q "ALPHAGPS_SIGNING_KEYSTORE" "$2" && ! grep -q "签名预检" "$2" && test ! -e "$3/keytool.args"' _ "$RC" "$TMP/w15e.log" "$SB"
+good_file "$SB/scripts/release.local.env"
+run15 "$TMP/w15f.log" ALPHAGPS_SIGNING_ALIAS='a b'; RC=$?
+check "非法 env alias → 非零且在签名预检前终止" \
+  bash -c 'test "$1" -ne 0 && grep -q "ALPHAGPS_SIGNING_ALIAS" "$2" && ! grep -q "签名预检" "$2" && test ! -e "$3/keytool.args"' _ "$RC" "$TMP/w15f.log" "$SB"
+( cd "$SB" && bash scripts/release_build.sh --help ) > "$TMP/w15g.log" 2>&1; RC=$?
+check "--help 退出 0 并说明两个签名键" bash -c 'test "$1" -eq 0 && grep -q ALPHAGPS_SIGNING_KEYSTORE "$2" && grep -q ALPHAGPS_SIGNING_ALIAS "$2"' _ "$RC" "$TMP/w15g.log"
 
 echo
 SCENARIOS=$(grep -c '^echo "== 场景' -- "$0")
