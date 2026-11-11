@@ -6,6 +6,7 @@ import com.sasch.cameragps.sharednew.bluetooth.coordinator.BleGattPort
 import com.sasch.cameragps.sharednew.bluetooth.coordinator.LocationDataConfig
 import com.sasch.cameragps.sharednew.bluetooth.coordinator.LocationPacketBuilder
 import com.sasch.cameragps.sharednew.bluetooth.coordinator.PlatformTimeZoneInfo
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -109,7 +110,14 @@ class LocationTransmissionManager(
 
     private fun publishFix(fix: PhoneLocationFix?) {
         _latestFix.value = fix
-        onFixObserved(fix)
+        // The observer is display only: a failing one must never stop collection or sending.
+        try {
+            onFixObserved(fix)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.w(e) { "Location fix observer failed, ignored" }
+        }
     }
 
     private fun startIfNeeded() {
