@@ -52,7 +52,7 @@ GRADLE_PROPS=$HOME/.gradle/gradle.properties
 # ALPHAGPS_SIGNING_ALIAS 覆盖（在下面 rl_load_release_config 之后生效，见 release_lib.sh）
 SIGNING_KEYSTORE_PATH=$HOME/.config/alphagps/signing/release.jks
 SIGNING_KEY_ALIAS=release
-PINNED_CERT_SHA256="18ff24c56bc52533c75ec709ea53497aa4323dac13c511979ac0a5fd7f9d97d7"
+PINNED_CERT_SHA256="a29cedb9af4ff4bbb80704cf60f476539281a3aeb30d3aa2adbcd660a83b0498"
 # 本仓库 versionName 硬编码无 v 前缀（如 "0.1.0"），产物内嵌 versionName = v$VERSION_NAME
 # 主发布仓库参数（PRIMARY_HOST / PRIMARY_REPO / PRIMARY_REMOTE）不内置于仓库：从不入库的
 # scripts/release.local.env 或环境变量 ALPHAGPS_PRIMARY_HOST/REPO/REMOTE 读取（见
