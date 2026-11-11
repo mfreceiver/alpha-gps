@@ -283,7 +283,6 @@
     <string name="whats_new_171_rx0">Fixed repeated Bluetooth disconnections during location sharing with cameras such as the Sony RX0 II when Always On is disabled.</string>
     <string name="whats_new_version">Version %1$s</string>
     <string name="whats_new_close">Got it</string>
-    <string name="whats_new_open">View release notes</string>
     <string name="whats_new_170_wifi_remote">New experimental Wi-Fi feature for browsing and downloading photos. Currently validated only with the Sony α6700.\n\nTo open it, tap your camera in the device list, then tap “Wi-Fi photo transfer”.</string>
     <string name="whats_new_162_time">View and change automatic time correction in your camera’s details. This setting controls whether the camera adjusts its date and time using your phone.</string>
     <string name="whats_new_162_notifications">Location transmission notifications now update more reliably.</string>
