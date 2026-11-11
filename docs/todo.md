@@ -63,7 +63,7 @@
 ### 37. 真机核对：设置页分组与下载格式“每次询问”弹层（批 R）
 - 做什么：装新版后验证：①设置页四组（通用：应用启用/语言/触感反馈/重新显示欢迎页；照片传输：下载格式；通知与后台：事件音效/电池与后台/开机自启；帮助与诊断：帮助/运行日志/更新日志），组标题为小号次要色文字、一组一张玻璃卡、无分隔线，亮暗主题与大字体下不截断；设置页已无日志级别；②运行日志页顶栏下“日志级别”行点开页内玻璃菜单（非系统弹窗），选中项有勾，切换后立即生效（VERBOSE/DEBUG 时新日志立刻出现）且重进应用保持，复制/清空不受影响；③下载格式四选一：从 0.3.0 升级的用户保持原选择（原片→JPG + RAW、仅 JPG→JPG），新装默认“每次询问”；④“每次询问”：预览页 JPG+RAW 照片点“下载”弹出页内选择（仅列该张实有格式与大小，默认选中 JPG，取消不下载），只有一种格式时直接下载；信息条显示“JPG x MB / RAW y MB”，网格格子不显示大小；选择模式悬浮按钮“下载所选 N 张”弹出 JPG / RAW / JPG + RAW 三项，各显示文件数、大小与将跳过数量，选区里没有 RAW 时 RAW 置灰，确认后进度/汇总/失败即停/重试剩余与固定格式一致；⑤RAW：只下 ARW，无 RAW 的照片在批量里跳过并汇总“N 个无 RAW”、格子带警示图标、预览页信息条“仅 JPG”并提示“此照片没有 RAW”，可手动“下载 JPG”；⑥TalkBack：弹层打开时焦点进入弹层、背后不可达，关闭后回到“下载”按钮；日志级别行朗读“日志级别，INFO”。
 - 验收：逐项无异常；弹层与菜单均为页内叠层，没有系统窗口。
-- 依据：批 R 提交（`WifiFormatPolicy.kt` 的 `WifiDownloadFormatSetting`/`RawOnly`/`NoRaw`/`batchFormatChoices`/`singleFormatChoices`，`WifiFormatChooser.kt`，`WifiPhotoViewer.kt` 的 `ViewerDownloadArea`，`WifiPhotoBrowser.kt`，`SharedLogViewerScreen.kt` 的 `LogLevelSelector`，`SettingsScreen.kt`，`PreferencesManager.wifiDownloadFormat`）；JVM 已覆盖：`WifiFormatPolicyTest`、`WifiPhotoViewerModelTest`、`WifiRemoteControllerTest`（RAW/询问批量）、`WifiFormatChooserTest`、`LogLevelOptionsTest`、`WifiDownloadFormatPreferencesTest`（app，含旧值迁移），`WifiFormatChooserComposeTest`（Robolectric：预览页询问弹层的选择/取消/单格式直下与批量行文案/置灰）；批量悬浮按钮→弹层的接线、日志级别菜单、设置页布局与焦点回位没有 Compose 用例，需真机。
+- 依据：批 R 提交（`WifiFormatPolicy.kt` 的 `WifiDownloadFormatSetting`/`RawOnly`/`NoRaw`/`batchFormatChoices`/`singleFormatChoices`，`WifiFormatChooser.kt`，`WifiPhotoViewer.kt` 的 `ViewerDownloadArea`，`WifiPhotoBrowser.kt`，`SharedLogViewerScreen.kt` 的 `LogLevelSelector`，`SettingsScreen.kt`，`PreferencesManager.wifiDownloadFormat`）；JVM 已覆盖：`WifiFormatPolicyTest`、`WifiPhotoViewerModelTest`、`WifiRemoteControllerTest`（RAW/询问批量）、`WifiFormatChooserTest`、`LogLevelOptionsTest`、`WifiDownloadFormatPreferencesTest`（app，含旧值迁移），`WifiFormatChooserComposeTest`（Robolectric：预览页询问弹层的选择/取消/单格式直下与批量行文案/置灰）；批量悬浮按钮→弹层的接线、日志级别菜单、设置页布局与焦点回位没有 Compose 用例，需真机。另：`ViewerDetailsDrawerComposeTest.kt:161-218` 用 `Dispatchers.Default` + `waitUntil` 5s + 两处 `Thread.sleep(600)`（等待“不再发生读取/重组”的负向断言窗口），建议改为统一测试调度器（可控虚拟时间）或显式完成信号；`WifiFormatChooserComposeTest` 未覆盖网格“下载所选 N 张”→chooser 的接线（上文已承认）。
 
 ## P2
 
@@ -90,6 +90,13 @@
 - 现状说明：无 `GlassBackground` 时 `CapsuleDialog` 走平台 `Dialog` 回退，新焦点逻辑**不作用于回退路径**（无叠层 entry → 面板不加 focusable、不请求焦点、不经焦点记忆），保持 0.2.1 行为，焦点由窗口管理（`GlassOverlayFocusTest.dialogWithoutGlassBackgroundKeepsTheWindowFallbackFocus` 待真机跑）。
 - 验收：①②通过；③④⑤与已知剩余缺口有结论（改或记录为接受）；不引入系统窗口；`OverlayFocusMemoryTest`、`OverlayHostLifecycleTest`、`OverlayFocusComposeTest` 仍通过。
 - 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/components/glass/GlassOverlayFocus.kt`（焦点路径、`OverlayFocusNode`/`OverlayFocusHandle`）、`GlassOverlayHost.kt`（层门控、entry 生命周期、栈式返回）、`GlassBackground.kt`（底页门控 + settle）、`GlassPopover.kt`；基线行为为叠加的 `PopupProperties(focusable = true)` / `Dialog` 窗口。
+
+### 38. 预览页详情抽屉不是完整键盘模态（沿袭 0.3.0，非 0.3.1 回归）
+- 做什么：竖屏详情抽屉对硬键盘/DPAD 用户不是完整模态：①`WifiPhotoViewer.kt:484-504`（`ViewerSemanticsGate`）只用 `clearAndSetSemantics` 对读屏隐藏背景，没有焦点闸，Tab/方向键仍可进入背后的照片/信息条/下载/胶片条；②`WifiPhotoViewer.kt:797-865`：关闭时 `onClose` 立即 `drawer.hide()` 并 `stripFocus.requestFocus()`，但 200ms 退出动画（`VIEWER_DETAILS_EXIT_MILLIS`）期间 sheet 仍在组合内、仍 `focusable()` 且带 `paneTitle` 语义；`NavigationBackHandler` 的 `isBackEnabled = open`，动画期间 Back 已不被抽屉接管；③快速重开（200ms 内再次打开）不会重启 `LaunchedEffect(Unit)` 的 sheet 焦点请求（sheet 未离开组合），焦点留在信息条/背景。
+- 复现：硬键盘/DPAD 打开详情后遍历焦点（应进不了背后控件）；关闭动画期间按 Tab/Back；关闭后 200ms 内重开，看焦点是否进入抽屉。
+- 建议：把可交互模态的 presence、背景 focus 与 semantics 隐藏、Back 启用统一到同一个状态（含退出动画期间），抽屉彻底离场后再恢复焦点到信息条；重开时重新请求 sheet 焦点（以 open 为 key）；补暂停 Compose clock 的退出动画/重开测试（参考 `overlayLayerGate`/`OverlayFocusComposeTest` 的做法）。
+- 验收：键盘焦点在抽屉打开及退出动画期间到不了背景；退出动画结束后焦点回信息条；200ms 内重开焦点进入抽屉；Back 在退出动画期间行为明确；有上述 Compose 用例并随 `testAndroidHostTest` 通过。
+- 依据：sol 对 23aafd0..594605b 的审阅（既有 P2，沿袭 0.3.0）；`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiPhotoViewer.kt`；`GlassOverlayFocus.kt` 的 `overlayLayerGate`；TalkBack 侧见 #19 ⑧。
 
 ## P3
 
