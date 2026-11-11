@@ -180,6 +180,17 @@ GlassBottomSheet(visible, onDismissRequest, modifier = Modifier, title: String? 
 // 下拉超过 35% 高度或快速下滑关闭；点遮罩 / 返回键关闭
 ```
 
+### 设置页（sharednew `ui/settings/`）
+```kotlin
+SharedSettingsGroup(title) { /* ColumnScope：组内各行 */ }  // 设置总览的分组：Caption + textSecondary 组标题（heading 语义）+ 一张 GlassCard，无分隔线
+SharedSettingsCard(title) { … }                              // 子页里的带 Heading 标题卡片
+SharedSettingsNavRow(title, onClick, description = null, value = null)
+SharedToggleRow(title, description, checked, onCheckedChange)
+SharedRadioOption(label, selected, onClick, description = null, enabled = true)  // 行级 selectable；外层 selectableGroup；enabled=false 置灰不可选
+```
+- 页内单选弹层范例：`WifiFormatChooserDialog`（`ui/remote/WifiFormatChooser.kt`，`CapsuleDialog` + `SharedRadioOption` 列表，取消左/确认右，无可选项时确认禁用）。
+- 页内下拉范例：运行日志页的日志级别行（`SharedLogViewerScreen.kt` `LogLevelSelector`：`glassAnchor` + `GlassMenu`，`selected` 打勾，行语义 `Role.DropdownList` + `stateDescription`）。
+
 ### 未提供
 - N14 `GlassFilmstrip`（可选）B0 未做：Viewer 胶片条继续用现有 `ViewerFilmstrip`，迁移 Viewer 的批次如需要再按 audit N14 规格（`GlassFloatingBar(level = Viewer)`、格 40 dp 圆角 8、当前项 2 dp onPhoto 环、其余 alpha .7）实现。
 

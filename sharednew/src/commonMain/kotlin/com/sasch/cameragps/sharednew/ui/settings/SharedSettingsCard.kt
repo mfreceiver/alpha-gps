@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Icon
@@ -49,6 +50,28 @@ fun SharedSettingsCard(
             modifier = Modifier.semantics { heading() },
         )
         content()
+    }
+}
+
+/**
+ * A titled group of the settings overview: a small section label (Caption, secondary colour, a
+ * heading for screen readers) above one G1 glass card holding the group's rows. Rows are separated by
+ * space, never by dividers.
+ */
+@Composable
+fun SharedSettingsGroup(
+    title: String,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = title,
+            style = AlphaType.Caption,
+            color = AlphaTheme.colors.textSecondary,
+            modifier = Modifier.padding(horizontal = 4.dp).semantics { heading() },
+        )
+        GlassCard(modifier = Modifier.fillMaxWidth(), content = content)
     }
 }
 

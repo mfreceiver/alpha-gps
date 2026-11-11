@@ -14,14 +14,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.whats_new_close
-import cameragps.sharednew.generated.resources.whats_new_open
 import cameragps.sharednew.generated.resources.whats_new_title
 import cameragps.sharednew.generated.resources.whats_new_version
-import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
-import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
-import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsCard
+import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsNavRow
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import org.jetbrains.compose.resources.stringResource
 
@@ -53,21 +50,19 @@ fun WhatsNewDialog(release: ReleaseNotes, onDismiss: () -> Unit) {
     }
 }
 
+/**
+ * "What's new" row of the settings' help & diagnostics group: the current version, opening the
+ * release notes in an in-page dialog. Hidden when there are no notes for this version.
+ */
 @Composable
-fun WhatsNewSettingsCard(state: WhatsNewState) {
+fun WhatsNewSettingsRow(state: WhatsNewState) {
     val release = state.release ?: return
     var showDialog by rememberSaveable { mutableStateOf(false) }
-    SharedSettingsCard(title = stringResource(Res.string.whats_new_title)) {
-        Text(
-            stringResource(Res.string.whats_new_version, release.version),
-            color = AlphaTheme.colors.onSurface,
-        )
-        CapsuleButton(
-            text = stringResource(Res.string.whats_new_open),
-            onClick = { showDialog = true },
-            role = CapsuleRole.Tonal,
-        )
-    }
+    SharedSettingsNavRow(
+        title = stringResource(Res.string.whats_new_title),
+        description = stringResource(Res.string.whats_new_version, release.version),
+        onClick = { showDialog = true },
+    )
     if (showDialog) {
         WhatsNewDialog(release) {
             state.dismiss()

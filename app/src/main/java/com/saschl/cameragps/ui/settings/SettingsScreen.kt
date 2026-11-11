@@ -4,12 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
@@ -23,15 +18,20 @@ import cameragps.sharednew.generated.resources.battery_optimization_settings_tit
 import cameragps.sharednew.generated.resources.event_sounds_open_section_description
 import cameragps.sharednew.generated.resources.event_sounds_title
 import cameragps.sharednew.generated.resources.m9_photo_transfer_title
+import cameragps.sharednew.generated.resources.r_settings_group_background
+import cameragps.sharednew.generated.resources.r_settings_group_general
+import cameragps.sharednew.generated.resources.r_settings_group_help
 import cameragps.sharednew.generated.resources.settings
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSnackbarHost
+import com.sasch.cameragps.sharednew.ui.components.glass.rememberGlassSnackbarHostState
 import com.sasch.cameragps.sharednew.ui.components.glass.isScrolledUnderTopBar
 import com.sasch.cameragps.sharednew.ui.settings.SharedLanguageSettingsCard
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsColumn
+import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsGroup
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsNavRow
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsScreen
-import com.sasch.cameragps.sharednew.whatsnew.WhatsNewSettingsCard
+import com.sasch.cameragps.sharednew.whatsnew.WhatsNewSettingsRow
 import com.sasch.cameragps.sharednew.whatsnew.WhatsNewState
-import com.saschl.cameragps.utils.PreferencesManager
 import kotlinx.serialization.Serializable
 import org.jetbrains.compose.resources.stringResource
 
@@ -104,56 +104,52 @@ private fun SettingsOverviewScreen(
         onBackClick = onBackClick,
         scrolled = scrollState.isScrolledUnderTopBar,
     ) { paddingValues ->
+        // In-page confirmation of "reset welcome" (no system Toast window).
+        val snackbar = rememberGlassSnackbarHostState()
+        GlassSnackbarHost(snackbar)
         SharedSettingsColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
             state = scrollState,
         ) {
-            AppControlsInlineSection()
-            SettingsCard(title = stringResource(Res.string.m9_photo_transfer_title)) {
+            SharedSettingsGroup(title = stringResource(Res.string.r_settings_group_general)) {
+                AppEnabledRow()
+                SharedLanguageSettingsCard()
+                HapticsRow()
+                ResetWelcomeButton(snackbar)
+            }
+            SharedSettingsGroup(title = stringResource(Res.string.m9_photo_transfer_title)) {
                 DownloadFormatSettingsRows()
             }
-            SharedSettingsNavRow(
-                title = stringResource(Res.string.event_sounds_title),
-                description = stringResource(Res.string.event_sounds_open_section_description),
-                onClick = { onOpenDestination(SettingsDestination.EventSounds) }
-            )
-            SharedSettingsNavRow(
-                title = stringResource(Res.string.battery_optimization_settings_title),
-                onClick = { onOpenDestination(SettingsDestination.BatteryOptimization) }
-            )
-            SharedLanguageSettingsCard()
-            // Help and the activity log moved here from the device list's top bar.
-            SharedSettingsNavRow(
-                title = stringResource(Res.string.a1_settings_help_title),
-                description = stringResource(Res.string.a1_settings_help_desc),
-                onClick = onHelpClick
-            )
-            SharedSettingsNavRow(
-                title = stringResource(Res.string.a1_settings_logs_title),
-                description = stringResource(Res.string.a1_settings_logs_desc),
-                onClick = onLogsClick
-            )
-            WhatsNewSettingsCard(whatsNew)
+            SharedSettingsGroup(title = stringResource(Res.string.r_settings_group_background)) {
+                SharedSettingsNavRow(
+                    title = stringResource(Res.string.event_sounds_title),
+                    description = stringResource(Res.string.event_sounds_open_section_description),
+                    onClick = { onOpenDestination(SettingsDestination.EventSounds) }
+                )
+                SharedSettingsNavRow(
+                    title = stringResource(Res.string.battery_optimization_settings_title),
+                    onClick = { onOpenDestination(SettingsDestination.BatteryOptimization) }
+                )
+                AutoStartAfterRebootRow()
+            }
+            // Help, the activity log (with its log level) and the release notes.
+            SharedSettingsGroup(title = stringResource(Res.string.r_settings_group_help)) {
+                SharedSettingsNavRow(
+                    title = stringResource(Res.string.a1_settings_help_title),
+                    description = stringResource(Res.string.a1_settings_help_desc),
+                    onClick = onHelpClick
+                )
+                SharedSettingsNavRow(
+                    title = stringResource(Res.string.a1_settings_logs_title),
+                    description = stringResource(Res.string.a1_settings_logs_desc),
+                    onClick = onLogsClick
+                )
+                WhatsNewSettingsRow(whatsNew)
+            }
         }
     }
-}
-
-@Composable
-private fun AppControlsInlineSection() {
-    val context = LocalContext.current
-    var isAppEnabled by remember {
-        mutableStateOf(PreferencesManager.isAppEnabled(context))
-    }
-
-    AppControlsCard(
-        isAppEnabled = isAppEnabled,
-        onAppEnabledChange = { enabled ->
-            isAppEnabled = enabled
-            PreferencesManager.setAppEnabled(context, enabled)
-        }
-    )
 }
 
 @Composable
