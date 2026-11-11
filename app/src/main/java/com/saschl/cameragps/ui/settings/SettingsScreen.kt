@@ -111,7 +111,6 @@ private fun SettingsOverviewScreen(
         ) {
             AppControlsInlineSection()
             PhotoTransferSettingsCard()
-            LogLevelSettingsCard()
             SharedSettingsNavRow(
                 title = stringResource(Res.string.event_sounds_title),
                 description = stringResource(Res.string.event_sounds_open_section_description),
