@@ -74,6 +74,12 @@ data class AlphaColors(
      * state — e.g. the "last write" metric of the device page. Text-safe on G1/G3 glass.
      */
     val accentTeal: Color,
+    /**
+     * Bluetooth brand blue for the Bluetooth status icon of the device page only — a recognisable
+     * glyph colour, not a state. Light #0082FC (brand); dark #4DA6FF (lightened: the brand value is
+     * only ≈2.4:1 on dark card glass). Non-text: ≥ 3:1 on G1 card glass (PaletteContrastTest).
+     */
+    val bluetoothBlue: Color,
     // Text roles that have no Material slot
     /** Role `textMuted`: disabled / placeholder / auxiliary counts. Opaque, ≥ 3:1 on every glass level. */
     val textMuted: Color,
@@ -172,6 +178,7 @@ val LightAlphaColors = AlphaColors(
     warningContainer = Color(0xFFFFE9B3),
     onWarningContainer = Color(0xFF261900),
     accentTeal = Color(0xFF006A6A),
+    bluetoothBlue = Color(0xFF0082FC),
     textMuted = Color(0xFF696E75),
     onPhoto = Color.White,
     onPhotoSecondary = Color.White.copy(alpha = 0.85f),
@@ -234,6 +241,7 @@ val DarkAlphaColors = AlphaColors(
     warningContainer = Color(0xFF5C4200),
     onWarningContainer = Color(0xFFFFE9B3),
     accentTeal = Color(0xFF6FD8D8),
+    bluetoothBlue = Color(0xFF4DA6FF),
     textMuted = Color(0xFFA3A8B0),
     onPhoto = Color.White,
     onPhotoSecondary = Color.White.copy(alpha = 0.85f),

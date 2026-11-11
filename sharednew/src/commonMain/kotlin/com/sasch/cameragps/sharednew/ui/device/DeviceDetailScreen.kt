@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -37,28 +36,18 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LifecycleStartEffect
 import cameragps.sharednew.generated.resources.Res
-import cameragps.sharednew.generated.resources.a1_bluetooth_connected_24px
 import cameragps.sharednew.generated.resources.cancel
 import cameragps.sharednew.generated.resources.device_connection_connect
 import cameragps.sharednew.generated.resources.m2_age_days
 import cameragps.sharednew.generated.resources.m2_age_hours
 import cameragps.sharednew.generated.resources.m2_age_just_now
 import cameragps.sharednew.generated.resources.m2_age_minutes
-import cameragps.sharednew.generated.resources.m2_battery_unknown
-import cameragps.sharednew.generated.resources.m2_battery_value
-import cameragps.sharednew.generated.resources.m2_battery_value_hours
-import cameragps.sharednew.generated.resources.m2_battery_value_minutes
-import cameragps.sharednew.generated.resources.m2_bluetooth_24px
-import cameragps.sharednew.generated.resources.m2_bt_auto_reconnect
 import cameragps.sharednew.generated.resources.m2_bt_connected
 import cameragps.sharednew.generated.resources.m2_bt_connecting
 import cameragps.sharednew.generated.resources.m2_bt_disconnected
 import cameragps.sharednew.generated.resources.m2_bt_disconnecting
-import cameragps.sharednew.generated.resources.m2_bt_manual_off
 import cameragps.sharednew.generated.resources.m2_card_location
 import cameragps.sharednew.generated.resources.m2_cell_last_write
-import cameragps.sharednew.generated.resources.m2_cell_signal
-import cameragps.sharednew.generated.resources.m2_cell_written
 import cameragps.sharednew.generated.resources.m2_error_24px
 import cameragps.sharednew.generated.resources.m2_photo_library_24px
 import cameragps.sharednew.generated.resources.m2_photo_transfer
@@ -66,35 +55,29 @@ import cameragps.sharednew.generated.resources.m2_photo_transfer_bt_failed
 import cameragps.sharednew.generated.resources.m2_photo_transfer_hint
 import cameragps.sharednew.generated.resources.m2_photo_transfer_hint_bt_first
 import cameragps.sharednew.generated.resources.m2_schedule_24px
-import cameragps.sharednew.generated.resources.m2_signal_24px
-import cameragps.sharednew.generated.resources.m2_signal_excellent
-import cameragps.sharednew.generated.resources.m2_signal_fair
-import cameragps.sharednew.generated.resources.m2_signal_good
-import cameragps.sharednew.generated.resources.m2_signal_poor
-import cameragps.sharednew.generated.resources.m2_time_sync_applied
-import cameragps.sharednew.generated.resources.m2_time_sync_failed
-import cameragps.sharednew.generated.resources.m2_time_sync_in_progress
-import cameragps.sharednew.generated.resources.m2_time_sync_not_run
-import cameragps.sharednew.generated.resources.m2_time_sync_rejected
-import cameragps.sharednew.generated.resources.m2_time_sync_unconfirmed
-import cameragps.sharednew.generated.resources.m2_time_sync_unsupported
 import cameragps.sharednew.generated.resources.m2_upload_24px
 import cameragps.sharednew.generated.resources.m2_value_none
+import cameragps.sharednew.generated.resources.m2_gps_fixed_24px
+import cameragps.sharednew.generated.resources.q_alert_location_disabled
+import cameragps.sharednew.generated.resources.q_alert_location_write_failed
+import cameragps.sharednew.generated.resources.q_alert_time_sync_failed
+import cameragps.sharednew.generated.resources.q_alert_time_sync_rejected
+import cameragps.sharednew.generated.resources.q_cell_location_signal
+import cameragps.sharednew.generated.resources.q_cell_location_writes
+import cameragps.sharednew.generated.resources.q_location_accuracy
+import com.sasch.cameragps.sharednew.bluetooth.location.PhoneLocationFix
 import com.sasch.cameragps.sharednew.bluetooth.status.CameraLiveStatus
 import com.sasch.cameragps.sharednew.bluetooth.status.SignalLevel
-import com.sasch.cameragps.sharednew.bluetooth.status.TimeSyncOutcome
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleSize
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressCircle
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressSize
-import com.sasch.cameragps.sharednew.ui.components.glass.InfoTag
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusItem
-import com.sasch.cameragps.sharednew.ui.components.glass.StatusLine
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusRow
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusTone
-import com.sasch.cameragps.sharednew.ui.components.glass.statusIconColor
+import com.sasch.cameragps.sharednew.ui.components.glass.statusToneColor
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.sasch.cameragps.sharednew.ui.theme.AlphaType
@@ -103,6 +86,7 @@ import com.sasch.cameragps.sharednew.ui.theme.windowClassOf
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import kotlin.math.roundToInt
 import kotlin.time.Clock
 
 /**
@@ -110,12 +94,13 @@ import kotlin.time.Clock
  * Ⓘ) and the [com.sasch.cameragps.sharednew.ui.components.glass.GlassBackground].
  *
  * - One status card (connection + location transfer as one unit, one glass level and spacing):
- *   status line (Bluetooth state; while connected the location/time-correction state is its
- *   supporting text) with a fixed trailing slot — a non-interactive "connected" Bluetooth icon,
- *   "Cancel" while connecting, "Connect" when off ([connectionCardTrailing]); the battery tag; then
- *   the "Location transfer" caption over three tinted cells (signal by level / written / last
- *   write). The manual disconnect lives in the Ⓘ dialog ([DeviceDialogs]) and is persisted by
- *   [DeviceDetailViewModel.disconnect]; nothing reconnects until the user taps Connect.
+ *   the Bluetooth state as the title, with one warning line under it only when something is wrong
+ *   ([statusCardAlert]); on the right the cached camera battery (hidden when unknown), the
+ *   Bluetooth glyph in its signal ring, and "Cancel" while connecting / "Connect" when off
+ *   ([connectionCardTrailing]); then the "Location transfer" caption over three tinted cells
+ *   (phone location signal / location writes / last write). The manual disconnect lives in the Ⓘ
+ *   dialog ([DeviceDialogs]) and is persisted by [DeviceDetailViewModel.disconnect]; nothing
+ *   reconnects until the user taps Connect.
  * - "Photo transfer" pinned to the bottom (52 dp, aligned with the card edges): opens the Wi-Fi
  *   flow ([onWifiRemote]) once Bluetooth is ready, connecting Bluetooth first when needed
  *   ([DeviceDetailViewModel.requestPhotoTransfer]).
@@ -134,13 +119,13 @@ fun DeviceDetailContent(
     onWifiRemote: (() -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
-    val state = viewModel.uiState.collectAsState().value
     val sessions by viewModel.sessions.collectAsState()
     val session = sessions[deviceId.uppercase()]
     val status = deviceConnectionStatus(session)
     val pending by viewModel.pending.collectAsState()
     val photoTransfer by viewModel.photoTransfer.collectAsState()
     val live by remember(deviceId) { viewModel.liveStatus(deviceId) }.collectAsState(initial = null)
+    val phoneFix by viewModel.phoneLocation.collectAsState(initial = null)
     val now by produceState(Clock.System.now().toEpochMilliseconds()) {
         while (true) {
             delay(TICK_MILLIS)
@@ -180,11 +165,18 @@ fun DeviceDetailContent(
     }
 
     val statusCard: @Composable () -> Unit = {
+        val headline = connectionHeadline(status, pending)
         DeviceStatusCard(
-            headline = connectionHeadline(status, pending),
+            headline = headline,
             trailing = connectionCardTrailing(status, pending),
-            manuallyOff = !state.isDeviceEnabled,
+            alert = statusCardAlert(
+                headline = headline,
+                locationDisabledByCamera = session?.locationDisabledByCamera == true,
+                gps = live?.gps,
+                timeSync = live?.timeSync?.outcome,
+            ),
             live = live,
+            phoneFix = phoneFix,
             nowMillis = now,
             onConnect = { viewModel.connect(deviceId) },
             onCancelConnecting = { viewModel.cancelConnecting(deviceId) },
@@ -248,22 +240,24 @@ fun DeviceDetailContent(
 }
 
 /**
- * The page's one status card: connection state + battery + the location-transfer metrics. One glass
- * level, one padding and one caption style, so connection and transfer read as one unit.
+ * The page's one status card: connection state (+ one warning line only when something is wrong),
+ * battery and Bluetooth signal on the right, then the location-transfer metrics. One glass level,
+ * one padding and one caption style, so connection and transfer read as one unit.
  */
 @Composable
 private fun DeviceStatusCard(
     headline: ConnectionHeadline,
     trailing: ConnectionCardTrailing,
-    manuallyOff: Boolean,
+    alert: StatusCardAlert,
     live: CameraLiveStatus?,
+    phoneFix: PhoneLocationFix?,
     nowMillis: Long,
     onConnect: () -> Unit,
     onCancelConnecting: () -> Unit,
 ) {
+    val colors = AlphaTheme.colors
     GlassCard(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            val tone = connectionTone(headline)
             val title = stringResource(
                 when (headline) {
                     ConnectionHeadline.Connected -> Res.string.m2_bt_connected
@@ -272,71 +266,62 @@ private fun DeviceStatusCard(
                     ConnectionHeadline.Disconnected -> Res.string.m2_bt_disconnected
                 },
             )
-            val supporting = when (headline) {
-                ConnectionHeadline.Connected -> timeSyncText(live?.timeSync?.outcome ?: TimeSyncOutcome.NotRun)
-                ConnectionHeadline.Disconnected ->
-                    stringResource(if (manuallyOff) Res.string.m2_bt_manual_off else Res.string.m2_bt_auto_reconnect)
-                else -> null
-            }
-            StatusLine(
-                title = title,
-                tone = tone,
-                supportingText = supporting,
-                modifier = Modifier
-                    .weight(1f)
-                    .semantics { liveRegion = LiveRegionMode.Polite },
-            )
-            // Fixed trailing slot: the content changes, its place does not.
-            Box(
+            val alertText = statusCardAlertText(alert)
+            Column(
                 Modifier
-                    .padding(start = 8.dp)
-                    .heightIn(min = AlphaDimens.minTouchTarget)
-                    .widthIn(min = AlphaDimens.minTouchTarget),
-                contentAlignment = Alignment.CenterEnd,
+                    .weight(1f)
+                    .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
+                Text(title, style = AlphaType.Heading, color = colors.textPrimary)
+                if (alertText != null) {
+                    Text(alertText, style = AlphaType.Caption, color = statusToneColor(StatusTone.Warning, colors))
+                }
+            }
+            Row(
+                Modifier.padding(start = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                val battery = batteryDisplay(live?.battery, nowMillis)
+                if (battery is BatteryDisplay.Value) BatteryBlock(battery)
+                val connected = trailing == ConnectionCardTrailing.ConnectedIndicator
+                BluetoothSignalRing(
+                    connected = connected,
+                    level = if (connected && live?.connected == true) live.signalLevel else SignalLevel.Unknown,
+                )
+                // The two actions the page needs stay here; a connected link is a state, not a button
+                // (the manual disconnect lives in Ⓘ).
                 when (trailing) {
-                    // A state, not an action: no click, no ripple; the status line already says it.
-                    ConnectionCardTrailing.ConnectedIndicator -> Box(
-                        Modifier.size(AlphaDimens.minTouchTarget),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Image(
-                            painterResource(Res.drawable.a1_bluetooth_connected_24px),
-                            contentDescription = null,
-                            colorFilter = ColorFilter.tint(statusIconColor(StatusTone.Success, AlphaTheme.colors)),
-                            modifier = Modifier.size(AlphaDimens.iconSize),
-                        )
-                    }
-
+                    ConnectionCardTrailing.ConnectedIndicator -> Unit
                     ConnectionCardTrailing.CancelConnecting -> CapsuleButton(
                         text = stringResource(Res.string.cancel),
                         onClick = onCancelConnecting,
                         role = CapsuleRole.Secondary,
                     )
-
                     ConnectionCardTrailing.Connect -> CapsuleButton(
                         text = stringResource(Res.string.device_connection_connect),
                         onClick = onConnect,
                         role = CapsuleRole.Tonal,
-                        icon = painterResource(Res.drawable.m2_bluetooth_24px),
                     )
-
                     ConnectionCardTrailing.Busy -> GlassProgressCircle(
                         modifier = Modifier.padding(12.dp),
                         size = GlassProgressSize.Medium,
-                        color = AlphaTheme.colors.textSecondary,
+                        color = colors.textSecondary,
                     )
                 }
             }
         }
-        InfoTag(text = batteryText(batteryDisplay(live?.battery, nowMillis)))
-        LocationMetrics(live = live, nowMillis = nowMillis)
+        LocationMetrics(live = live, phoneFix = phoneFix, nowMillis = nowMillis)
     }
 }
 
-/** "Location transfer" caption + three cells; icons tinted by meaning (see [signalTone]). */
+/**
+ * "Location transfer" caption + three cells: the phone's location signal (fix accuracy radius,
+ * [locationSignalLevel]), location writes, last write; icons tinted by meaning.
+ */
 @Composable
-private fun LocationMetrics(live: CameraLiveStatus?, nowMillis: Long) {
+private fun LocationMetrics(live: CameraLiveStatus?, phoneFix: PhoneLocationFix?, nowMillis: Long) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             stringResource(Res.string.m2_card_location),
@@ -344,17 +329,21 @@ private fun LocationMetrics(live: CameraLiveStatus?, nowMillis: Long) {
             color = AlphaTheme.colors.textSecondary,
         )
         val none = stringResource(Res.string.m2_value_none)
-        val signal = if (live?.connected == true) live.signalLevel else SignalLevel.Unknown
+        val fixLevel = locationSignalLevel(phoneFix?.accuracyMeters, phoneFix?.timeMillis, nowMillis)
         StatusRow(
             items = listOf(
                 StatusItem(
-                    label = stringResource(Res.string.m2_cell_signal),
-                    value = signalText(signal) ?: none,
-                    icon = painterResource(Res.drawable.m2_signal_24px),
-                    iconTone = signalTone(signal),
+                    label = stringResource(Res.string.q_cell_location_signal),
+                    value = if (fixLevel == LocationSignalLevel.Unknown || phoneFix == null) {
+                        none
+                    } else {
+                        stringResource(Res.string.q_location_accuracy, phoneFix.accuracyMeters.roundToInt().coerceAtLeast(1))
+                    },
+                    icon = painterResource(Res.drawable.m2_gps_fixed_24px),
+                    iconTone = locationSignalTone(fixLevel),
                 ),
                 StatusItem(
-                    label = stringResource(Res.string.m2_cell_written),
+                    label = stringResource(Res.string.q_cell_location_writes),
                     value = live?.gps?.writtenCount?.toString() ?: none,
                     icon = painterResource(Res.drawable.m2_upload_24px),
                     iconTone = WrittenMetricTone,
@@ -428,25 +417,12 @@ private fun PhotoTransferEntryBlock(
 }
 
 @Composable
-private fun timeSyncText(outcome: TimeSyncOutcome): String = stringResource(
-    when (outcome) {
-        TimeSyncOutcome.Applied -> Res.string.m2_time_sync_applied
-        TimeSyncOutcome.InProgress -> Res.string.m2_time_sync_in_progress
-        TimeSyncOutcome.Unconfirmed -> Res.string.m2_time_sync_unconfirmed
-        TimeSyncOutcome.Rejected -> Res.string.m2_time_sync_rejected
-        TimeSyncOutcome.Failed -> Res.string.m2_time_sync_failed
-        TimeSyncOutcome.Unsupported -> Res.string.m2_time_sync_unsupported
-        TimeSyncOutcome.NotRun -> Res.string.m2_time_sync_not_run
-    },
-)
-
-@Composable
-private fun signalText(level: SignalLevel): String? = when (level) {
-    SignalLevel.Excellent -> stringResource(Res.string.m2_signal_excellent)
-    SignalLevel.Good -> stringResource(Res.string.m2_signal_good)
-    SignalLevel.Fair -> stringResource(Res.string.m2_signal_fair)
-    SignalLevel.Poor -> stringResource(Res.string.m2_signal_poor)
-    SignalLevel.Unknown -> null
+private fun statusCardAlertText(alert: StatusCardAlert): String? = when (alert) {
+    StatusCardAlert.None -> null
+    StatusCardAlert.LocationDisabledByCamera -> stringResource(Res.string.q_alert_location_disabled)
+    StatusCardAlert.LocationWriteFailing -> stringResource(Res.string.q_alert_location_write_failed)
+    StatusCardAlert.TimeSyncFailed -> stringResource(Res.string.q_alert_time_sync_failed)
+    StatusCardAlert.TimeSyncRejected -> stringResource(Res.string.q_alert_time_sync_rejected)
 }
 
 @Composable
@@ -456,20 +432,6 @@ private fun ageText(age: RelativeAge): String? = when (age) {
     is RelativeAge.Minutes -> stringResource(Res.string.m2_age_minutes, age.value.toInt())
     is RelativeAge.Hours -> stringResource(Res.string.m2_age_hours, age.value.toInt())
     is RelativeAge.Days -> stringResource(Res.string.m2_age_days, age.value.toInt())
-}
-
-@Composable
-private fun batteryText(display: BatteryDisplay): String = when (display) {
-    BatteryDisplay.Unknown -> stringResource(Res.string.m2_battery_unknown)
-    is BatteryDisplay.Value -> {
-        val percent = "${display.percent}%"
-        val minutes = display.ageMinutes
-        when {
-            minutes == null -> stringResource(Res.string.m2_battery_value, percent)
-            minutes < 60 -> stringResource(Res.string.m2_battery_value_minutes, percent, minutes.toInt())
-            else -> stringResource(Res.string.m2_battery_value_hours, percent, (minutes / 60).toInt())
-        }
-    }
 }
 
 private const val TICK_MILLIS = 30_000L

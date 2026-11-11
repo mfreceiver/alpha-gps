@@ -15,19 +15,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
@@ -39,15 +34,11 @@ import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.camera_24px
 import cameragps.sharednew.generated.resources.cancel
-import cameragps.sharednew.generated.resources.delete
-import cameragps.sharednew.generated.resources.delete_24px
-import cameragps.sharednew.generated.resources.delete_device
-import cameragps.sharednew.generated.resources.delete_device_confirmation
 import cameragps.sharednew.generated.resources.enable_pairing_mode_continue
 import cameragps.sharednew.generated.resources.enable_pairing_mode_message
 import cameragps.sharednew.generated.resources.enable_pairing_mode_title
 import cameragps.sharednew.generated.resources.guide_open_button
-import cameragps.sharednew.generated.resources.keyboard_arrow_right_24px
+import cameragps.sharednew.generated.resources.info_24px
 import cameragps.sharednew.generated.resources.location_linking_disabled_by_camera
 import cameragps.sharednew.generated.resources.m2_bluetooth_24px
 import cameragps.sharednew.generated.resources.m2_list_connected_syncing
@@ -55,7 +46,8 @@ import cameragps.sharednew.generated.resources.m2_list_not_connected
 import cameragps.sharednew.generated.resources.m2_list_section_paired
 import cameragps.sharednew.generated.resources.nearby_cameras
 import cameragps.sharednew.generated.resources.not_paired_tap_to_pair_again
-import cameragps.sharednew.generated.resources.show_details
+import cameragps.sharednew.generated.resources.q_list_info_a11y
+import cameragps.sharednew.generated.resources.q_list_open_device
 import cameragps.sharednew.generated.resources.tap_to_connect
 import cameragps.sharednew.generated.resources.transmission_active
 import cameragps.sharednew.generated.resources.transmission_inactive
@@ -76,14 +68,14 @@ import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.sasch.cameragps.sharednew.ui.theme.AlphaType
-import com.sasch.cameragps.sharednew.ui.theme.GlassTintRole
-import com.sasch.cameragps.sharednew.ui.theme.GlassTints
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The shared device list (design v3): "Paired" / "Nearby" sections of glass rows (no divider),
- * swipe-to-delete on paired rows, and the delete-confirm and tap-to-pair [CapsuleDialog]s.
+ * The shared device list (design v3): "Paired" / "Nearby" sections of glass rows (no divider) and
+ * the tap-to-pair [CapsuleDialog]. A paired row opens its device page anywhere on the card; its
+ * trailing ⓘ ([onOpenInfo]) opens the host's camera-info dialog, which is also where a camera is
+ * removed (no swipe-to-delete).
  * Derived per-row state comes from [DeviceListItem]s looked up by uppercased identifier; platform
  * hosts own the surrounding empty states, navigation and callbacks.
  */
@@ -95,11 +87,10 @@ fun SharedDeviceList(
     hapticsEnabled: Boolean = true,
     contentPadding: PaddingValues = PaddingValues(top = 8.dp, bottom = 16.dp),
     onConnect: (BluetoothDeviceInfo) -> Unit,
-    onDelete: (BluetoothDeviceInfo) -> Unit,
+    onOpenInfo: (BluetoothDeviceInfo) -> Unit,
     onOpenDetails: (BluetoothDeviceInfo) -> Unit,
     onOpenTroubleshooting: () -> Unit,
 ) {
-    var deviceToDelete by remember { mutableStateOf<BluetoothDeviceInfo?>(null) }
     var deviceToPair by remember { mutableStateOf<BluetoothDeviceInfo?>(null) }
 
     // Pairing mode hint dialog for first-time connections
@@ -114,21 +105,6 @@ fun SharedDeviceList(
                 deviceToPair = null
             }),
             dismiss = DialogAction(stringResource(Res.string.cancel), onClick = { deviceToPair = null }),
-        )
-    }
-
-    deviceToDelete?.let { device ->
-        CapsuleDialog(
-            onDismissRequest = { deviceToDelete = null },
-            title = stringResource(Res.string.delete_device),
-            message = stringResource(Res.string.delete_device_confirmation, device.name),
-            icon = painterResource(Res.drawable.delete_24px),
-            destructive = true,
-            confirm = DialogAction(stringResource(Res.string.delete), onClick = {
-                onDelete(device)
-                deviceToDelete = null
-            }),
-            dismiss = DialogAction(stringResource(Res.string.cancel), onClick = { deviceToDelete = null }),
         )
     }
 
@@ -149,13 +125,13 @@ fun SharedDeviceList(
                 SectionHeader(title = stringResource(Res.string.m2_list_section_paired))
             }
             items(savedDevices, key = { it.identifier }) { device ->
-                SwipeToDeleteDeviceCard(
+                DeviceCard(
                     device = device,
                     item = items[device.identifier.uppercase()],
                     hapticsEnabled = hapticsEnabled,
                     onConnect = { onConnect(device) },
-                    onDeleteRequest = { deviceToDelete = device },
                     onOpenDetails = { onOpenDetails(device) },
+                    onOpenInfo = { onOpenInfo(device) },
                     onOpenTroubleshooting = onOpenTroubleshooting,
                 )
             }
@@ -176,6 +152,7 @@ fun SharedDeviceList(
                     hapticsEnabled = hapticsEnabled,
                     onConnect = { deviceToPair = device },
                     onOpenDetails = { onOpenDetails(device) },
+                    onOpenInfo = null,
                     onOpenTroubleshooting = onOpenTroubleshooting,
                 )
             }
@@ -241,69 +218,14 @@ private fun SectionHeader(title: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun SwipeToDeleteDeviceCard(
-    device: BluetoothDeviceInfo,
-    item: DeviceListItem?,
-    hapticsEnabled: Boolean,
-    onConnect: () -> Unit,
-    onDeleteRequest: () -> Unit,
-    onOpenDetails: () -> Unit,
-    onOpenTroubleshooting: () -> Unit,
-) {
-
-    val dismissState = rememberSwipeToDismissBoxState()
-
-    LaunchedEffect(dismissState.currentValue) {
-        if (dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) {
-            onDeleteRequest()
-
-            dismissState.snapTo(SwipeToDismissBoxValue.Settled)
-        }
-    }
-
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = false,
-        backgroundContent = {
-            val isActive = dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart
-            val colors = AlphaTheme.colors
-            // Glass row underneath; it turns danger-tinted once the swipe is heading for delete.
-            val danger = GlassTints.of(GlassTintRole.Danger, colors)
-            GlassSurface(
-                modifier = Modifier.fillMaxSize(),
-                shape = AlphaShapes.row,
-                tint = if (isActive) danger.tint else Color.Transparent,
-                contentAlignment = Alignment.CenterEnd,
-                contentPadding = PaddingValues(0.dp),
-            ) {
-                Image(
-                    painter = painterResource(Res.drawable.delete_24px),
-                    contentDescription = stringResource(Res.string.delete_device),
-                    colorFilter = ColorFilter.tint(if (isActive) danger.content else colors.danger),
-                    modifier = Modifier.padding(end = 24.dp).size(24.dp),
-                )
-            }
-        },
-    ) {
-        DeviceCard(
-            device = device,
-            item = item,
-            hapticsEnabled = hapticsEnabled,
-            onConnect = onConnect,
-            onOpenDetails = onOpenDetails,
-            onOpenTroubleshooting = onOpenTroubleshooting,
-        )
-    }
-}
-
-
-@Composable
 private fun DeviceCard(
     device: BluetoothDeviceInfo,
     item: DeviceListItem?,
     hapticsEnabled: Boolean,
     onConnect: () -> Unit,
     onOpenDetails: () -> Unit,
+    /** Saved rows only: the trailing ⓘ (camera info dialog). Null = no trailing button. */
+    onOpenInfo: (() -> Unit)?,
     onOpenTroubleshooting: () -> Unit,
 ) {
     val colors = AlphaTheme.colors
@@ -314,7 +236,8 @@ private fun DeviceCard(
         shape = AlphaShapes.row,
         // Saved devices connect automatically; a tap opens their page. Unsaved devices keep tap-to-pair.
         onClick = { if (device.isSaved) onOpenDetails() else onConnect() },
-        contentPadding = PaddingValues(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+        onClickLabel = if (device.isSaved) stringResource(Res.string.q_list_open_device) else null,
+        contentPadding = PaddingValues(start = 16.dp, top = 12.dp, bottom = 12.dp, end = if (onOpenInfo != null) 4.dp else 16.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -382,11 +305,14 @@ private fun DeviceCard(
                     )
                 }
             }
-            GlassIconButton(
-                icon = painterResource(Res.drawable.keyboard_arrow_right_24px),
-                contentDescription = stringResource(Res.string.show_details),
-                onClick = onOpenDetails,
-            )
+            if (onOpenInfo != null) {
+                // Its own 48 dp target: consumes the tap, so the card (open page) does not fire.
+                GlassIconButton(
+                    icon = painterResource(Res.drawable.info_24px),
+                    contentDescription = stringResource(Res.string.q_list_info_a11y, device.name),
+                    onClick = onOpenInfo,
+                )
+            }
         }
     }
 }

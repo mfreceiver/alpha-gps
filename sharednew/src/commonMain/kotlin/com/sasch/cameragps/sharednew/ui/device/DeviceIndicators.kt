@@ -10,14 +10,14 @@ import com.sasch.cameragps.sharednew.ui.components.glass.StatusTone
  * chosen here: a [StatusTone] resolves through the theme (`statusToneColor` / `statusIconColor`).
  */
 
-/** Tone of the Bluetooth state (status dot of the card, value of the Ⓘ dialog row). */
+/** Tone of the Bluetooth state (value of the Ⓘ dialog row). */
 fun connectionTone(headline: ConnectionHeadline): StatusTone = when (headline) {
     ConnectionHeadline.Connected -> StatusTone.Success
     ConnectionHeadline.Connecting, ConnectionHeadline.Disconnecting -> StatusTone.Active
     ConnectionHeadline.Disconnected -> StatusTone.Neutral
 }
 
-/** Signal icon colour by level: strong = green, fair = amber, weak = red, unknown = grey. */
+/** Signal colour by level: strong = green, fair = amber, weak = red, unknown = grey. */
 fun signalTone(level: SignalLevel): StatusTone = when (level) {
     SignalLevel.Excellent, SignalLevel.Good -> StatusTone.Success
     SignalLevel.Fair -> StatusTone.Warning
@@ -25,7 +25,27 @@ fun signalTone(level: SignalLevel): StatusTone = when (level) {
     SignalLevel.Unknown -> StatusTone.Neutral
 }
 
-/** "Written" metric icon: the theme's primary (accent blue). */
+/**
+ * Share of the signal ring that is drawn for a level (Excellent 100 %, Good 75 %, Fair 50 %,
+ * Poor 25 %); Unknown draws only the track.
+ */
+fun signalArcFraction(level: SignalLevel): Float = when (level) {
+    SignalLevel.Excellent -> 1f
+    SignalLevel.Good -> 0.75f
+    SignalLevel.Fair -> 0.5f
+    SignalLevel.Poor -> 0.25f
+    SignalLevel.Unknown -> 0f
+}
+
+/** Phone location-fix colour, same scheme as [signalTone]: strong green, medium amber, weak red. */
+fun locationSignalTone(level: LocationSignalLevel): StatusTone = when (level) {
+    LocationSignalLevel.Strong -> StatusTone.Success
+    LocationSignalLevel.Medium -> StatusTone.Warning
+    LocationSignalLevel.Weak -> StatusTone.Error
+    LocationSignalLevel.Unknown -> StatusTone.Neutral
+}
+
+/** "Location writes" metric icon: the theme's primary (accent blue). */
 val WrittenMetricTone: StatusTone = StatusTone.Active
 
 /** "Last write" metric icon: the secondary teal accent. */
@@ -43,29 +63,53 @@ fun infoSettingDisplay(session: CameraSession?, state: CameraSettingState?): Set
         settingDisplay(session, state)
     }
 
-/** Enabled = green with a ✓ (like "Location writing · Active"); everything else grey, no mark. */
-fun settingTone(display: SettingDisplay): StatusTone =
-    if (display == SettingDisplay.Enabled) StatusTone.Success else StatusTone.Neutral
-
-/** Whether a row shows the green ✓ in front of its value. */
-fun showsCheck(tone: StatusTone): Boolean = tone == StatusTone.Success
-
 /**
- * Ⓘ dialog Bluetooth address: hidden by default, shown only after a tap, hidden again by the next
- * tap. The state is not saved, so every new opening of the dialog starts hidden.
+ * The Ⓘ dialog's single "Auto time & area" row. The camera reports the two settings separately
+ * (they can differ), so the row is only "enabled" when both are, and otherwise names the one that
+ * is not.
  */
-enum class AddressVisibility {
-    Hidden,
-    Shown;
+enum class AutoCorrectionSummary {
+    /** Both settings on. */
+    Enabled,
 
-    fun toggled(): AddressVisibility = if (this == Hidden) Shown else Hidden
+    /** Auto time correction is off or unsupported; area adjustment is on (or not yet known). */
+    TimeNotEnabled,
+
+    /** Auto area adjustment is off or unsupported; time correction is on (or not yet known). */
+    AreaNotEnabled,
+
+    /** Both are off (or one off, the other unsupported). */
+    NeitherEnabled,
+
+    /** The camera supports neither. */
+    Unsupported,
+
+    /** Not connected, or the camera has not reported yet. */
+    Unknown,
 }
 
-/** What a hidden address shows: a fixed mask that says nothing about the address (not even its length). */
-const val HIDDEN_ADDRESS_TEXT: String = "••••••"
+fun autoCorrectionSummary(session: CameraSession?): AutoCorrectionSummary {
+    val time = infoSettingDisplay(session, session?.autoTimeCorrection)
+    val area = infoSettingDisplay(session, session?.autoAreaAdjustment)
+    fun SettingDisplay.notEnabled() = this == SettingDisplay.Off || this == SettingDisplay.Unsupported
+    return when {
+        time == SettingDisplay.Enabled && area == SettingDisplay.Enabled -> AutoCorrectionSummary.Enabled
+        time == SettingDisplay.Unsupported && area == SettingDisplay.Unsupported -> AutoCorrectionSummary.Unsupported
+        time.notEnabled() && area.notEnabled() -> AutoCorrectionSummary.NeitherEnabled
+        time.notEnabled() -> AutoCorrectionSummary.TimeNotEnabled
+        area.notEnabled() -> AutoCorrectionSummary.AreaNotEnabled
+        else -> AutoCorrectionSummary.Unknown
+    }
+}
 
-/** The address as the Ⓘ row shows it: the full upper-case address only while [AddressVisibility.Shown]. */
-fun addressText(address: String, visibility: AddressVisibility): String = when (visibility) {
-    AddressVisibility.Shown -> address.uppercase()
-    AddressVisibility.Hidden -> HIDDEN_ADDRESS_TEXT
+/**
+ * Text colour of the auto row: on = green; something the app keeps on but the camera reports off
+ * = amber; unsupported / unknown = grey.
+ */
+fun autoCorrectionTone(summary: AutoCorrectionSummary): StatusTone = when (summary) {
+    AutoCorrectionSummary.Enabled -> StatusTone.Success
+    AutoCorrectionSummary.TimeNotEnabled,
+    AutoCorrectionSummary.AreaNotEnabled,
+    AutoCorrectionSummary.NeitherEnabled -> StatusTone.Warning
+    AutoCorrectionSummary.Unsupported, AutoCorrectionSummary.Unknown -> StatusTone.Neutral
 }

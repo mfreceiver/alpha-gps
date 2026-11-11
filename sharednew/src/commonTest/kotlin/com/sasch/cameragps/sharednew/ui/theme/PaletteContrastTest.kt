@@ -21,7 +21,9 @@ import com.sasch.cameragps.sharednew.ui.components.glass.statusIconColor
 import com.sasch.cameragps.sharednew.ui.components.glass.statusToneColor
 import com.sasch.cameragps.sharednew.ui.components.glass.textFieldBorder
 import com.sasch.cameragps.sharednew.ui.device.LastWriteMetricTone
+import com.sasch.cameragps.sharednew.ui.device.LocationSignalLevel
 import com.sasch.cameragps.sharednew.ui.device.WrittenMetricTone
+import com.sasch.cameragps.sharednew.ui.device.locationSignalTone
 import com.sasch.cameragps.sharednew.ui.device.signalTone
 import com.sasch.cameragps.sharednew.ui.remote.ViewerDownloadPhase
 import com.sasch.cameragps.sharednew.ui.remote.viewerDownloadHintColor
@@ -445,7 +447,9 @@ class PaletteContrastTest {
     fun deviceMetricIconTonesReadableOnCardAndInsetGlass() {
         // Device page metric icons (signal by level, written, last write) sit on an inset block
         // (onSurface 5–7 %) inside a G1 card.
-        val tones = SignalLevel.entries.map { signalTone(it) } + listOf(WrittenMetricTone, LastWriteMetricTone)
+        val tones = SignalLevel.entries.map { signalTone(it) } +
+            LocationSignalLevel.entries.map { locationSignalTone(it) } +
+            listOf(WrittenMetricTone, LastWriteMetricTone)
         listOf(light, dark).forEach { colors ->
             val card = glassBackgrounds(GlassLevel.Card, colors)
             val inset = card.map { Contrast.over(colors.onSurface.copy(alpha = if (colors.isDark) 0.07f else 0.05f), it) }
@@ -462,6 +466,16 @@ class PaletteContrastTest {
         listOf(light, dark).forEach { c ->
             assertEquals(c.accentTeal, statusToneColor(StatusTone.Accent, c))
             assertTrue(c.accentTeal != c.primary && c.accentTeal != c.success, "teal must be its own colour")
+        }
+    }
+
+    @Test
+    fun bluetoothBlueIconReadableOnCardGlass() {
+        // The device page's Bluetooth glyph (brand blue) sits directly on the G1 status card,
+        // inside the signal ring; non-text, so ≥ 3:1 against every card backdrop in both themes.
+        listOf(light, dark).forEach { c ->
+            val ratio = minRatio(c.bluetoothBlue, glassBackgrounds(GlassLevel.Card, c))
+            assertTrue(ratio >= Contrast.AA_LARGE, "bluetoothBlue dark=${c.isDark} ratio=$ratio")
         }
     }
 

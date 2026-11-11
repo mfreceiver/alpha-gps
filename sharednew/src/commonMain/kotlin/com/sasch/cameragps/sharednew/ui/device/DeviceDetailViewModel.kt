@@ -3,6 +3,7 @@ package com.sasch.cameragps.sharednew.ui.device
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sasch.cameragps.sharednew.bluetooth.BleSessionPhase
+import com.sasch.cameragps.sharednew.bluetooth.location.PhoneLocationFix
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraAutoCorrectionControls
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraAutoCorrectionSetting
 import com.sasch.cameragps.sharednew.bluetooth.status.CameraLiveStatus
@@ -31,6 +32,9 @@ class DeviceDetailViewModel(
     /** Signal polling while the page is visible; call the returned function when it is not. */
     fun acquireSignalMonitoring(device: String): () -> Unit =
         liveStatusSource.acquireSignalMonitoring(device.uppercase())
+
+    /** Phone-level accuracy/time of the latest location fix (for the "location signal" cell). */
+    val phoneLocation: Flow<PhoneLocationFix?> = liveStatusSource.observePhoneLocation()
 
     fun refreshCameraSettings(device: String) = cameraSettings.refreshAutoCorrectionSettings(device)
 

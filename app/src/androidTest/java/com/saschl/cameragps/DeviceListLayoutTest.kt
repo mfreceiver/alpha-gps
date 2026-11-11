@@ -83,7 +83,7 @@ class DeviceListLayoutTest {
                             devices = devices,
                             items = emptyMap(),
                             onConnect = {},
-                            onDelete = {},
+                            onOpenInfo = {},
                             onOpenDetails = {},
                             onOpenTroubleshooting = {},
                         )
@@ -121,7 +121,7 @@ class DeviceListLayoutTest {
                         ),
                         hapticsEnabled = false,
                         onConnect = { connections++ },
-                        onDelete = {},
+                        onOpenInfo = {},
                         onOpenDetails = { details = it },
                         onOpenTroubleshooting = {},
                     )
@@ -164,7 +164,7 @@ class DeviceListLayoutTest {
                         ),
                         hapticsEnabled = false,
                         onConnect = {},
-                        onDelete = {},
+                        onOpenInfo = {},
                         onOpenDetails = { detailsRequests++ },
                         onOpenTroubleshooting = { helpRequests++ },
                     )

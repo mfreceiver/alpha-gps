@@ -222,7 +222,6 @@
     <string name="device_association_removed_retry">The device was already associated. The association was removed to prevent duplicates. Please try again.</string>
     <string name="back">Back</string>
     <string name="device_icon">Device icon</string>
-    <string name="show_details">Show details</string>
     <string name="not_paired_tap_to_pair_again">Not paired, please pair the device in the bluetooth settings</string>
     <string name="to_pair_with_your_camera_please">To pair with your camera \'%1$s\', please:</string>
     <string name="_1_turn_on_your_camera">\n1. Turn on your camera</string>
@@ -249,12 +248,9 @@
     <!-- Device management strings -->
     <string name="device_management">Device Management</string>
     <string name="no_devices_found">No devices found</string>
-    <string name="delete_device">Delete Device</string>
-    <string name="delete_device_confirmation">Are you sure you want to delete %1$s?</string>
     <string name="enable_pairing_mode_title">Enable Pairing Mode</string>
     <string name="enable_pairing_mode_message">If this is the first time connecting this camera to your phone, please make sure to enable Bluetooth pairing mode in your camera's settings before continuing. If this is not the case, simply continue</string>
     <string name="enable_pairing_mode_continue">Continue</string>
-    <string name="delete">Delete</string>
     <string name="always_on_enabled">Always On Enabled</string>
     <!-- Pairing dialog strings -->
     <string name="pairing_camera_title">Pairing Camera</string>
@@ -417,8 +413,6 @@
     <string name="device_connection_disconnecting">Disconnecting…</string>
     <string name="device_info_keep_active">Keep active</string>
     <string name="device_info_keep_active_hint">Keeps the background service running for this camera while it is out of range. Leaving the app still disconnects it.</string>
-    <string name="device_info_auto_time">Auto time correction</string>
-    <string name="device_info_auto_area">Auto area adjustment</string>
     <string name="device_info_setting_enabled">On (the app keeps it on)</string>
     <string name="device_info_setting_off">Off – switched on after connecting</string>
     <string name="device_info_setting_unsupported">Not supported by this camera</string>
@@ -489,22 +483,11 @@
     <string name="m2_bt_connecting">Connecting Bluetooth…</string>
     <string name="m2_bt_disconnected">Bluetooth not connected</string>
     <string name="m2_bt_disconnecting">Disconnecting Bluetooth…</string>
-    <string name="m2_bt_manual_off">Disconnected by you. Tap Connect to reconnect.</string>
-    <string name="m2_bt_auto_reconnect">Connects automatically when the camera is nearby</string>
-    <string name="m2_time_sync_applied">Location syncing · time corrected</string>
-    <string name="m2_time_sync_in_progress">Location syncing · correcting time…</string>
-    <string name="m2_time_sync_unconfirmed">Location syncing · time sent, not confirmed</string>
-    <string name="m2_time_sync_rejected">Location syncing · camera rejected the time</string>
-    <string name="m2_time_sync_failed">Location syncing · time correction failed</string>
-    <string name="m2_time_sync_unsupported">Location syncing · camera can't set time directly</string>
-    <string name="m2_time_sync_not_run">Location syncing</string>
     <string name="m2_disconnect_bt">Disconnect Bluetooth</string>
     <string name="m2_disconnect_bt_title">Disconnect Bluetooth?</string>
     <string name="m2_disconnect_bt_message">Location writing to the camera stops. You will need to reconnect manually.</string>
     <string name="m2_disconnect_bt_confirm">Disconnect</string>
     <string name="m2_card_location">Location transfer</string>
-    <string name="m2_cell_signal">Signal</string>
-    <string name="m2_cell_written">Written</string>
     <string name="m2_cell_last_write">Last write</string>
     <string name="m2_signal_excellent">Strong</string>
     <string name="m2_signal_good">Good</string>
@@ -515,10 +498,6 @@
     <string name="m2_age_minutes">%1$d min ago</string>
     <string name="m2_age_hours">%1$d h ago</string>
     <string name="m2_age_days">%1$d d ago</string>
-    <string name="m2_battery_unknown">Battery unknown</string>
-    <string name="m2_battery_value">Battery %1$s</string>
-    <string name="m2_battery_value_minutes">Battery %1$s · read %2$d min ago</string>
-    <string name="m2_battery_value_hours">Battery %1$s · read %2$d h ago</string>
     <string name="m2_photo_transfer">Photo transfer</string>
     <string name="m2_photo_transfer_hint">Browse and download photos from the camera</string>
     <string name="m2_photo_transfer_hint_bt_first">Bluetooth connects first, then the transfer starts</string>
@@ -594,7 +573,6 @@
     <string name="a1_bt_connecting_short">Connecting…</string>
     <string name="a1_bt_disconnecting_short">Disconnecting…</string>
     <string name="a1_bt_disconnected_short">Not connected</string>
-    <string name="a1_info_bt_address">Bluetooth address</string>
     <string name="a1_address_show">Show</string>
     <string name="a1_address_hide">Hide</string>
     <string name="a1_address_hidden">Hidden</string>
@@ -616,4 +594,21 @@
     <string name="d1_tile_too_large">Over the size limit, will be skipped</string>
     <string name="d1_tile_saved">Saved</string>
     <string name="d1_exif_focal_35mm">Focal length (35 mm equiv.)</string>
+    <string name="q_info_auto_time_area">Auto time &amp; area</string>
+    <string name="q_info_auto_time_off">Time correction off</string>
+    <string name="q_info_auto_area_off">Area adjustment off</string>
+    <string name="q_cell_location_signal">Location signal</string>
+    <string name="q_cell_location_writes">Location writes</string>
+    <string name="q_location_accuracy">±%1$d m</string>
+    <string name="q_alert_location_disabled">Location linking is off on the camera, nothing is written</string>
+    <string name="q_alert_location_write_failed">Last location write failed</string>
+    <string name="q_alert_time_sync_failed">Time correction failed</string>
+    <string name="q_alert_time_sync_rejected">The camera rejected the time correction</string>
+    <string name="q_battery_a11y">Camera battery %1$s</string>
+    <string name="q_battery_age_minutes">read %1$d min ago</string>
+    <string name="q_battery_age_hours">read %1$d h ago</string>
+    <string name="q_bt_signal_a11y">Bluetooth signal: %1$s</string>
+    <string name="q_bt_signal_unknown">unknown</string>
+    <string name="q_list_info_a11y">Camera info: %1$s</string>
+    <string name="q_list_open_device">Open camera page</string>
 </resources>

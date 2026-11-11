@@ -80,7 +80,7 @@ class AdaptiveLayoutTest {
                             ),
                             hapticsEnabled = false,
                             onConnect = {},
-                            onDelete = {},
+                            onOpenInfo = {},
                             onOpenDetails = {},
                             onOpenTroubleshooting = {},
                         )
@@ -132,7 +132,7 @@ class AdaptiveLayoutTest {
                     ),
                     hapticsEnabled = false,
                     onConnect = {},
-                    onDelete = {},
+                    onOpenInfo = {},
                     onOpenDetails = {},
                     onOpenTroubleshooting = {},
                 )
