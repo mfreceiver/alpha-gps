@@ -12,6 +12,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -39,6 +40,7 @@ import com.saschl.cameragps.ui.TroubleshootingScreen
 import com.saschl.cameragps.ui.WelcomeScreen
 import com.saschl.cameragps.ui.device.CameraDeviceManager
 import com.saschl.cameragps.ui.settings.SettingsScreen
+import com.saschl.cameragps.service.FileTree
 import com.saschl.cameragps.utils.PreferencesManager
 import com.saschl.cameragps.utils.logging.AndroidLogFormatter
 import kotlinx.serialization.Serializable
@@ -264,12 +266,23 @@ class MainActivity : AppCompatActivity() {
                     NavEntry(AppDestination.Logs) {
                         val logFormatter =
                             remember(logRepository) { AndroidLogFormatter(logRepository) }
+                        val context = LocalContext.current
+                        var logLevel by remember { mutableIntStateOf(PreferencesManager.logLevel(context)) }
                         SharedLogViewerScreen(
                             logFormatter,
                             logRepository = logRepository,
                             onBackClick = {
                                 popBackStackIfPossible()
-                            }
+                            },
+                            // Moved here from the settings page: applied at once (file tree
+                            // replanted with the new minimum) and stored under the same key.
+                            logLevel = logLevel,
+                            onLogLevelChange = { level ->
+                                logLevel = level
+                                PreferencesManager.setLogLevel(context, level)
+                                Timber.uprootAll()
+                                Timber.plant(FileTree(context, level))
+                            },
                         )
                     }
                 }
