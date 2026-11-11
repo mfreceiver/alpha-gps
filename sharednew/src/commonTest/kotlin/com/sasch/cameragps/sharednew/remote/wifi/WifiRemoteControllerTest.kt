@@ -3796,4 +3796,74 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         assertEquals(1, started.size, "an empty plan never submits")
         controller.closeAndJoin()
     }
+
+    @Test
+    fun rawOnlyBatchFetchesOnlyRawsAndCountsPhotosWithoutRawAsSkipped() = runTest {
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> plannerConnection() }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        model.togglePhotoSelection("h")
+        model.togglePhotoSelection("jr")
+        val started = mutableListOf<List<WifiPhotoDownload>>()
+
+        model.requestBatchDownload(WifiFormatPolicy.RawOnly, registry.get("camera")!!.wifiRemote) { started += it }
+
+        assertEquals(listOf(listOf(WifiPhotoDownload(3))), started, "only the RAW, the HEIF-only photo is not replaced")
+        assertEquals(WifiBatchSummary(1, mapOf(WifiSkipReason.NoRaw to 1)), model.batchSummary)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun rawOnlyBatchWithoutAnyRawIsASettledNoOpSummary() = runTest {
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> plannerConnection() }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        model.togglePhotoSelection("h")
+        var started = 0
+
+        model.requestBatchDownload(WifiFormatPolicy.RawOnly, registry.get("camera")!!.wifiRemote) { started++ }
+
+        assertEquals(0, started)
+        assertEquals(WifiBatchSummary(0, mapOf(WifiSkipReason.NoRaw to 1)), model.batchSummary)
+        assertTrue(model.batchSummarySettled())
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun askBatchChoicesPlanEachFormatOverTheSelectionAndThePickRunsLikeAFixedSetting() = runTest {
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> plannerConnection() }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browsePhotos("camera")
+        runCurrent()
+        model.togglePhotoSelection("h")
+        model.togglePhotoSelection("jr")
+        val state = registry.get("camera")!!.wifiRemote
+
+        val choices = model.batchChoices(state)
+        assertEquals(listOf(WifiFormatPolicy.JpegOnly, WifiFormatPolicy.RawOnly, WifiFormatPolicy.Original), choices.map { it.policy })
+        assertEquals(listOf(WifiPhotoDownload(2)), choices[0].plan.downloads)
+        assertEquals(mapOf(WifiSkipReason.NoJpeg to 1), choices[0].plan.skipped, "the HEIF-only photo is skipped under JPG")
+        assertEquals(listOf(WifiPhotoDownload(3)), choices[1].plan.downloads)
+        assertEquals(mapOf(WifiSkipReason.NoRaw to 1), choices[1].plan.skipped)
+        assertEquals(listOf(WifiPhotoDownload(1), WifiPhotoDownload(2), WifiPhotoDownload(3)), choices[2].plan.downloads)
+        for (choice in choices) assertEquals(model.batchPlan(choice.policy, state), choice.plan)
+
+        // Confirming a choice is the fixed-setting batch request with that policy.
+        val started = mutableListOf<List<WifiPhotoDownload>>()
+        model.requestBatchDownload(choices[1].policy, state) { started += it }
+        assertEquals(listOf(listOf(WifiPhotoDownload(3))), started)
+        assertEquals(WifiBatchSummary(1, mapOf(WifiSkipReason.NoRaw to 1)), model.batchSummary)
+        controller.closeAndJoin()
+    }
 }

@@ -17,7 +17,8 @@ It is not distributed through any app store — you build and install it yoursel
   photos:
   - date-grouped gallery (newest first) with lazy thumbnails;
   - multi-select and long-press drag range selection across days;
-  - download strategy per batch: **JPG only** (skip RAW/HEIF) or **original files** (JPG + RAW).
+  - download format: **ask each time** (default), **JPG**, **RAW** or **JPG + RAW**; photos without
+    the chosen format are skipped and counted in the summary.
 - Companion-device based connection with a foreground service; optional “standby after the camera
   leaves” mode keeps the service ready to reconnect automatically.
 

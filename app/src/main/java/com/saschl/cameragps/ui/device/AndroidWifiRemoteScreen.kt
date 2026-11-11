@@ -126,7 +126,7 @@ fun AndroidWifiRemoteScreen(identifier: String, onClose: () -> Unit) {
                 }
             } else context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
         },
-        defaultDownloadFormatJpeg = PreferencesManager.isWifiDefaultDownloadFormatJpeg(context),
+        downloadFormat = PreferencesManager.wifiDownloadFormat(context),
         gridOptions = gridOptions,
         onGridOptionsChange = {
             gridOptions = it

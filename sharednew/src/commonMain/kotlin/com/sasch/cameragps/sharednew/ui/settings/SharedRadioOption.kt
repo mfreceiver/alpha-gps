@@ -17,7 +17,10 @@ import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 
-/** One single-choice row (≥ 48 dp, the whole row selects) for settings cards and dialogs. */
+/**
+ * One single-choice row (≥ 48 dp, the whole row selects) for settings cards and dialogs. A disabled
+ * row is shown muted and cannot be selected.
+ */
 @Composable
 fun SharedRadioOption(
     label: String,
@@ -25,27 +28,28 @@ fun SharedRadioOption(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     description: String? = null,
+    enabled: Boolean = true,
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = AlphaDimens.minTouchTarget)
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        GlassRadio(selected = selected, onClick = null)
+        GlassRadio(selected = selected, onClick = null, enabled = enabled)
         Column(Modifier.padding(start = 12.dp)) {
             Text(
                 text = label,
                 style = AlphaType.Body,
-                color = AlphaTheme.colors.textPrimary,
+                color = if (enabled) AlphaTheme.colors.textPrimary else AlphaTheme.colors.textMuted,
             )
             if (description != null) {
                 Text(
                     text = description,
                     style = AlphaType.Caption,
-                    color = AlphaTheme.colors.textSecondary,
+                    color = if (enabled) AlphaTheme.colors.textSecondary else AlphaTheme.colors.textMuted,
                 )
             }
         }

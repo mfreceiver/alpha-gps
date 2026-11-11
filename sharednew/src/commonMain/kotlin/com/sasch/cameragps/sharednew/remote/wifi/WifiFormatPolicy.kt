@@ -2,26 +2,64 @@ package com.sasch.cameragps.sharednew.remote.wifi
 
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy.JpegOnly
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy.Original
+import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy.RawOnly
 
 private const val MIME_JPEG = "image/jpeg"
 private const val MIME_HEIF = "image/heif"
 private const val MIME_RAW = "image/x-sony-arw"
 
 /**
- * The user's "default download format" setting as one policy that the download planner
- * ([planDownloads]) and the settings copy derive from.
+ * The user's "Download format" setting (settings → Photo transfer), persisted as [storageValue].
  *
- * - [Original]: a download fetches all original files of the selected captures.
- * - [JpegOnly]: a download fetches only the existing JPEG file; captures without one (RAW-only,
- *   HEIF-only) are skipped and counted, never converted. The grid badge is independent of it.
+ * - [Ask]: every download asks — the viewer offers the formats this photo has, a batch offers JPG /
+ *   RAW / JPG+RAW. The default for new installs and for unknown or missing stored values.
+ * - [Jpg], [Raw], [JpgRaw]: downloads follow [WifiFormatPolicy.JpegOnly] / [WifiFormatPolicy.RawOnly] /
+ *   [WifiFormatPolicy.Original] without asking.
+ *
+ * The stored strings of the two pre-0.3.1 values are kept, so old settings migrate unchanged:
+ * "original" (all original files) is [JpgRaw] and "jpeg" is [Jpg].
+ */
+enum class WifiDownloadFormatSetting(val storageValue: String) {
+    Ask("ask"),
+    Jpg("jpeg"),
+    Raw("raw"),
+    JpgRaw("original");
+
+    companion object {
+        /** New installs ask on every download. */
+        val Default: WifiDownloadFormatSetting = Ask
+
+        /** The setting of a stored value: the old "original" / "jpeg" keep their meaning; anything else is [Default]. */
+        fun fromStorage(value: String?): WifiDownloadFormatSetting =
+            entries.firstOrNull { it.storageValue == value } ?: Default
+    }
+}
+
+/** The fixed download policy of a setting; null for [WifiDownloadFormatSetting.Ask] (chosen per download). */
+internal val WifiDownloadFormatSetting.policy: WifiFormatPolicy?
+    get() = when (this) {
+        WifiDownloadFormatSetting.Ask -> null
+        WifiDownloadFormatSetting.Jpg -> JpegOnly
+        WifiDownloadFormatSetting.Raw -> RawOnly
+        WifiDownloadFormatSetting.JpgRaw -> Original
+    }
+
+/**
+ * Which files one download fetches — the policy the download planner ([planDownloads]) and every size
+ * or format label derive from. With the "ask each time" setting the user picks one per download.
+ *
+ * - [Original]: JPG+RAW — all original files of the selected captures.
+ * - [JpegOnly]: only the existing JPEG file; captures without one (RAW-only, HEIF-only) are skipped and
+ *   counted, never converted.
+ * - [RawOnly]: only the existing RAW (ARW) file; captures without one (JPG-only, HEIF-only) are skipped
+ *   and counted, never replaced by the JPG.
+ *
+ * The grid badge is independent of it.
  */
 internal enum class WifiFormatPolicy {
     Original,
-    JpegOnly;
-
-    companion object {
-        fun of(jpegOnly: Boolean): WifiFormatPolicy = if (jpegOnly) JpegOnly else Original
-    }
+    JpegOnly,
+    RawOnly,
 }
 
 /**
@@ -46,7 +84,11 @@ internal fun WifiCameraCapture.formatBadge(): String? {
 }
 
 /** Why a selected capture or file contributes nothing to a download. */
-internal enum class WifiSkipReason { NoJpeg, AlreadySaved, TooLarge }
+internal enum class WifiSkipReason { NoJpeg, NoRaw, AlreadySaved, TooLarge }
+
+/** The capture lacks the one format the policy takes (no JPEG under JPG only, no RAW under RAW only). */
+internal val WifiSkipReason.isMissingFormat: Boolean
+    get() = this == WifiSkipReason.NoJpeg || this == WifiSkipReason.NoRaw
 
 /**
  * What one download action will fetch: the exact [files] (original bytes, never a transcode) and what
@@ -67,7 +109,7 @@ internal data class WifiDownloadPlan(
      * Why an empty plan is empty, by a fixed priority that never depends on counts or file order:
      * [WifiSkipReason.AlreadySaved] only when *every* skipped candidate was already saved; otherwise
      * [WifiSkipReason.TooLarge] wins (something is over the limit and nothing can be fetched), then
-     * [WifiSkipReason.NoJpeg]. Null when nothing was skipped.
+     * [WifiSkipReason.NoJpeg], then [WifiSkipReason.NoRaw]. Null when nothing was skipped.
      */
     val mainSkipReason: WifiSkipReason? get() {
         val reasons = skipped.filterValues { it > 0 }.keys
@@ -76,13 +118,14 @@ internal data class WifiDownloadPlan(
             reasons == setOf(WifiSkipReason.AlreadySaved) -> WifiSkipReason.AlreadySaved
             WifiSkipReason.TooLarge in reasons -> WifiSkipReason.TooLarge
             WifiSkipReason.NoJpeg in reasons -> WifiSkipReason.NoJpeg
+            WifiSkipReason.NoRaw in reasons -> WifiSkipReason.NoRaw
             else -> reasons.first()
         }
     }
 }
 
 /**
- * The single download planner. Both policies download original bytes only — nothing is converted.
+ * The single download planner. Every policy downloads original bytes only — nothing is converted.
  *
  * - [Original]: every file of each capture (JPG+RAW downloads both). Files saved earlier in this
  *   catalog generation or over the download limit are skipped.
@@ -117,6 +160,11 @@ internal fun planDownloads(
                 val jpeg = jpegs.firstOrNull { it.downloadable } ?: jpegs.firstOrNull()
                 if (jpeg == null) skip(WifiSkipReason.NoJpeg) else consider(jpeg)
             }
+            RawOnly -> {
+                val raws = capture.files.filter { it.mimeType == MIME_RAW }
+                val raw = raws.firstOrNull { it.downloadable } ?: raws.firstOrNull()
+                if (raw == null) skip(WifiSkipReason.NoRaw) else consider(raw)
+            }
         }
     }
     return WifiDownloadPlan(files.values.toList(), skipped)
@@ -130,9 +178,10 @@ internal fun planDownloads(
  * and need not add up to the rounded total.
  *
  * [CaptureDownloadSize.reason] says why nothing would be fetched (null = the bytes will download):
- * - [WifiSkipReason.NoJpeg] — JPG-only policy over a RAW/HEIF-only capture: the size of the original
- *   files is still shown with the reason, so the UI can mark it ("only RAW") — the user-confirmed
- *   exception of showing a size that will not download.
+ * - [WifiSkipReason.NoJpeg] / [WifiSkipReason.NoRaw] — JPG-only policy over a RAW/HEIF-only capture,
+ *   or RAW-only policy over a JPG/HEIF-only capture: the size of the original files is still shown with
+ *   the reason, so the UI can mark it ("only RAW" / "only JPG") — the user-confirmed exception of
+ *   showing a size that will not download.
  * - [WifiSkipReason.TooLarge] — every candidate file is over the download limit: nothing is shown.
  * - [WifiSkipReason.AlreadySaved] — every candidate file was saved earlier in this catalog
  *   generation: the tile shows its saved state instead of a size.
@@ -147,19 +196,60 @@ internal fun captureDownloadSize(
     val plan = planDownloads(listOf(capture), policy, saved)
     if (plan.files.isNotEmpty()) return CaptureDownloadSize(plan.totalBytes)
     return when (plan.mainSkipReason) {
-        WifiSkipReason.NoJpeg ->
-            // The RAW/HEIF-only exception shows the originals' size as a warning — unless the user
+        WifiSkipReason.NoJpeg, WifiSkipReason.NoRaw ->
+            // The missing-format exception shows the originals' size as a warning — unless the user
             // already saved every original file by hand (the viewer's "Download RAW"): then it is
             // saved, exactly like the viewer's button says.
             planDownloads(listOf(capture), WifiFormatPolicy.Original, saved).let { originals ->
                 if (originals.files.isEmpty() && originals.mainSkipReason == WifiSkipReason.AlreadySaved)
                     CaptureDownloadSize(0, WifiSkipReason.AlreadySaved)
-                else CaptureDownloadSize(capture.files.sumOf { it.size }, WifiSkipReason.NoJpeg)
+                else CaptureDownloadSize(capture.files.sumOf { it.size }, plan.mainSkipReason)
             }
         WifiSkipReason.TooLarge -> CaptureDownloadSize(0, WifiSkipReason.TooLarge)
         WifiSkipReason.AlreadySaved -> CaptureDownloadSize(0, WifiSkipReason.AlreadySaved)
         null -> CaptureDownloadSize(0)
     }
+}
+
+/** The choices of the "ask each time" chooser, in display order: JPG, RAW, JPG+RAW. */
+internal val askFormatPolicies: List<WifiFormatPolicy> = listOf(JpegOnly, RawOnly, Original)
+
+/**
+ * One choice of the "ask each time" chooser: the [policy] the user may pick and the [plan] it would run
+ * — planned by [planDownloads] exactly like the fixed settings, so files, sizes and skip counts agree.
+ */
+internal data class WifiFormatChoice(val policy: WifiFormatPolicy, val plan: WifiDownloadPlan) {
+    val available: Boolean get() = plan.files.isNotEmpty()
+}
+
+/**
+ * Choices for a batch under "ask each time": always JPG, RAW and JPG+RAW (in that order), each with
+ * its own plan over the selection; a choice that would fetch nothing is shown but not available.
+ */
+internal fun batchFormatChoices(
+    captures: List<WifiCameraCapture>,
+    saved: Set<WifiPhotoDownload>,
+): List<WifiFormatChoice> = askFormatPolicies.map { WifiFormatChoice(it, planDownloads(captures, it, saved)) }
+
+/**
+ * Choices for one capture under "ask each time": only the formats it actually has and that still need
+ * fetching (files already saved or over the download limit are left out by the planner). Choices that
+ * would fetch the same files collapse into the first one — a JPG-only capture offers just "JPG", a
+ * JPG + RAW capture whose JPG is already saved just "RAW". One choice (or none) means no question.
+ */
+internal fun singleFormatChoices(
+    capture: WifiCameraCapture,
+    saved: Set<WifiPhotoDownload>,
+): List<WifiFormatChoice> {
+    val choices = mutableListOf<WifiFormatChoice>()
+    for (policy in askFormatPolicies) {
+        val plan = planDownloads(listOf(capture), policy, saved)
+        if (plan.files.isEmpty()) continue
+        val handles = plan.files.map { it.handle }.toSet()
+        if (choices.any { choice -> choice.plan.files.map { it.handle }.toSet() == handles }) continue
+        choices += WifiFormatChoice(policy, plan)
+    }
+    return choices
 }
 
 /** Result line shown after a batch: how many files were downloaded, how many skipped. */

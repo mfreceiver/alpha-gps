@@ -8,12 +8,16 @@ import com.sasch.cameragps.sharednew.remote.wifi.PhotoMetadataState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraPhoto
 import com.sasch.cameragps.sharednew.remote.wifi.WifiDownloadPlan
+import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatChoice
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
 import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiSkipReason
 import com.sasch.cameragps.sharednew.remote.wifi.captureDownloadSize
+import com.sasch.cameragps.sharednew.remote.wifi.formatByteSize
+import com.sasch.cameragps.sharednew.remote.wifi.isMissingFormat
 import com.sasch.cameragps.sharednew.remote.wifi.planDownloads
+import com.sasch.cameragps.sharednew.remote.wifi.singleFormatChoices
 import com.sasch.cameragps.sharednew.ui.theme.AlphaColors
 
 /** The handle the viewer reads metadata for: the capture's preview file (its JPEG when it has one). */
@@ -50,21 +54,24 @@ internal fun PhotoMetadataState.metadataFor(handle: Long): PhotoMetadata? = when
 }
 
 /**
- * The single-layer info strip under the photo: "JPG · 8.1 MB" under JPG only, "JPG + RAW · 54.6 MB"
- * under Original (see [stripFormatLabel]).
+ * The single-layer info strip under the photo: "JPG · 8.1 MB" under JPG only, "RAW · 67 MB" under RAW
+ * only, "JPG + RAW · 54.6 MB" under JPG+RAW (see [stripFormatLabel]); under "ask each time" every
+ * format with its own size, "JPG 6.6 MB / RAW 67 MB", and no total (nothing is assumed).
  *
- * @property formatText the formats a download fetches ([stripFormatLabel]); with [noJpeg] the strip
- *   shows the capture's own formats as "Only RAW".
- * @property sizeBytes what the default download format would fetch ([captureDownloadSize], the same
- *   number as the grid's size tag and the batch button): JPG only → the JPEG; Original → every file.
- *   A capture without a JPEG under JPG only shows the size of its originals (what the manual
- *   "Download RAW" fetches) and is marked [noJpeg] — it is never downloaded silently.
- * @property noJpeg the default format is JPG only and the capture has no JPEG (RAW-only / HEIF-only).
+ * @property formatText the formats a download fetches ([stripFormatLabel]); with [missingFormat] the
+ *   strip shows the capture's own formats as "Only RAW" / "Only JPG".
+ * @property sizeBytes what the download format would fetch ([captureDownloadSize], the same number as
+ *   the grid's size tag and the batch button): JPG only → the JPEG; RAW only → the RAW; JPG+RAW →
+ *   every file. A capture without the policy's format shows the size of its originals (what the manual
+ *   "Download RAW" / "Download JPG" fetches) and is marked [missingFormat] — it is never downloaded
+ *   silently. 0 = no size shown (always so under "ask each time").
+ * @property missingFormat the capture has no file of the fixed format (no JPEG under JPG only, no RAW
+ *   under RAW only).
  */
 internal data class ViewerInfoStrip(
     val formatText: String?,
     val sizeBytes: Long,
-    val noJpeg: Boolean,
+    val missingFormat: Boolean,
 )
 
 /**
@@ -75,16 +82,18 @@ internal data class ViewerInfoStrip(
 internal fun viewerHidesBackgroundSemantics(portrait: Boolean, drawerOpen: Boolean, hasDetails: Boolean): Boolean =
     portrait && drawerOpen && hasDetails
 
+/** [policy] null = "ask each time": every format with its size, no total, nothing marked. */
 internal fun viewerInfoStrip(
     capture: WifiCameraCapture,
-    policy: WifiFormatPolicy,
+    policy: WifiFormatPolicy?,
     saved: Set<WifiPhotoDownload> = emptySet(),
 ): ViewerInfoStrip {
+    if (policy == null) return ViewerInfoStrip(stripFormatLabel(capture, null), 0, missingFormat = false)
     val size = captureDownloadSize(capture, policy, saved)
-    // Only the NoJpeg exception carries a size that will not download (see CaptureDownloadSize).
+    // Only the missing-format exception carries a size that will not download (see CaptureDownloadSize).
     return ViewerInfoStrip(
         stripFormatLabel(capture, policy), size.bytes,
-        noJpeg = size.reason == WifiSkipReason.NoJpeg,
+        missingFormat = size.reason?.isMissingFormat == true,
     )
 }
 
@@ -92,9 +101,12 @@ internal fun viewerInfoStrip(
  * The files a download of [capture] under [policy] aims at — chosen by the download planner itself
  * ([planDownloads]), before the per-file exclusions (already saved, over the download limit) that
  * only decide whether the bytes still have to be fetched. Empty when the policy takes nothing from
- * this capture (JPG only over a RAW / HEIF-only capture). A new policy only changes the planner.
+ * this capture (JPG only over a RAW / HEIF-only capture, RAW only over a JPG / HEIF-only one). A new
+ * policy only changes the planner. [policy] null ("ask each time") aims at every file: the user picks
+ * among them when downloading.
  */
-internal fun viewerDownloadTargets(capture: WifiCameraCapture, policy: WifiFormatPolicy): List<WifiCameraPhoto> {
+internal fun viewerDownloadTargets(capture: WifiCameraCapture, policy: WifiFormatPolicy?): List<WifiCameraPhoto> {
+    if (policy == null) return capture.files
     val candidates = capture.copy(files = capture.files.map { it.copy(downloadable = true) })
     val planned = planDownloads(listOf(candidates), policy, emptySet()).files.map { it.handle }.toSet()
     return capture.files.filter { it.handle in planned }
@@ -103,14 +115,33 @@ internal fun viewerDownloadTargets(capture: WifiCameraCapture, policy: WifiForma
 /**
  * Format part of the info strip, derived from what the default download format fetches
  * ([viewerDownloadTargets]) so it never contradicts the size next to it: JPG only over a JPG + RAW
- * capture → "JPG"; Original → every format ("JPG + RAW"). When the policy takes nothing from the
- * capture (no JPEG under JPG only) it is the capture's own formats, which the strip marks as
- * "Only RAW" ([ViewerInfoStrip.noJpeg]). Null when no format is known.
+ * capture → "JPG"; RAW only → "RAW"; JPG+RAW → every format ("JPG + RAW"). When the policy takes
+ * nothing from the capture (no JPEG under JPG only, no RAW under RAW only) it is the capture's own
+ * formats, which the strip marks as "Only RAW" / "Only JPG" ([ViewerInfoStrip.missingFormat]). Under
+ * "ask each time" ([policy] null) every format with its own size: "JPG 6.6 MB / RAW 67 MB". Null when no
+ * format is known.
  */
-internal fun stripFormatLabel(capture: WifiCameraCapture, policy: WifiFormatPolicy): String? {
+internal fun stripFormatLabel(capture: WifiCameraCapture, policy: WifiFormatPolicy?): String? {
+    if (policy == null) return viewerFormatSizesText(capture.files)
     val targets = viewerDownloadTargets(capture, policy)
     return viewerFormatText(if (targets.isEmpty()) capture.files else targets)
 }
+
+/** "JPG 6.6 MB / RAW 67 MB": each format (JPG, HEIF, RAW order) with the size of its files. */
+private fun viewerFormatSizesText(files: List<WifiCameraPhoto>): String? {
+    val byFormat = files.filter { it.viewerFormatName().isNotBlank() }
+        .groupBy { it.viewerFormatName() }
+        .toList()
+        .sortedBy { (name, _) -> viewerFormatRank(name) }
+    if (byFormat.isEmpty()) return null
+    return byFormat.joinToString(" / ") { (name, group) ->
+        val bytes = group.sumOf { it.size }
+        if (bytes > 0) "$name ${formatByteSize(bytes)}" else name
+    }
+}
+
+/** Format line of a choice of the "ask each time" chooser: the files it fetches, "JPG + RAW". */
+internal fun WifiFormatChoice.formatText(): String? = viewerFormatText(plan.files)
 
 private fun viewerFormatText(files: List<WifiCameraPhoto>): String? {
     val names = files.map { it.viewerFormatName() }.filter { it.isNotBlank() }.distinct()
@@ -212,13 +243,12 @@ internal fun viewerDetails(capture: WifiCameraCapture, metadataState: PhotoMetad
     )
 }
 
-/** States of the viewer's single download button. */
 /**
- * Colour of the info strip's format text: "Only RAW" (no JPEG) is a warning. The Viewer is dark in
+ * Colour of the info strip's format text: "Only RAW" / "Only JPG" (the fixed format is missing) is a warning. The Viewer is dark in
  * both themes, so it uses the photo role [AlphaColors.onPhotoWarning], never the theme's warningText.
  */
-internal fun viewerFormatColor(noJpeg: Boolean, colors: AlphaColors): Color =
-    if (noJpeg) colors.onPhotoWarning else colors.onPhoto
+internal fun viewerFormatColor(missingFormat: Boolean, colors: AlphaColors): Color =
+    if (missingFormat) colors.onPhotoWarning else colors.onPhoto
 
 /**
  * Colour of the hint above the download button: in [ViewerDownloadPhase.Ready] the hint is the last
@@ -227,8 +257,12 @@ internal fun viewerFormatColor(noJpeg: Boolean, colors: AlphaColors): Color =
 internal fun viewerDownloadHintColor(phase: ViewerDownloadPhase, colors: AlphaColors): Color =
     if (phase == ViewerDownloadPhase.Ready) colors.onPhotoDanger else colors.onPhotoSecondary
 
+/** States of the viewer's single download button. */
 internal enum class ViewerDownloadPhase {
-    /** "Download": fetches [ViewerDownloadState.downloads] (the default-format plan). */
+    /**
+     * "Download": fetches [ViewerDownloadState.downloads] (the fixed format's plan) — or, under "ask
+     * each time" with more than one choice ([ViewerDownloadState.asks]), opens the format chooser.
+     */
     Ready,
     /** This capture is being downloaded: glass progress capsule with Cancel, swiping locked. */
     Downloading,
@@ -240,20 +274,31 @@ internal enum class ViewerDownloadPhase {
     Saved,
     /** JPG only and no JPEG: "This photo has no JPG" plus a manual "Download RAW" (never silent). */
     NoJpeg,
+    /** RAW only and no RAW: "This photo has no RAW" plus a manual "Download JPG" (never silent). */
+    NoRaw,
     /** Over the download limit: disabled with the reason. */
     TooLarge,
 }
 
 internal data class ViewerDownloadState(
     val phase: ViewerDownloadPhase,
-    /** What a tap fetches (Ready: default format; NoJpeg: the originals). Empty otherwise. */
+    /**
+     * What a tap fetches (Ready: the fixed format, or the only choice under "ask each time";
+     * NoJpeg / NoRaw: the originals). Under "ask each time" with several [choices] every file still to
+     * fetch — the chooser decides. Empty otherwise.
+     */
     val downloads: List<WifiPhotoDownload> = emptyList(),
-    /** NoJpeg: the originals' format ("RAW", "HEIF") for "Download RAW". */
+    /** NoJpeg / NoRaw: the originals' format ("RAW", "HEIF", "JPG") for "Download RAW" / "Download JPG". */
     val manualFormat: String? = null,
+    /** "Ask each time" with more than one format to pick from ([singleFormatChoices]); empty otherwise. */
+    val choices: List<WifiFormatChoice> = emptyList(),
 ) {
     val enabled: Boolean
-        get() = downloads.isNotEmpty() &&
-                (phase == ViewerDownloadPhase.Ready || phase == ViewerDownloadPhase.NoJpeg)
+        get() = downloads.isNotEmpty() && (phase == ViewerDownloadPhase.Ready ||
+                phase == ViewerDownloadPhase.NoJpeg || phase == ViewerDownloadPhase.NoRaw)
+
+    /** A tap opens the format chooser instead of downloading. */
+    val asks: Boolean get() = phase == ViewerDownloadPhase.Ready && choices.size > 1
 }
 
 /**
@@ -261,10 +306,13 @@ internal data class ViewerDownloadState(
  * saved-file set of this catalog generation and the transfer state. A transfer whose current file
  * belongs to [capture] (or an unnamed one, the viewer being the only single-download source) is this
  * page's download; any other running transfer only disables the button.
+ *
+ * [policy] null = "ask each time": the choices are the formats this capture has that still need
+ * fetching ([singleFormatChoices]); one choice downloads directly, several open the chooser.
  */
 internal fun viewerDownloadState(
     capture: WifiCameraCapture,
-    policy: WifiFormatPolicy,
+    policy: WifiFormatPolicy?,
     saved: Set<WifiPhotoDownload>,
     transfer: WifiImageTransferState,
     browserLoading: Boolean,
@@ -274,12 +322,15 @@ internal fun viewerDownloadState(
         return ViewerDownloadState(if (ours) ViewerDownloadPhase.Downloading else ViewerDownloadPhase.OtherTransfer)
     }
     if (browserLoading) return ViewerDownloadState(ViewerDownloadPhase.Waiting)
+    if (policy == null) return askDownloadState(capture, saved)
     val plan = planDownloads(listOf(capture), policy, saved)
     if (plan.files.isNotEmpty()) return ViewerDownloadState(ViewerDownloadPhase.Ready, plan.downloads)
     return when (plan.mainSkipReason) {
-        WifiSkipReason.NoJpeg -> {
+        WifiSkipReason.NoJpeg, WifiSkipReason.NoRaw -> {
             val originals = planDownloads(listOf(capture), WifiFormatPolicy.Original, saved)
-            noJpegState(capture, originals)
+            val phase = if (plan.mainSkipReason == WifiSkipReason.NoJpeg) ViewerDownloadPhase.NoJpeg
+            else ViewerDownloadPhase.NoRaw
+            missingFormatState(capture, originals, phase)
         }
         WifiSkipReason.AlreadySaved -> ViewerDownloadState(ViewerDownloadPhase.Saved)
         WifiSkipReason.TooLarge -> ViewerDownloadState(ViewerDownloadPhase.TooLarge)
@@ -287,9 +338,25 @@ internal fun viewerDownloadState(
     }
 }
 
-private fun noJpegState(capture: WifiCameraCapture, originals: WifiDownloadPlan): ViewerDownloadState = when {
+private fun askDownloadState(capture: WifiCameraCapture, saved: Set<WifiPhotoDownload>): ViewerDownloadState {
+    val choices = singleFormatChoices(capture, saved)
+    val originals = planDownloads(listOf(capture), WifiFormatPolicy.Original, saved)
+    return when {
+        choices.size == 1 -> ViewerDownloadState(ViewerDownloadPhase.Ready, choices.single().plan.downloads)
+        choices.isNotEmpty() -> ViewerDownloadState(ViewerDownloadPhase.Ready, originals.downloads, choices = choices)
+        originals.mainSkipReason == WifiSkipReason.AlreadySaved -> ViewerDownloadState(ViewerDownloadPhase.Saved)
+        originals.mainSkipReason == WifiSkipReason.TooLarge -> ViewerDownloadState(ViewerDownloadPhase.TooLarge)
+        else -> ViewerDownloadState(ViewerDownloadPhase.Waiting)
+    }
+}
+
+private fun missingFormatState(
+    capture: WifiCameraCapture,
+    originals: WifiDownloadPlan,
+    phase: ViewerDownloadPhase,
+): ViewerDownloadState = when {
     originals.files.isNotEmpty() ->
-        ViewerDownloadState(ViewerDownloadPhase.NoJpeg, originals.downloads, viewerFormatText(capture))
+        ViewerDownloadState(phase, originals.downloads, viewerFormatText(capture))
     originals.mainSkipReason == WifiSkipReason.AlreadySaved -> ViewerDownloadState(ViewerDownloadPhase.Saved)
     else -> ViewerDownloadState(ViewerDownloadPhase.TooLarge)
 }

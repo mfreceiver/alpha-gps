@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.core.content.edit
 import com.saschl.cameragps.service.TransmissionSoundEvent
 import com.saschl.cameragps.service.TransmissionSoundMode
+import com.sasch.cameragps.sharednew.remote.wifi.WifiDownloadFormatSetting
 import com.sasch.cameragps.sharednew.ui.remote.WifiGridOptions
 
 object PreferencesManager {
@@ -17,7 +18,7 @@ object PreferencesManager {
     private const val KEY_LOG_LEVEL = "log_level"
     private const val KEY_IGNORE_PERMISSIONS = "ignore_permissions"
     private const val KEY_HAPTICS_ENABLED = "haptics_enabled"
-    private const val KEY_WIFI_DEFAULT_DOWNLOAD_FORMAT = "wifi_default_download_format"
+    internal const val KEY_WIFI_DEFAULT_DOWNLOAD_FORMAT = "wifi_default_download_format"
     private const val KEY_TRANSMISSION_EVENT_SOUNDS_ENABLED = "transmission_event_sounds_enabled"
     private const val KEY_SOUND_LOCATION_ACQUIRED = "sound_location_acquired"
     private const val KEY_SOUND_LOCATION_INVALID = "sound_location_invalid"
@@ -93,15 +94,24 @@ object PreferencesManager {
         return getPreferences(context).getBoolean(KEY_HAPTICS_ENABLED, true)
     }
 
-    /** Default Wi-Fi photo download format: "original" (JPG+RAW, default) or "jpeg" (JPG only). */
-    fun isWifiDefaultDownloadFormatJpeg(context: Context): Boolean {
-        return getPreferences(context).getString(KEY_WIFI_DEFAULT_DOWNLOAD_FORMAT, "original") == "jpeg"
+    /**
+     * Wi-Fi photo download format (key `wifi_default_download_format`): "ask" (ask each time — the
+     * default), "jpeg" (JPG), "raw" (RAW) or "original" (JPG + RAW). Values written by older versions
+     * keep their meaning ("original" = every original file, "jpeg" = JPG only); a missing, unknown or
+     * wrongly typed value reads as the default.
+     */
+    fun wifiDownloadFormat(context: Context): WifiDownloadFormatSetting =
+        wifiDownloadFormatFrom(getPreferences(context))
+
+    fun setWifiDownloadFormat(context: Context, format: WifiDownloadFormatSetting) {
+        writeWifiDownloadFormat(getPreferences(context), format)
     }
 
-    fun setWifiDefaultDownloadFormatJpeg(context: Context, jpegOnly: Boolean) {
-        getPreferences(context).edit {
-            putString(KEY_WIFI_DEFAULT_DOWNLOAD_FORMAT, if (jpegOnly) "jpeg" else "original")
-        }
+    internal fun wifiDownloadFormatFrom(preferences: SharedPreferences): WifiDownloadFormatSetting =
+        WifiDownloadFormatSetting.fromStorage(preferences.all[KEY_WIFI_DEFAULT_DOWNLOAD_FORMAT] as? String)
+
+    internal fun writeWifiDownloadFormat(preferences: SharedPreferences, format: WifiDownloadFormatSetting) {
+        preferences.edit { putString(KEY_WIFI_DEFAULT_DOWNLOAD_FORMAT, format.storageValue) }
     }
 
     fun setHapticsEnabled(context: Context, enabled: Boolean) {

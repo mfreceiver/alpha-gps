@@ -29,6 +29,7 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteController
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemotePhase
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
+import com.sasch.cameragps.sharednew.remote.wifi.WifiDownloadFormatSetting
 import com.sasch.cameragps.sharednew.remote.wifi.cameraPhotoPage
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassBackground
@@ -183,7 +184,10 @@ class ViewerDetailsDrawerComposeTest : WifiLoggingTest() {
             CameraGpsTheme {
                 GlassBackground(contentIsBackdropSource = false) {
                     CompositionLocalProvider(LocalViewerCompositionProbe provides { slot -> compositions.merge(slot, 1, Int::plus) }) {
-                        if (model.viewedPhotoIndex != null) WifiPhotoViewer(state, model, onDownload = {})
+                        // JPG + RAW: the strip reads "JPG + RAW · size" (ask each time would list each format).
+                        if (model.viewedPhotoIndex != null) {
+                            WifiPhotoViewer(state, model, onDownload = {}, downloadFormat = WifiDownloadFormatSetting.JpgRaw)
+                        }
                     }
                 }
             }

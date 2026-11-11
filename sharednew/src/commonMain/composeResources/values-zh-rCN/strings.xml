@@ -583,4 +583,19 @@
     <string name="q_bt_signal_unknown">未知</string>
     <string name="q_list_info_a11y">相机信息：%1$s</string>
     <string name="q_list_open_device">打开相机页</string>
+    <string name="r_settings_group_general">通用</string>
+    <string name="r_settings_group_background">通知与后台</string>
+    <string name="r_settings_group_help">帮助与诊断</string>
+    <string name="r_download_format">下载格式</string>
+    <string name="r_download_format_hint">单张下载与批量下载都按此设置。</string>
+    <string name="r_format_ask">每次询问</string>
+    <string name="r_format_ask_desc">下载时选择 JPG、RAW 或两者。</string>
+    <string name="r_format_raw_desc">只下载 RAW；没有 RAW 的照片会被跳过，并在汇总里提示，不会改下 JPG。</string>
+    <string name="r_format_jpg_raw_desc">下载照片的全部原始文件（JPG、HEIF 与 RAW）。</string>
+    <string name="r_ask_title">选择下载格式</string>
+    <string name="r_ask_batch_option_desc">%1$d 个文件 · %2$s</string>
+    <string name="r_batch_download_ask">下载所选 %1$d 张</string>
+    <string name="r_skip_no_raw">%1$d 个无 RAW</string>
+    <string name="r_tile_size_not_downloaded_raw">%1$s MB，不包含在仅 RAW 下载中</string>
+    <string name="r_viewer_no_raw">此照片没有 RAW。</string>
 </resources>
