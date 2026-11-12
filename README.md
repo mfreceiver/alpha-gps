@@ -2,133 +2,85 @@
 
 # AlphaGPS
 
-**Write GPS location and time from your phone to a Sony Alpha camera over Bluetooth, and browse /
-download photos from the camera over its Wi-Fi.**
+**通过蓝牙向索尼 Alpha 相机写入 GPS 位置与时间，并通过相机 Wi-Fi 浏览、下载照片。**
 
-AlphaGPS is a personal, open-source customization of [Saschl/alpha-gps](https://github.com/Saschl/alpha-gps).
-It is not distributed through any app store — you build and install it yourself.
+AlphaGPS 是 [Saschl/alpha-gps](https://github.com/Saschl/alpha-gps)（GPL-3.0）的个人定制分支，
+由 mfreceiver 自 2026-11 起维护。不通过任何应用市场分发，需自行构建安装。
 
-## Features
+## 功能
 
-- **GPS location & time linking** — reads the phone's location (only with your permission) and
-  writes it to your paired Sony camera over Bluetooth Low Energy, so photos are geotagged on the
-  camera itself. Time and time-zone data is linked as well.
-- **Photo browse & download over camera Wi-Fi** — connect to the camera's Wi-Fi and browse its
-  photos:
-  - date-grouped gallery (newest first) with lazy thumbnails;
-  - multi-select and long-press drag range selection across days;
-  - download format: **ask each time** (default), **JPG**, **RAW** or **JPG + RAW**; photos without
-    the chosen format are skipped and counted in the summary.
-- Companion-device based connection with a foreground service; optional “standby after the camera
-  leaves” mode keeps the service ready to reconnect automatically.
+- **GPS 位置与时间写入** —— 在获得授权后读取手机位置，经蓝牙低功耗（BLE）写入配对的索尼相机，
+  照片在相机端直接完成地理标记；时间与时区信息同步写入。
+- **相机 Wi-Fi 照片浏览与下载** —— 连接相机 Wi-Fi 后浏览相机内照片：
+  - 按日期分组（最新在前）的图库，缩略图懒加载；
+  - 多选与长按拖动跨日区间选择；
+  - 下载格式：**每次询问**（默认）、**JPG**、**RAW** 或 **JPG + RAW**；不含所选格式的照片自动跳过，
+    并在结果汇总中计数。
+- **后台保持与自动重连** —— 基于 companion device 的连接方式配合前台服务；可选“相机离开后待机”
+  模式，保持服务就绪以自动重连。
 
-English and Simplified Chinese only. Android only.
+仅支持英文与简体中文，仅支持 Android。
 
-## Supported cameras
+## 支持的相机
 
-Sony cameras that support Bluetooth location linking with Imaging Edge Mobile or the Creators'
-App should work. GPS geotagging has been confirmed (by upstream user reports) on these models:
+凡是支持与 Imaging Edge Mobile 或 Creators' App 蓝牙位置联动的索尼相机原则上均可使用。
+以下型号的 GPS 地理标记已经上游用户实测确认：
 
-- A1
-- [A7 III](https://github.com/Saschl/alpha-gps/issues/260)
-- [A7 IV](https://github.com/Saschl/alpha-gps/issues/301)
-- [A7 V](https://github.com/Saschl/alpha-gps/issues/79)
-- A7C II — confirmed by email.
-- [A7R III](https://github.com/Saschl/alpha-gps/issues/95#issuecomment-5609520240) — enable
-  **Location Info. Link** in the camera menu.
-- [A7R V](https://github.com/Saschl/alpha-gps/issues/199)
-- [A99 II](https://github.com/Saschl/alpha-gps/issues/294) — GPS confirmed; time correction and
-  area adjustment were disabled in the report.
-- [A6400](https://github.com/Saschl/alpha-gps/issues/195)
-- [A6500](https://github.com/Saschl/alpha-gps/issues/301) — geotagging confirmed; other features
-  are limited by the camera's capabilities.
-- [A6700](https://github.com/Saschl/alpha-gps/issues/294)
-- [ZV-1](https://github.com/Saschl/alpha-gps/issues/100)
-- [ZV-E10](https://github.com/Saschl/alpha-gps/issues/67#issuecomment-3678222970)
+| 型号 | 备注 | Issues 链接 |
+| --- | --- | --- |
+| A1 | — | — |
+| [A7 III](https://github.com/Saschl/alpha-gps/issues/260) | — | [#260](https://github.com/Saschl/alpha-gps/issues/260) |
+| [A7 IV](https://github.com/Saschl/alpha-gps/issues/301) | — | [#301](https://github.com/Saschl/alpha-gps/issues/301) |
+| [A7 V](https://github.com/Saschl/alpha-gps/issues/79) | — | [#79](https://github.com/Saschl/alpha-gps/issues/79) |
+| A7C II | 经邮件确认 | — |
+| [A7R III](https://github.com/Saschl/alpha-gps/issues/95#issuecomment-5609520240) | 需在相机菜单启用 **Location Info. Link** | [#95](https://github.com/Saschl/alpha-gps/issues/95#issuecomment-5609520240) |
+| [A7R V](https://github.com/Saschl/alpha-gps/issues/199) | — | [#199](https://github.com/Saschl/alpha-gps/issues/199) |
+| [A99 II](https://github.com/Saschl/alpha-gps/issues/294) | GPS 已确认；报告中时间校正与区域调整被禁用 | [#294](https://github.com/Saschl/alpha-gps/issues/294) |
+| [A6400](https://github.com/Saschl/alpha-gps/issues/195) | — | [#195](https://github.com/Saschl/alpha-gps/issues/195) |
+| [A6500](https://github.com/Saschl/alpha-gps/issues/301) | 地理标记已确认；其余功能受相机能力限制 | [#301](https://github.com/Saschl/alpha-gps/issues/301) |
+| [A6700](https://github.com/Saschl/alpha-gps/issues/294) | — | [#294](https://github.com/Saschl/alpha-gps/issues/294) |
+| [ZV-1](https://github.com/Saschl/alpha-gps/issues/100) | — | [#100](https://github.com/Saschl/alpha-gps/issues/100) |
+| [ZV-E10](https://github.com/Saschl/alpha-gps/issues/67#issuecomment-3678222970) | — | [#67](https://github.com/Saschl/alpha-gps/issues/67#issuecomment-3678222970) |
 
-These are user reports, not a guarantee. Wi-Fi-only models such as the
-[A6000](https://github.com/Saschl/alpha-gps/issues/236) cannot use Bluetooth geotagging.
-Reports are welcome — [share your results](https://github.com/mfreceiver/alpha-gps/issues).
+以上为用户报告，不构成保证。仅 Wi-Fi 联动的机型（如
+[A6000](https://github.com/Saschl/alpha-gps/issues/236)）无法使用蓝牙地理标记。
+欢迎到 [GitHub Issues](https://github.com/mfreceiver/alpha-gps/issues) 反馈实测结果。
 
-## Requirements
+## 系统要求
 
-- Android 12 (API 31) or newer, **arm64-only** (`arm64-v8a`; no 32-bit or x86 support).
-- A Sony camera with Bluetooth location linking (see above) for GPS writing; camera Wi-Fi for
-  photo browse/download.
+- Android 12（API 31）及以上，仅 **arm64**（`arm64-v8a`；不支持 32 位与 x86 设备）。
+- 支持蓝牙位置联动的索尼相机（见上表）用于 GPS 写入；相机 Wi-Fi 用于照片浏览/下载。
+- 仅 Android：iOS 应用与 Apple 相关源集已从本仓库移除。
 
-## Build
-
-Initialize the pinned libheif / libde265 source submodules first (native builds use these local
-sources):
+## 构建
 
 ```bash
 git submodule update --init --recursive
-```
-
-Then build the Android app:
-
-```bash
 ./gradlew :app:assembleDebug
 ```
 
-Other verification tasks are listed in [AGENTS.md](AGENTS.md). For releases (signed APKs, tags and
-releases), see [`scripts/release_build.sh`](scripts/release_build.sh) — releasing is a manual,
-confirmed step.
+构建与发版细节见 [AGENTS.md](AGENTS.md) 与 `scripts/release_build.sh`。发版是手动确认的步骤。
 
-`scripts/release_build.sh --publish-only` publishes to the maintainer's primary repository first and,
-only after that succeeds, to GitHub (`--no-github` skips it; `--publish-github-only` re-runs just the
-GitHub step). The GitHub step pushes the release tag (plus the current branch only with
-`--github-push-branch`), so the commit history reachable from it is publicly visible. The primary
-repository address is kept in an untracked local file (see
-[`scripts/release.local.env.example`](scripts/release.local.env.example)). The local GitHub remote
-must resolve (fetch and push side, after `insteadOf`/`pushurl` rewriting) to exactly one URL,
-`https://github.com/mfreceiver/alpha-gps.git`; anything else is rejected before any push. Exit codes:
-`0` ok, `1` failure (usage/config/preflight/build/primary release; the GitHub step did not run),
-`40` GitHub step failed — only in the dual-source modes (`--publish` / `--publish-only`) does this
-mean the primary release already succeeded (it is not rolled back; fix the cause and re-run with
-`--publish-github-only`); `--publish-github-only` never touches the primary repository.
+## 来源与致谢
 
-This fork ships only English (`values/`) and Simplified Chinese (`values-zh-rCN/`) — do not add
-other language directories.
+本项目是 [Saschl/alpha-gps](https://github.com/Saschl/alpha-gps)（GPL-3.0）的分支，许可证仍为 GPL-3.0。
+上游项目又得益于：
 
-## Android only
+- [anoulis/sony_camera_bluetooth_external_gps](https://github.com/anoulis/sony_camera_bluetooth_external_gps) ——
+  弄清索尼蓝牙 GPS 协议的 Python 脚本。
+- [mlapaglia/AlphaSync](https://github.com/mlapaglia/AlphaSync) —— 为使用 Creators' App（而非
+  Imaging Edge）的设备启用该功能的经验。
 
-This customization ships Android builds only. The iOS app (`iosApp/`), the `iosMain`/`iosTest`
-source sets and the Apple targets have been removed entirely from this repository.
+如需支持**上游原作者（Saschl）**，见其 [Buy Me A Coffee](https://buymeacoffee.com/wj8tism4dq) 页面。
 
-## Source & acknowledgements
+**源码：** [GitHub](https://github.com/mfreceiver/alpha-gps)
+**反馈：** [GitHub Issues](https://github.com/mfreceiver/alpha-gps/issues)
 
-This project is a fork of [Saschl/alpha-gps](https://github.com/Saschl/alpha-gps) (GPL-3.0),
-modified by **mfreceiver** since 2026-11. The license remains GPL-3.0.
+## 商标声明
 
-The upstream project itself built on:
+AlphaGPS 与索尼公司无关联，未获其认可或赞助。"Sony" 与 "Alpha" 是 Sony Group Corporation 的商标。
+本项目是与其相机互操作的独立工具。
 
-- [anoulis/sony_camera_bluetooth_external_gps](https://github.com/anoulis/sony_camera_bluetooth_external_gps) —
-  a Python script that got the Sony Bluetooth GPS protocol right.
-- [mlapaglia/AlphaSync](https://github.com/mlapaglia/AlphaSync) — insights into enabling the
-  functionality for devices that use the Sony Creators' App instead of Imaging Edge.
+## 隐私
 
-If you would like to support the **original upstream author (Saschl)**, see their
-[Buy Me A Coffee](https://buymeacoffee.com/wj8tism4dq) page.
-
-**Source code:** [GitHub](https://github.com/mfreceiver/alpha-gps)
-
-**Feedback:** open an issue on [GitHub](https://github.com/mfreceiver/alpha-gps/issues).
-
-## Trademark disclaimer
-
-AlphaGPS is not affiliated with, endorsed by, or sponsored by Sony. “Sony” and “Alpha” are
-trademarks of Sony Group Corporation. This project is an independent tool that interoperates with
-Sony cameras.
-
-## Privacy
-
-AlphaGPS does not collect or upload any data. See [privacy.md](privacy.md).
-
-## 中文摘要
-
-AlphaGPS 是 [Saschl/alpha-gps](https://github.com/Saschl/alpha-gps)（GPL-3.0）的个人定制分支，
-由 mfreceiver 自 2026-11 起维护：通过蓝牙向索尼 Alpha 相机写入 GPS 位置与时间，并通过相机 Wi-Fi
-浏览、下载照片（按日期分组、多选/拖选、仅下载 JPG 或原始文件）。仅支持 Android 12+（arm64），
-不通过任何应用市场分发。应用不收集、不上传任何数据，详见 [privacy.md](privacy.md)。源码：
-[GitHub](https://github.com/mfreceiver/alpha-gps)；反馈请到 [GitHub Issues](https://github.com/mfreceiver/alpha-gps/issues)。
+AlphaGPS 不收集、不上传任何数据，详见 [privacy.md](privacy.md)。
