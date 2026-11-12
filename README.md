@@ -5,7 +5,7 @@
 **通过蓝牙向索尼 Alpha 相机写入 GPS 位置与时间，并通过相机 Wi-Fi 浏览、下载照片。**
 
 AlphaGPS 是 [Saschl/alpha-gps](https://github.com/Saschl/alpha-gps)（GPL-3.0）的个人定制分支，
-由 mfreceiver 自 2026-11 起维护。不通过任何应用市场分发，需自行构建安装。
+由 mfreceiver 自 2026-11 起维护。不通过任何应用市场分发。
 
 ## 功能
 
@@ -44,7 +44,6 @@ AlphaGPS 是 [Saschl/alpha-gps](https://github.com/Saschl/alpha-gps)（GPL-3.0�
 
 以上为用户报告，不构成保证。仅 Wi-Fi 联动的机型（如
 [A6000](https://github.com/Saschl/alpha-gps/issues/236)）无法使用蓝牙地理标记。
-欢迎到 [GitHub Issues](https://github.com/mfreceiver/alpha-gps/issues) 反馈实测结果。
 
 ## 系统要求
 
@@ -72,9 +71,6 @@ git submodule update --init --recursive
   Imaging Edge）的设备启用该功能的经验。
 
 如需支持**上游原作者（Saschl）**，见其 [Buy Me A Coffee](https://buymeacoffee.com/wj8tism4dq) 页面。
-
-**源码：** [GitHub](https://github.com/mfreceiver/alpha-gps)
-**反馈：** [GitHub Issues](https://github.com/mfreceiver/alpha-gps/issues)
 
 ## 商标声明
 
