@@ -360,11 +360,14 @@ private fun InfoRow(label: String, value: @Composable () -> Unit) {
     }
 }
 
-/** A row value with an optional decorative confirmation mark. */
+/** Confirmed values use an accessible icon; other values retain their text. */
 @Composable
 private fun InfoStatusValue(text: String, tone: StatusTone, confirmed: Boolean = false) {
-    if (confirmed) Icon(painterResource(Res.drawable.check_circle_24px), contentDescription = null, tint = AlphaTheme.colors.success, modifier = Modifier.size(20.dp))
-    Text(text, style = InfoValueStyle, color = statusToneColor(tone, AlphaTheme.colors), maxLines = 1)
+    if (confirmed) {
+        Icon(painterResource(Res.drawable.check_circle_24px), contentDescription = text, tint = AlphaTheme.colors.success, modifier = Modifier.size(20.dp))
+    } else {
+        Text(text, style = InfoValueStyle, color = statusToneColor(tone, AlphaTheme.colors), maxLines = 1)
+    }
 }
 
 /** Compact in-row action (32 dp capsule, 48 dp touch target). */
