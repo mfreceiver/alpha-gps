@@ -31,6 +31,16 @@ import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import cameragps.sharednew.generated.resources.Res
+import cameragps.sharednew.generated.resources.faq_subtitle_documentation
+import cameragps.sharednew.generated.resources.faq_subtitle_privacy
+import cameragps.sharednew.generated.resources.faq_subtitle_service
+import cameragps.sharednew.generated.resources.faq_subtitle_connect
+import cameragps.sharednew.generated.resources.faq_subtitle_appearing
+import cameragps.sharednew.generated.resources.faq_subtitle_connecting
+import cameragps.sharednew.generated.resources.faq_subtitle_permissions
+import cameragps.sharednew.generated.resources.faq_subtitle_accuracy
+import cameragps.sharednew.generated.resources.faq_subtitle_background
+import cameragps.sharednew.generated.resources.faq_subtitle_disconnects
 import cameragps.sharednew.generated.resources.faq_background_work_answer
 import cameragps.sharednew.generated.resources.faq_background_work_question
 import cameragps.sharednew.generated.resources.faq_camera_not_appearing_answer
@@ -79,6 +89,7 @@ import org.jetbrains.compose.resources.stringResource
 private data class FaqItem(
     val questionRes: StringResource,
     val answerRes: StringResource,
+    val subtitleRes: StringResource? = null,
     val containsLink: Boolean = false
 )
 
@@ -155,16 +166,16 @@ private fun HelpFaqScreen(
 ) {
     val faqItems = remember {
         listOf(
-            FaqItem(Res.string.is_there_documenation, Res.string.is_there_documenation_answer, containsLink = true),
-            FaqItem(Res.string.how_about_privacy, Res.string.how_about_privacy_answer),
-            FaqItem(Res.string.faq_enable_service_question, Res.string.faq_enable_service_answer),
-            FaqItem(Res.string.faq_connect_camera_question, Res.string.faq_connect_camera_answer),
-            FaqItem(Res.string.faq_camera_not_appearing_question, Res.string.faq_camera_not_appearing_answer),
-            FaqItem(Res.string.faq_camera_not_connecting_question, Res.string.faq_camera_not_connecting_answer),
-            FaqItem(Res.string.faq_permissions_question, Res.string.faq_permissions_answer),
-            FaqItem(Res.string.faq_gps_accuracy_question, Res.string.faq_gps_accuracy_answer),
-            FaqItem(Res.string.faq_background_work_question, Res.string.faq_background_work_answer),
-            FaqItem(Res.string.faq_disconnects_question, Res.string.faq_disconnects_answer),
+            FaqItem(Res.string.is_there_documenation, Res.string.is_there_documenation_answer, subtitleRes = Res.string.faq_subtitle_documentation, containsLink = true),
+            FaqItem(Res.string.how_about_privacy, Res.string.how_about_privacy_answer, subtitleRes = Res.string.faq_subtitle_privacy),
+            FaqItem(Res.string.faq_enable_service_question, Res.string.faq_enable_service_answer, subtitleRes = Res.string.faq_subtitle_service),
+            FaqItem(Res.string.faq_connect_camera_question, Res.string.faq_connect_camera_answer, subtitleRes = Res.string.faq_subtitle_connect),
+            FaqItem(Res.string.faq_camera_not_appearing_question, Res.string.faq_camera_not_appearing_answer, subtitleRes = Res.string.faq_subtitle_appearing),
+            FaqItem(Res.string.faq_camera_not_connecting_question, Res.string.faq_camera_not_connecting_answer, subtitleRes = Res.string.faq_subtitle_connecting),
+            FaqItem(Res.string.faq_permissions_question, Res.string.faq_permissions_answer, subtitleRes = Res.string.faq_subtitle_permissions),
+            FaqItem(Res.string.faq_gps_accuracy_question, Res.string.faq_gps_accuracy_answer, subtitleRes = Res.string.faq_subtitle_accuracy),
+            FaqItem(Res.string.faq_background_work_question, Res.string.faq_background_work_answer, subtitleRes = Res.string.faq_subtitle_background),
+            FaqItem(Res.string.faq_disconnects_question, Res.string.faq_disconnects_answer, subtitleRes = Res.string.faq_subtitle_disconnects),
         )
     }
 
@@ -242,6 +253,9 @@ private fun FaqRow(faq: FaqItem, initiallyExpanded: Boolean) {
                 style = AlphaType.Label,
                 color = AlphaTheme.colors.textPrimary,
             )
+            faq.subtitleRes?.let {
+                Text(text = stringResource(it), style = AlphaType.Caption, color = AlphaTheme.colors.textSecondary)
+            }
             if (expanded) {
                 if (faq.containsLink) {
                     val linkStyle = TextLinkStyles(
@@ -259,7 +273,7 @@ private fun FaqRow(faq: FaqItem, initiallyExpanded: Boolean) {
                             withLink(LinkAnnotation.Url(AlphaGpsLinks.README, linkStyle)) {
                                 append(AlphaGpsLinks.REPOSITORY)
                             }
-                            append("\n")
+                            append("\n\n")
                             withLink(LinkAnnotation.Url(AlphaGpsLinks.ISSUES, linkStyle)) {
                                 append(reportIssue)
                             }

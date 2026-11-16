@@ -232,8 +232,19 @@
     <string name="quick_start_feature_description">On the next screen, follow the instructions to pair your camera. Once pairing is complete, the app will automatically connect to your camera and start transmitting location data. If it does not start immediately, try restarting your camera.</string>
     <string name="reset_welcome">Show welcome screen on next launch</string>
     <string name="will_show_welcome">Will show welcome screen on next launch!</string>
+    <string name="faq_subtitle_documentation">Project guide and issue tracker</string>
+    <string name="faq_subtitle_privacy">How your data is handled</string>
+    <string name="faq_subtitle_service">Start transmitting location</string>
+    <string name="faq_subtitle_connect">Pair and connect your camera</string>
+    <string name="faq_subtitle_appearing">Find a camera during pairing</string>
+    <string name="faq_subtitle_connecting">Troubleshoot connection problems</string>
+    <string name="faq_subtitle_permissions">Location and Bluetooth access</string>
+    <string name="faq_subtitle_accuracy">Understand location precision</string>
+    <string name="faq_subtitle_background">Keep location updates running</string>
+    <string name="faq_subtitle_disconnects">Resolve interruptions</string>
+    <string name="wifi_remote_clear_selection_back">Going back will clear all selected photos</string>
     <string name="is_there_documenation">Is there any documentation?</string>
-    <string name="is_there_documenation_answer">Yes! Please visit the GitHub page.\nTo report a problem with the app, open an issue on GitHub:</string>
+    <string name="is_there_documenation_answer">Documentation and issue tracker:</string>
     <string name="app_standby_title">Standby</string>
     <string name="app_standby_content">Waiting for camera to connect</string>
     <!-- Language settings -->
