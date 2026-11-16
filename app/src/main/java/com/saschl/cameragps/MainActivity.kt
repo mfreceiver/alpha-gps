@@ -28,7 +28,6 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import com.sasch.cameragps.sharednew.database.LogDatabase
 import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
-import com.sasch.cameragps.sharednew.database.logging.LogRepository
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassBackground
 import com.sasch.cameragps.sharednew.ui.logs.SharedLogViewerScreen
 import com.sasch.cameragps.sharednew.ui.theme.CameraGpsTheme
@@ -94,7 +93,7 @@ class MainActivity : AppCompatActivity() {
         val context = LocalContext.current
         val cameraDeviceDAO =
             LogDatabase.getRoomDatabase(getDatabaseBuilder(context)).cameraDeviceDao()
-        val logRepository = remember(context) { LogRepository(getDatabaseBuilder(context)) }
+        val logRepository = FileTree.logRepository
         val lifecycleState by ProcessLifecycleOwner.get().lifecycle.currentStateFlow.collectAsState()
 
         val startDestination = remember {
@@ -281,7 +280,7 @@ class MainActivity : AppCompatActivity() {
                                 logLevel = level
                                 PreferencesManager.setLogLevel(context, level)
                                 Timber.uprootAll()
-                                Timber.plant(FileTree(context, level))
+                                Timber.plant(FileTree(level))
                             },
                         )
                     }

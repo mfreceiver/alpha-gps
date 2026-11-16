@@ -23,10 +23,9 @@ class CameraGpsApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        FileTree.initialize(this)
-        Timber.plant(FileTree(this, PreferencesManager.logLevel(this)))
+        Timber.plant(FileTree(PreferencesManager.logLevel(this)))
         // Keep Logcat/tag generation and also route shared logs into the in-app
-        // database and consent-controlled Timber trees. Trees own their thresholds.
+        // process-local buffer and consent-controlled Timber trees. Trees own their thresholds.
         KmLogging.setLoggers(PlatformLogger(FixedLogLevel(true)), TimberLogger())
 
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()

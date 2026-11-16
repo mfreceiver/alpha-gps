@@ -1,11 +1,8 @@
 package com.saschl.cameragps.service
 
-import android.content.Context
 import android.util.Log
 import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.asLiveData
-import com.sasch.cameragps.sharednew.database.getDatabaseBuilder
 import com.sasch.cameragps.sharednew.database.logging.LogRepository
 import kotlinx.coroutines.flow.map
 import timber.log.Timber
@@ -13,27 +10,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class FileTree(context: Context, private val minPriority: Int) : Timber.Tree() {
-    private val logRepository = LogRepository(getDatabaseBuilder(context))
-
+class FileTree(private val minPriority: Int) : Timber.Tree() {
     companion object {
-        @Volatile
-        private var logRepository: LogRepository? = null
-
-        fun initialize(context: Context) {
-            if (logRepository == null) {
-                synchronized(this) {
-                    if (logRepository == null) {
-                        logRepository =
-                            LogRepository(getDatabaseBuilder(context.applicationContext))
-                    }
-                }
-            }
-        }
+        val logRepository = LogRepository()
 
         fun getLogs(): LiveData<List<String>> {
             Timber.d("Getting logs from FileTree")
-            return logRepository?.let { repo ->
+            return logRepository.let { repo ->
                     repo.getRecentLogs().map { logEntry ->
                         logEntry.map {
                             val date = formatTimestamp(it.timestamp)
@@ -42,11 +25,11 @@ class FileTree(context: Context, private val minPriority: Int) : Timber.Tree() {
                         }
 
                     }
-            }?.asLiveData() ?: MutableLiveData(emptyList())
+            }.asLiveData()
         }
 
         suspend fun clearLogs() {
-            logRepository?.clearAllLogs()
+            logRepository.clearAllLogs()
         }
 
         private fun priorityToString(priority: Int): String = when (priority) {
