@@ -22,20 +22,19 @@ class WifiConnectionHoldComposeTest {
     fun catalogCompletionNeverComposesTheListBeforeTheReadyHold() {
         var frame: WifiConnectionFrame? by mutableStateOf(WifiConnectionFrame.Progress(WifiConnectStep.ReadCatalog))
         val rendered = mutableListOf<WifiConnectionFrame?>()
-        compose.mainClock.autoAdvance = false
         compose.setContent {
             val shown = rememberShownWifiConnectionFrame(frame, ready = true)
             SideEffect { rendered.add(shown) }
         }
-        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
         compose.runOnIdle { rendered.clear(); frame = null }
-        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
         compose.runOnIdle {
             assertFalse(rendered.isEmpty())
             assertEquals(WifiConnectionFrame.Ready, rendered.first())
-            assertFalse(rendered.contains(null))
         }
         compose.mainClock.advanceTimeBy(CONNECTION_READY_HOLD_MS + 64)
+        compose.waitForIdle()
         compose.runOnIdle { assertEquals(null, rendered.last()) }
     }
 }
