@@ -613,38 +613,39 @@ private fun ViewerTopBar(
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier.fillMaxWidth()) {
-    // Keep the position and navigation usable on narrow photo panes and at large font scales.
-    val showSelection = maxWidth >= 320.dp && LocalDensity.current.fontScale <= 1.3f
-    Row(
-        Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        GlassIconButton(
-            painterResource(Res.drawable.arrow_back_24px),
-            contentDescription = stringResource(Res.string.wifi_remote_viewer_back),
-            onClick = parts.onBack,
-            // Round GV glass keeps the arrow legible where the bar lies over the photo (layout C).
-            container = GlassLevel.Viewer,
-        )
-        Column(Modifier.weight(1f)) {
-            Text(
-                parts.title, color = AlphaTheme.colors.onPhoto, style = AlphaType.Heading,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
+        // Hide the tag rather than squeeze navigation or clip a very large count.
+        val showSelection = maxWidth >= 320.dp && LocalDensity.current.fontScale <= 1.3f &&
+            parts.selectedCount <= 999 && (parts.position?.length ?: 0) <= 9
+        Row(
+            Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            GlassIconButton(
+                painterResource(Res.drawable.arrow_back_24px),
+                contentDescription = stringResource(Res.string.wifi_remote_viewer_back),
+                onClick = parts.onBack,
+                // Round GV glass keeps the arrow legible where the bar lies over the photo (layout C).
+                container = GlassLevel.Viewer,
             )
-            parts.capturedAt?.let {
+            Column(Modifier.weight(1f)) {
                 Text(
-                    it, color = AlphaTheme.colors.onPhotoMuted, style = AlphaType.Caption,
+                    parts.title, color = AlphaTheme.colors.onPhoto, style = AlphaType.Heading,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
+                parts.capturedAt?.let {
+                    Text(
+                        it, color = AlphaTheme.colors.onPhotoMuted, style = AlphaType.Caption,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
+            if (showSelection && parts.selectedCount > 0) InfoTag(
+                stringResource(Res.string.m7_viewer_selected_count, parts.selectedCount),
+                modifier = Modifier.widthIn(max = 120.dp), style = InfoTagStyle.OnPhoto,
+            )
+            parts.position?.let { Text(it, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Label, maxLines = 1) }
         }
-        if (showSelection && parts.selectedCount > 0) InfoTag(
-            stringResource(Res.string.m7_viewer_selected_count, parts.selectedCount),
-            modifier = Modifier.widthIn(max = 96.dp), style = InfoTagStyle.OnPhoto,
-        )
-        parts.position?.let { Text(it, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Label, maxLines = 1) }
-    }
     }
 }
 

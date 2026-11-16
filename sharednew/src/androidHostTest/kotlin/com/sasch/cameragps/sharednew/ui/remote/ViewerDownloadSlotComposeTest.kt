@@ -154,6 +154,9 @@ class ViewerDownloadSlotComposeTest {
         compose.runOnIdle { selectedCount = 9 }
         compose.waitForIdle()
         assertEquals(before, compose.onNodeWithTag("photo-bounds").fetchSemanticsNode().boundsInRoot)
+        compose.runOnIdle { selectedCount = 1000 }
+        compose.waitForIdle()
+        assertEquals(before, compose.onNodeWithTag("photo-bounds").fetchSemanticsNode().boundsInRoot)
         compose.onNodeWithText("1 / 1").assertExists()
     }
 
