@@ -37,6 +37,7 @@
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)
+source "$HERE/release_test_pass_stub.sh"
 LIB=$HERE/release_lib.sh
 # shellcheck source=release_lib.sh
 source "$LIB"
@@ -318,6 +319,8 @@ setup_wiring_sandbox() { # $1=沙箱根
     "$FIXTURE_NAME" > "$SB/app/build.gradle.kts"
   cat > "$SB/gradlew" <<'GW'
 #!/usr/bin/env bash
+# 断言真实接线把 pass 的两项口令经环境传给 Gradle，而非使用继承环境。
+[[ ${SIGNING_STORE_PASSWORD:-} == fake-store-password && ${SIGNING_KEY_PASSWORD:-} == fake-key-password && ${KS_PASS:-} == fake-store-password ]] || { echo 'fake gradle: signing env mismatch' >&2; exit 1; }
 mkdir -p app/build/outputs/apk/release
 # 生成真实 zip 形态的 fake APK（供 release_assert_apk.sh 的 python3 zipfile ABI/语言检查）。
 # APK_ABI_MODE: good=仅 lib/arm64-v8a（含 .so）/ bad=混入 armeabi-v7a / none=无 lib 条目
@@ -366,7 +369,7 @@ exit 0
 AAPT
   chmod +x "$SB/sdk/build-tools/33.0.0/aapt"
   printf 'sdk.dir=%s\n' "$SB/sdk" > "$SB/local.properties"
-  printf 'DSH_KEYSTORE_PASSWORD=x\nDSH_KEY_PASSWORD=x\n' > "$SB/home/.gradle/gradle.properties"
+  make_test_pass "$SB/home/jdk/bin" "$SB/home"
   printf 'placeholder\n' > "$SB/home/.config/alphagps/signing/release.jks"
   ( cd "$SB" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm init )
   rm -rf -- "$TMP/wprimary.git"; git init -q --bare "$TMP/wprimary.git"

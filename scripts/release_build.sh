@@ -15,11 +15,11 @@
 #     重算 sha256 对账。GitHub 失败**不回滚**主仓库，退出码 40（区别于主仓库失败的 1）。
 #   - 主仓库参数（host/repo/本机远端名）不入库：scripts/release.local.env 或 ALPHAGPS_PRIMARY_*
 #     环境变量（见 scripts/release.local.env.example）；缺失 fail-closed
-#   - 签名 keystore 路径/alias 默认 ~/.config/alphagps/signing/release.jks / release；本机位置不同时由
+#   - 签名凭据来自 pass android/release-shared/*；keystore 路径/alias 可由
 #     scripts/release.local.env（或环境变量）的 ALPHAGPS_SIGNING_KEYSTORE / ALPHAGPS_SIGNING_ALIAS 覆盖
-#     （值校验见 release_lib.sh；口令仍只来自 ~/.gradle/gradle.properties，经 env 传递）
+#     （值校验见 release_lib.sh；口令仅经 env 传递）
 #   - 硬红线：release 资产只上传本次 APK；任何 *.jks/*.keystore/*.p12/*.pass/*.key
-#     绝不上传；口令/token 只经 stdin/curl 配置流传递，绝不进 argv/日志
+#     绝不上传；签名口令经环境变量传递、发布凭据经 stdin/curl 配置流传递，绝不进 argv/日志
 #   - GitHub 推送目的地：验证远端的**全部**有效目的地（fetch 与 push 两侧、含 insteadOf/pushurl/
 #     pushInsteadOf 重写后，且各恰好一个）都等于公开 URL，之后 ls-remote/push 直接对已验证的
 #     URL 字面量执行（见 release_lib.sh rl_gh_verify_remote）；日志里的 URL 一律净化（无 userinfo/query）
@@ -47,11 +47,9 @@ RELEASE_DIR="$REPO_ROOT/release"
 REPO_PROPS="$REPO_ROOT/gradle.properties"
 OUT_APK_DIR="$REPO_ROOT/app/build/outputs/apk/release"
 BUILD_GRADLE="$REPO_ROOT/app/build.gradle.kts"
-GRADLE_PROPS=$HOME/.gradle/gradle.properties
-# 签名 keystore / alias 的默认值；可被 release.local.env 或环境变量 ALPHAGPS_SIGNING_KEYSTORE /
-# ALPHAGPS_SIGNING_ALIAS 覆盖（在下面 rl_load_release_config 之后生效，见 release_lib.sh）
-SIGNING_KEYSTORE_PATH=$HOME/.config/alphagps/signing/release.jks
-SIGNING_KEY_ALIAS=release
+# 配置加载只填写显式覆盖；未配置时签名预检使用 pass 中的值。
+SIGNING_KEYSTORE_PATH=""
+SIGNING_KEY_ALIAS=""
 PINNED_CERT_SHA256="a29cedb9af4ff4bbb80704cf60f476539281a3aeb30d3aa2adbcd660a83b0498"
 # 本仓库 versionName 硬编码无 v 前缀（如 "0.1.0"），产物内嵌 versionName = v$VERSION_NAME
 # 主发布仓库参数（PRIMARY_HOST / PRIMARY_REPO / PRIMARY_REMOTE）不内置于仓库：从不入库的
@@ -77,7 +75,7 @@ GitHub 选项（仅在会执行 GitHub 步骤的模式下有效）:
         主仓库已成功且不回滚，用 --publish-github-only 重跑）
 配置: 主仓库 host/repo/远端名见 scripts/release.local.env（不入库）；GitHub 远端名默认 github，需先
       git remote add github https://github.com/mfreceiver/alpha-gps.git
-      签名 keystore 默认 ~/.config/alphagps/signing/release.jks、alias 默认 release；本机不同则在
+      签名凭据从 pass android/release-shared/* 读取；keystore / alias 如需覆盖，在
       scripts/release.local.env 设 ALPHAGPS_SIGNING_KEYSTORE（绝对路径或 ~/ 开头）/ ALPHAGPS_SIGNING_ALIAS
       （格式见 scripts/release.local.env.example；同名环境变量优先）
 USAGE
@@ -543,13 +541,30 @@ run_github_step() {
 # ─── 签名预检（fail-closed）──────────────────────────────────────────────
 { set +x; } 2>/dev/null   # 纵深防御：下面开始读取/赋值签名口令
 log "签名预检"
-[[ -f "$GRADLE_PROPS" ]] || fail "未找到 $GRADLE_PROPS（DSH_* 签名凭据应位于其中）"
-prop_of() { sed -nE "s/^$1=(.*)$/\1/p" "$GRADLE_PROPS" | head -1; }
-DSH_KEYSTORE_PASSWORD=$(prop_of DSH_KEYSTORE_PASSWORD)
-DSH_KEY_PASSWORD=$(prop_of DSH_KEYSTORE_PASSWORD)
-[[ -n "$(prop_of DSH_KEY_PASSWORD)" ]] && DSH_KEY_PASSWORD=$(prop_of DSH_KEY_PASSWORD)
-[[ -n "$DSH_KEYSTORE_PASSWORD" ]] || fail "$GRADLE_PROPS 缺少 DSH_KEYSTORE_PASSWORD"
-[[ -f "$SIGNING_KEYSTORE_PATH" ]] || fail "keystore 不存在或不可读: $SIGNING_KEYSTORE_PATH"
+unset DSH_KEYSTORE DSH_KEYSTORE_PASSWORD DSH_KEY_ALIAS DSH_KEY_PASSWORD
+unset SIGNING_STORE_PASSWORD SIGNING_KEY_PASSWORD KS_PASS
+PASS_PREFIX=android/release-shared
+# pass 是本脚本的日志函数；绕过它调用 PATH 中的 pass 命令。
+type -P pass >/dev/null 2>&1 || fail "未找到 pass 命令：签名凭据只能取自 pass $PASS_PREFIX/*"
+pass_of() {
+  local value
+  value=$(command pass show "$PASS_PREFIX/$1" 2>/dev/null) || return 1
+  value=${value%%$'\n'*}
+  [[ -n "$value" ]] || return 1
+  printf '%s' "$value"
+}
+PASS_KEYSTORE=$(pass_of store-file) || fail "pass $PASS_PREFIX/store-file 不可用或为空（条目缺失或未解锁）"
+DSH_KEYSTORE_PASSWORD=$(pass_of store-password) || fail "pass $PASS_PREFIX/store-password 不可用或为空（条目缺失或未解锁）"
+PASS_ALIAS=$(pass_of key-alias) || fail "pass $PASS_PREFIX/key-alias 不可用或为空（条目缺失或未解锁）"
+DSH_KEY_PASSWORD=$(pass_of key-password) || fail "pass $PASS_PREFIX/key-password 不可用或为空（条目缺失或未解锁）"
+SIGNING_KEYSTORE_PATH=${SIGNING_KEYSTORE_PATH:-$PASS_KEYSTORE}
+SIGNING_KEY_ALIAS=${SIGNING_KEY_ALIAS:-$PASS_ALIAS}
+if [[ "$SIGNING_KEYSTORE_PATH" == "~/"* ]]; then
+  [[ "${HOME:-}" == /* ]] || fail "pass keystore 使用 '~/' 展开但 HOME 不是绝对路径"
+  SIGNING_KEYSTORE_PATH=${HOME%/}/${SIGNING_KEYSTORE_PATH#"~/"}
+fi
+rl_cfg_py value ALPHAGPS_SIGNING_ALIAS "$SIGNING_KEY_ALIAS" || fail "签名 alias 非法"
+[[ -f "$SIGNING_KEYSTORE_PATH" && -r "$SIGNING_KEYSTORE_PATH" ]] || fail "keystore 不存在或不可读: $SIGNING_KEYSTORE_PATH"
 
 KEYTOOL_OUT=$(mktemp)
 export KS_PASS=$DSH_KEYSTORE_PASSWORD   # 口令经 env 传递，绝不进 argv

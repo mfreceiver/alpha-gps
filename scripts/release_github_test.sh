@@ -37,6 +37,7 @@
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)
+source "$HERE/release_test_pass_stub.sh"
 LIB=$HERE/release_lib.sh
 # shellcheck source=release_lib.sh
 source "$LIB"
@@ -458,7 +459,7 @@ exit 0
 AAPT
   chmod +x "$SB/sdk/build-tools/33.0.0/aapt"
   printf 'sdk.dir=%s\n' "$SB/sdk" > "$SB/local.properties"
-  printf 'DSH_KEYSTORE_PASSWORD=x\nDSH_KEY_PASSWORD=x\n' > "$SB/home/.gradle/gradle.properties"
+  make_test_pass "$SB/home/jdk/bin" "$SB/home"
   printf 'placeholder\n' > "$SB/home/.config/alphagps/signing/release.jks"
   printf 'https://ghuser:%s@github.com\nhttps://puser:ppw@forge.example.com:443\n' "$GH_TOKEN_VALUE" > "$SB/home/.git-credentials"
   printf '[credential]\n\thelper = store --file=%s/home/.git-credentials\n' "$SB" > "$SB/home/.gitconfig"
@@ -985,7 +986,8 @@ echo "== 场景 22: bash -x / SHELLOPTS=xtrace 下假口令/假 token 不进 std
 SECRETS=(FAKEks_pw_91Zq FAKEkey_pw_72Yp ghp_FAKEleakTOK_55 PRIMfakePW_33)
 xt_sb() { # xt_sb <名> → 沙箱写入假口令/假 token（含主仓库口令）
   make_sb "$1"; fake_reset; fake_clear_env
-  printf 'DSH_KEYSTORE_PASSWORD=%s\nDSH_KEY_PASSWORD=%s\n' "${SECRETS[0]}" "${SECRETS[1]}" > "$TMP/$1/home/.gradle/gradle.properties"
+  printf '%s\n' "${SECRETS[0]}" > "$TMP/$1/home/.fake-pass/store-password"
+  printf '%s\n' "${SECRETS[1]}" > "$TMP/$1/home/.fake-pass/key-password"
   printf 'https://ghuser:%s@github.com\nhttps://puser:%s@forge.example.com:443\n' "${SECRETS[2]}" "${SECRETS[3]}" > "$TMP/$1/home/.git-credentials"
   retag "$TMP/$1"   # home/ 已入沙箱仓库：提交改动以保持干净树，并让 tag 回到 HEAD
 }

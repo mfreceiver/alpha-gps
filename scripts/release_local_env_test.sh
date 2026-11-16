@@ -23,6 +23,7 @@ set -uo pipefail
 
 HERE=$(cd "$(dirname "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)
 LIB=$HERE/release_lib.sh
+source "$HERE/release_test_pass_stub.sh"
 # shellcheck source=release_lib.sh
 source "$LIB"
 
@@ -171,6 +172,8 @@ check ".gitignore 含 /scripts/release.local.env" grep -qxF '/scripts/release.lo
 
 echo "== 场景 12: release_build.sh 接线 =="
 SB=$TMP/sb12; mkdir -p "$SB/scripts"
+make_test_pass "$SB/bin" "$SB/home"
+export PATH="$SB/bin:$PATH"
 cp -- "$HERE/release_build.sh" "$HERE/release_version_inject.sh" "$HERE/release_lib.sh" "$HERE/release_assert_apk.sh" "$SB/scripts/"
 ( cd "$SB" && env -u ALPHAGPS_PRIMARY_HOST -u ALPHAGPS_PRIMARY_REPO -u ALPHAGPS_PRIMARY_REMOTE -u ALPHAGPS_GITHUB_REMOTE \
     HOME="$SB/home" timeout 30 bash scripts/release_build.sh 0.1.3 --allow-dirty ) > "$TMP/w12.log" 2>&1; RC=$?
@@ -328,7 +331,7 @@ check "真实库接受 '~/x.jks'" test "$RC" -eq 0
 echo "== 场景 15: release_build.sh 接线（keytool 实参 / 预检前终止 / --help） =="
 SB=$TMP/sb15; mkdir -p "$SB/scripts" "$SB/home/.gradle" "$SB/bin"
 cp -- "$HERE/release_build.sh" "$HERE/release_version_inject.sh" "$HERE/release_lib.sh" "$HERE/release_assert_apk.sh" "$SB/scripts/"
-printf 'DSH_KEYSTORE_PASSWORD=x\nDSH_KEY_PASSWORD=x\n' > "$SB/home/.gradle/gradle.properties"
+make_test_pass "$SB/bin" "$SB/home"
 # 假 keytool：只记录 argv（不记录环境，口令走 env 不会出现），然后失败以止步于签名预检
 printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "%s/keytool.args"\nexit 1\n' "$SB" > "$SB/bin/keytool"
 chmod +x "$SB/bin/keytool"
@@ -341,12 +344,12 @@ run15() { # run15 <日志> [VAR=val ...]
 }
 good_file "$SB/scripts/release.local.env"
 run15 "$TMP/w15a.log"; RC=$?
-check "默认：keystore 缺失时报内置默认路径（\$HOME/.config/alphagps/signing/release.jks）" \
+check "pass：keystore 缺失时报 pass 路径（\$HOME/.config/alphagps/signing/release.jks）" \
   bash -c 'test "$1" -ne 0 && grep -qF "keystore 不存在或不可读: $2/home/.config/alphagps/signing/release.jks" "$3"' _ "$RC" "$SB" "$TMP/w15a.log"
 mkdir -p "$SB/home/.config/alphagps/signing" "$SB/home/.config/custom"
 : > "$SB/home/.config/alphagps/signing/release.jks"; : > "$SB/home/.config/custom/my.jks"
 run15 "$TMP/w15b.log"; RC=$?
-check "默认：keytool 收到默认 -keystore 与 -alias release" \
+check "pass：keytool 收到 pass 的 -keystore 与 -alias release" \
   bash -c 'grep -qF -- "-keystore $1/home/.config/alphagps/signing/release.jks " "$1/keytool.args" && grep -qE -- "-alias release( |$)" "$1/keytool.args"' _ "$SB"
 check "默认：失败信息含 alias 'release'" grep -qF "alias 'release'" "$TMP/w15b.log"
 sign_file "$SB/scripts/release.local.env" 'ALPHAGPS_SIGNING_KEYSTORE=~/.config/custom/my.jks' 'ALPHAGPS_SIGNING_ALIAS=myalias'
@@ -367,6 +370,46 @@ check "非法 env alias → 非零且在签名预检前终止" \
   bash -c 'test "$1" -ne 0 && grep -q "ALPHAGPS_SIGNING_ALIAS" "$2" && ! grep -q "签名预检" "$2" && test ! -e "$3/keytool.args"' _ "$RC" "$TMP/w15f.log" "$SB"
 ( cd "$SB" && bash scripts/release_build.sh --help ) > "$TMP/w15g.log" 2>&1; RC=$?
 check "--help 退出 0 并说明两个签名键" bash -c 'test "$1" -eq 0 && grep -q ALPHAGPS_SIGNING_KEYSTORE "$2" && grep -q ALPHAGPS_SIGNING_ALIAS "$2"' _ "$RC" "$TMP/w15g.log"
+# 使用与旧内置值完全不同的 pass 项，验证真实 fallback 及覆盖优先级。
+printf '%s\n' '~/.config/custom/frompass.jks' > "$SB/home/.fake-pass/store-file"
+printf '%s\n' pass-alias > "$SB/home/.fake-pass/key-alias"
+: > "$SB/home/.config/custom/frompass.jks"
+run15 "$TMP/w15pass.log"; RC=$?
+check "未覆盖时使用 pass 中的路径和 alias" bash -c 'grep -qF -- "-keystore $1/home/.config/custom/frompass.jks " "$1/keytool.args" && grep -qE -- "-alias pass-alias( |$)" "$1/keytool.args"' _ "$SB"
+sign_file "$SB/scripts/release.local.env" 'ALPHAGPS_SIGNING_KEYSTORE=~/.config/custom/my.jks' 'ALPHAGPS_SIGNING_ALIAS=myalias'
+run15 "$TMP/w15override.log" ALPHAGPS_SIGNING_KEYSTORE='~/.config/alphagps/signing/release.jks' ALPHAGPS_SIGNING_ALIAS=envalias; RC=$?
+check "环境覆盖文件，二者均覆盖不同的 pass 值" bash -c 'grep -qF -- "-keystore $1/home/.config/alphagps/signing/release.jks " "$1/keytool.args" && grep -qE -- "-alias envalias( |$)" "$1/keytool.args"' _ "$SB"
+
+echo "== 场景 16: pass 唯一来源及缺失 fail-closed =="
+good_file "$SB/scripts/release.local.env"
+# 系统环境与旧 properties 故意设为不同值：keytool 只能看见 pass 的口令。
+mkdir -p "$SB/home/.gradle"
+printf 'DSH_KEYSTORE_PASSWORD=old-properties-secret\nDSH_KEY_PASSWORD=old-properties-key\n' > "$SB/home/.gradle/gradle.properties"
+cat > "$SB/bin/keytool" <<'KEYTOOL'
+#!/usr/bin/env bash
+printf '%s\n' "$*" > "$HOME/keytool.argv"
+[[ ${KS_PASS:-} == fake-store-password && -z ${DSH_KEYSTORE:-} && -z ${DSH_KEY_ALIAS:-} ]] && : > "$HOME/pass-env-ok"
+exit 1
+KEYTOOL
+chmod +x "$SB/bin/keytool"
+run15 "$TMP/w16.log" DSH_KEYSTORE=wrong DSH_KEY_ALIAS=wrong DSH_KEYSTORE_PASSWORD=wrong DSH_KEY_PASSWORD=wrong KS_PASS=wrong
+check "keytool 通过 env 收到 pass 口令，旧路径和 alias 环境已清除" test -e "$SB/home/pass-env-ok"
+check "假口令不进入 keytool argv 或日志" bash -c '! grep -qE "fake-store-password|fake-key-password|old-properties-secret|old-properties-key" "$1" "$2"' _ "$SB/home/keytool.argv" "$TMP/w16.log"
+for entry in store-file store-password key-alias key-password; do
+  mv "$SB/home/.fake-pass/$entry" "$SB/home/.fake-pass/$entry.saved"
+  run15 "$TMP/w16-$entry.log" DSH_KEYSTORE_PASSWORD=wrong DSH_KEY_PASSWORD=wrong; RC=$?
+  check "缺少 $entry 时明确报错且不回退旧凭据" bash -c 'test "$1" -ne 0 && grep -qF "pass android/release-shared/$2" "$3" && ! grep -q "keytool 校验失败" "$3"' _ "$RC" "$entry" "$TMP/w16-$entry.log"
+  mv "$SB/home/.fake-pass/$entry.saved" "$SB/home/.fake-pass/$entry"
+done
+# 受限 PATH 中只提供启动和配置解析所需的命令，彻底隔离系统 pass。
+mkdir -p "$SB/nopass"
+for tool in readlink dirname python3; do ln -s "$(command -v "$tool")" "$SB/nopass/$tool"; done
+( cd "$SB" && env -u ALPHAGPS_SIGNING_KEYSTORE -u ALPHAGPS_SIGNING_ALIAS HOME="$SB/home" PATH="$SB/nopass" /bin/bash scripts/release_build.sh 0.1.3 --allow-dirty ) > "$TMP/w16-missing.log" 2>&1; RC=$?
+check "无 pass 命令时报清晰错误且 fail-closed" bash -c 'test "$1" -ne 0 && grep -q "未找到 pass 命令" "$2"' _ "$RC" "$TMP/w16-missing.log"
+printf '#!/usr/bin/env bash\nprintf "SHA256: 00:11:22:33\\n"\n' > "$SB/bin/keytool"
+chmod +x "$SB/bin/keytool"
+run15 "$TMP/w16-pin.log"; RC=$?
+check "不同证书 SHA256 仍被钉定门禁拒绝" bash -c 'test "$1" -ne 0 && grep -q "证书 SHA256 与钉定值不一致" "$2"' _ "$RC" "$TMP/w16-pin.log"
 
 echo
 SCENARIOS=$(grep -c '^echo "== 场景' -- "$0")

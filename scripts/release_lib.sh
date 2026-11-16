@@ -386,10 +386,10 @@ assert_code_monotonic() {
 #   ALPHAGPS_PRIMARY_REPO    主仓库 owner/repo
 #   ALPHAGPS_PRIMARY_REMOTE  本机 git 远端名（主仓库）
 #   ALPHAGPS_GITHUB_REMOTE   本机 git 远端名（GitHub；可选，默认 github）
-#   ALPHAGPS_SIGNING_KEYSTORE 签名 keystore 路径（可选；缺省用 release_build.sh 内置默认）。须为绝对路径，
+#   ALPHAGPS_SIGNING_KEYSTORE 签名 keystore 路径（可选；缺省由调用方选取 pass 值）。须为绝对路径，
 #                            或以 '~/' 开头（脚本把开头的 '~/' 替换为 $HOME/；这是唯一的展开，不做任何
 #                            shell 展开）；路径段只含 [A-Za-z0-9._-]，不含 '..'/空段
-#   ALPHAGPS_SIGNING_ALIAS   签名 key alias（可选；缺省用内置默认）；形态 [A-Za-z0-9][A-Za-z0-9._-]*
+#   ALPHAGPS_SIGNING_ALIAS   签名 key alias（可选；缺省由调用方选取 pass 值）；形态 [A-Za-z0-9][A-Za-z0-9._-]*
 # 同名环境变量优先于文件（同样经过校验）。配置了签名两键时覆盖调用方预设的
 # SIGNING_KEYSTORE_PATH / SIGNING_KEY_ALIAS；未配置则保持调用方的默认值不变。
 
@@ -399,7 +399,7 @@ RL_CFG_EXAMPLE='示例（写入 scripts/release.local.env，该文件不入库�
   ALPHAGPS_PRIMARY_REMOTE=origin
   # 可选（默认 github）：
   # ALPHAGPS_GITHUB_REMOTE=github
-  # 可选（签名 keystore / alias 不在内置默认位置时）：
+  # 可选（需要覆盖 pass 中的签名 keystore / alias 时）：
   # ALPHAGPS_SIGNING_KEYSTORE=~/.config/alphagps/signing/release.jks
   # ALPHAGPS_SIGNING_ALIAS=release'
 
