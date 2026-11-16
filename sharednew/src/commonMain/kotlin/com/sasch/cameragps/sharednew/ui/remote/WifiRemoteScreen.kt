@@ -697,7 +697,7 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
             frame != null -> readingCatalog = false
         }
     }
-    val shownFrame = frame ?: if (holdReady && ready) WifiConnectionFrame.Ready else null
+    val shownFrame = shownWifiConnectionFrame(frame, readingCatalog, holdReady, ready)
     GlassBackground(contentIsBackdropSource = false) {
         if (viewModel.confirmClearSelectionBack) {
             CapsuleDialog(

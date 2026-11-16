@@ -77,6 +77,18 @@ class WifiBrowserModelTest {
     }
 
     @Test
+    fun completionNeverExposesListBeforeReadyHoldBegins() {
+        val progress = progress(WifiConnectStep.ReadCatalog)
+        assertEquals(progress, shownWifiConnectionFrame(progress, true, false, true))
+        // The first composition after loading ends precedes the LaunchedEffect transition.
+        assertEquals(WifiConnectionFrame.Ready, shownWifiConnectionFrame(null, true, false, true))
+        assertEquals(WifiConnectionFrame.Ready, shownWifiConnectionFrame(null, false, true, true))
+        assertNull(shownWifiConnectionFrame(null, false, false, true))
+        assertNull(shownWifiConnectionFrame(null, true, true, false))
+        assertEquals(WifiConnectionFrame.Closing, shownWifiConnectionFrame(WifiConnectionFrame.Closing, true, true, false))
+    }
+
+    @Test
     fun aCameraWithoutPhotoTransferEndsLikeAFailure() =
         assertEquals(WifiConnectionFrame.Unsupported, frame(WifiRemotePhase.Ready, transfer = false))
 

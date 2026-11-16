@@ -73,6 +73,11 @@ internal fun wifiConnectionFrame(
     }
 }
 
+/** Keep the completion frame visible even before the hold effect starts. */
+internal fun shownWifiConnectionFrame(
+    frame: WifiConnectionFrame?, readingCatalog: Boolean, holdReady: Boolean, ready: Boolean,
+): WifiConnectionFrame? = frame ?: if (ready && (readingCatalog || holdReady)) WifiConnectionFrame.Ready else null
+
 /** A failure frame closes itself after this long — except the permission one, which waits. */
 internal const val CONNECTION_FAILURE_AUTO_DISMISS_MS = 5_000L
 
