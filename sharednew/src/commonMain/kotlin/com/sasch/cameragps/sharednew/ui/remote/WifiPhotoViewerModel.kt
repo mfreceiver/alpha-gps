@@ -50,6 +50,13 @@ internal fun viewerZoomTransform(
 
 internal fun viewerZoomOnRelease(zoom: ViewerZoom): ViewerZoom = if (zoom.scale < 1.05f) ViewerZoom() else zoom
 
+/** Interpolate both components together, then enforce the fitted-image bounds on every frame. */
+internal fun viewerZoomAnimationFrame(start: ViewerZoom, target: ViewerZoom, fraction: Float, viewport: Size, image: Size): ViewerZoom {
+    val t = fraction.coerceIn(0f, 1f)
+    val frame = ViewerZoom(start.scale + (target.scale - start.scale) * t, start.offset + (target.offset - start.offset) * t)
+    return viewerZoomTransform(frame, 1f, Offset.Zero, Offset.Zero, viewport, image)
+}
+
 /** The handle the viewer reads metadata for: the capture's preview file (its JPEG when it has one). */
 internal val WifiCameraCapture.metadataHandle: Long get() = preview.handle
 

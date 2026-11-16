@@ -212,6 +212,7 @@ import com.sasch.cameragps.sharednew.ui.theme.WindowClass
 import com.sasch.cameragps.sharednew.ui.theme.currentWindowClass
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -715,7 +716,19 @@ internal fun ViewerPager(
                     var viewport by remember(capture.id) { mutableStateOf(Size.Zero) }
                     val imageSize = Size(image.width.toFloat(), image.height.toFloat())
                     val active = page == pager.currentPage
+                    val animationScope = rememberCoroutineScope()
+                    var animationJob by remember(capture.id) { mutableStateOf<Job?>(null) }
+                    fun animateZoom(target: ViewerZoom) {
+                        animationJob?.cancel()
+                        val start = zoom
+                        animationJob = animationScope.launch {
+                            Animatable(0f).animateTo(1f, tween(225, easing = FastOutSlowInEasing)) {
+                                zoom = viewerZoomAnimationFrame(start, target, value, viewport, imageSize)
+                            }
+                        }
+                    }
                     LaunchedEffect(active, imageSize, viewport) {
+                        animationJob?.cancel()
                         if (active) {
                             zoom = viewerZoomTransform(zoom, 1f, Offset.Zero, Offset.Zero, viewport, imageSize)
                         }
@@ -725,8 +738,9 @@ internal fun ViewerPager(
                             .onSizeChanged { viewport = Size(it.width.toFloat(), it.height.toFloat()) }
                             .pointerInput(capture.id, active, imageSize) {
                                 if (active) detectTapGestures(onDoubleTap = { point ->
-                                    zoom = if (zoom.scale > 1f) ViewerZoom() else
+                                    val target = if (zoom.scale > 1f) ViewerZoom() else
                                         viewerZoomTransform(zoom, 2.5f, Offset.Zero, point, viewport, imageSize)
+                                    animateZoom(target)
                                 })
                             }
                             .pointerInput(capture.id, active, imageSize) {
@@ -738,6 +752,7 @@ internal fun ViewerPager(
                                         val multi = event.changes.count { it.pressed } >= 2
                                         claimed = claimed || multi || zoom.scale > 1f
                                         if (claimed) {
+                                            if (multi || event.changes.any { it.positionChanged() }) animationJob?.cancel()
                                             val centroid = event.calculateCentroid(useCurrent = false)
                                             if (centroid != Offset.Unspecified) {
                                                 zoom = viewerZoomTransform(zoom, event.calculateZoom(), event.calculatePan(), centroid, viewport, imageSize)
@@ -745,7 +760,8 @@ internal fun ViewerPager(
                                             event.changes.filter { it.pressed && it.positionChanged() }.forEach { it.consume() }
                                         }
                                     } while (event.changes.any { it.pressed })
-                                    zoom = viewerZoomOnRelease(zoom)
+                                    val target = viewerZoomOnRelease(zoom)
+                                    if (target != zoom) animateZoom(target)
                                 }
                             },
                     ) {

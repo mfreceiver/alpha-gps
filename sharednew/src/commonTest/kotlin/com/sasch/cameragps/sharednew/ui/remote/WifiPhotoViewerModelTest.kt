@@ -44,6 +44,24 @@ class WifiPhotoViewerModelTest {
     )
 
     @Test
+    fun zoomAnimationInterpolatesAndClampsEveryFrame() {
+        val viewport = Size(1000f, 800f)
+        val image = Size(1000f, 800f)
+        val start = ViewerZoom()
+        val target = viewerZoomTransform(start, 2.5f, Offset.Zero, Offset(250f, 200f), viewport, image)
+        assertEquals(start, viewerZoomAnimationFrame(start, target, 0f, viewport, image))
+        assertEquals(target, viewerZoomAnimationFrame(start, target, 1f, viewport, image))
+        val halfway = viewerZoomAnimationFrame(start, target, 0.5f, viewport, image)
+        assertEquals(1.75f, halfway.scale)
+        assertEquals(target.offset * 0.5f, halfway.offset)
+        assertEquals(start, viewerZoomAnimationFrame(target, start, 1f, viewport, image))
+        val invalidOffset = ViewerZoom(2.5f, Offset(10000f, -10000f))
+        val clamped = viewerZoomAnimationFrame(start, invalidOffset, 0.5f, viewport, image)
+        assertTrue(kotlin.math.abs(clamped.offset.x) <= 375f)
+        assertTrue(kotlin.math.abs(clamped.offset.y) <= 300f)
+    }
+
+    @Test
     fun zoomIsClampedAndRecentersAtFit() {
         val viewport = Size(300f, 400f)
         val image = Size(600f, 400f)
