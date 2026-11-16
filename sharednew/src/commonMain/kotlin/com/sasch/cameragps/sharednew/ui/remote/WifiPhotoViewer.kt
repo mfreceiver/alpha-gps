@@ -34,6 +34,12 @@ import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
@@ -666,9 +672,11 @@ private fun ViewerPager(
         }
         return
     }
+    val currentId = captures.getOrNull(pager.currentPage - preceding)?.id
+    var zoom by remember(currentId) { mutableStateOf(ViewerZoom()) }
     HorizontalPager(
         state = pager, modifier = modifier,
-        userScrollEnabled = userScrollEnabled,
+        userScrollEnabled = userScrollEnabled && zoom.scale <= 1f,
         key = { page -> captures.getOrNull(page - preceding)?.id ?: "boundary:$page" },
     ) { page ->
         viewerCompositionProbe("page")
@@ -703,10 +711,50 @@ private fun ViewerPager(
                     }
                 }
                 // Bitmaps arrive already upright (EXIF orientation applied at decode).
-                image != null -> Image(
-                    image, contentDescription = capture.name,
-                    modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit,
-                )
+                image != null -> {
+                    var viewport by remember(capture.id) { mutableStateOf(Size.Zero) }
+                    val imageSize = Size(image.width.toFloat(), image.height.toFloat())
+                    val active = page == pager.currentPage
+                    Box(
+                        Modifier.fillMaxSize().clipToBounds()
+                            .onSizeChanged { viewport = Size(it.width.toFloat(), it.height.toFloat()) }
+                            .pointerInput(capture.id, active, imageSize) {
+                                if (active) detectTapGestures(onDoubleTap = { point ->
+                                    zoom = if (zoom.scale > 1f) ViewerZoom() else
+                                        viewerZoomTransform(zoom, 2.5f, Offset.Zero, point, viewport, imageSize)
+                                })
+                            }
+                            .pointerInput(capture.id, active, imageSize) {
+                                if (active) awaitEachGesture {
+                                    awaitFirstDown(requireUnconsumed = false)
+                                    var claimed = zoom.scale > 1f
+                                    do {
+                                        val event = awaitPointerEvent()
+                                        val multi = event.changes.count { it.pressed } >= 2
+                                        claimed = claimed || multi || zoom.scale > 1f
+                                        if (claimed) {
+                                            val centroid = event.calculateCentroid(useCurrent = false)
+                                            if (centroid != Offset.Unspecified) {
+                                                zoom = viewerZoomTransform(zoom, event.calculateZoom(), event.calculatePan(), centroid, viewport, imageSize)
+                                            }
+                                            event.changes.filter { it.pressed && it.positionChanged() }.forEach { it.consume() }
+                                        }
+                                    } while (event.changes.any { it.pressed })
+                                    zoom = viewerZoomOnRelease(zoom)
+                                }
+                            },
+                    ) {
+                        Image(
+                            image, contentDescription = capture.name,
+                            modifier = Modifier.fillMaxSize().graphicsLayer {
+                                scaleX = if (active) zoom.scale else 1f
+                                scaleY = if (active) zoom.scale else 1f
+                                translationX = if (active) zoom.offset.x else 0f
+                                translationY = if (active) zoom.offset.y else 0f
+                            }, contentScale = ContentScale.Fit,
+                        )
+                    }
+                }
                 browser.loading || previewLoading(capture) ->
                     GlassProgressCircle(onPhoto = true, size = GlassProgressSize.Large)
                 else -> Text(stringResource(Res.string.wifi_remote_preview_unavailable), color = AlphaTheme.colors.onPhoto, style = AlphaType.Body)

@@ -1,5 +1,7 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -22,6 +24,25 @@ import com.sasch.cameragps.sharednew.remote.wifi.isMissingFormat
 import com.sasch.cameragps.sharednew.remote.wifi.planDownloads
 import com.sasch.cameragps.sharednew.remote.wifi.singleFormatChoices
 import com.sasch.cameragps.sharednew.ui.theme.AlphaColors
+
+internal data class ViewerZoom(val scale: Float = 1f, val offset: Offset = Offset.Zero)
+
+/** Transform the fitted image around the gesture centroid and constrain it to the viewport. */
+internal fun viewerZoomTransform(
+    current: ViewerZoom, zoom: Float, pan: Offset, centroid: Offset, viewport: Size, image: Size,
+): ViewerZoom {
+    val scale = (current.scale * zoom).coerceIn(1f, 4f)
+    if (scale <= 1f || viewport.width <= 0f || viewport.height <= 0f || image.width <= 0f || image.height <= 0f) return ViewerZoom()
+    val fit = minOf(viewport.width / image.width, viewport.height / image.height)
+    val limitX = ((image.width * fit * scale - viewport.width) / 2f).coerceAtLeast(0f)
+    val limitY = ((image.height * fit * scale - viewport.height) / 2f).coerceAtLeast(0f)
+    val ratio = scale / current.scale
+    val center = Offset(viewport.width / 2f, viewport.height / 2f)
+    val offset = current.offset + pan + (centroid - center - current.offset) * (1f - ratio)
+    return ViewerZoom(scale, Offset(offset.x.coerceIn(-limitX, limitX), offset.y.coerceIn(-limitY, limitY)))
+}
+
+internal fun viewerZoomOnRelease(zoom: ViewerZoom): ViewerZoom = if (zoom.scale < 1.05f) ViewerZoom() else zoom
 
 /** The handle the viewer reads metadata for: the capture's preview file (its JPEG when it has one). */
 internal val WifiCameraCapture.metadataHandle: Long get() = preview.handle

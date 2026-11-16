@@ -15,6 +15,8 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiSkipReason
 import com.sasch.cameragps.sharednew.remote.wifi.captureDownloadSize
 import com.sasch.cameragps.sharednew.remote.wifi.formatByteSize
 import com.sasch.cameragps.sharednew.remote.wifi.singleFormatChoices
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -40,6 +42,23 @@ class WifiPhotoViewerModelTest {
         apertureF = 2.8, exposureTimeSeconds = 1.0 / 250, iso = 400, focalLengthMm = 35.0,
         exposureBiasEv = 0.3, lensModel = "FE 24-70mm F2.8 GM II",
     )
+
+    @Test
+    fun zoomIsClampedAndRecentersAtFit() {
+        val viewport = Size(300f, 400f)
+        val image = Size(600f, 400f)
+        val center = Offset(150f, 200f)
+        val enlarged = viewerZoomTransform(ViewerZoom(), 10f, Offset(5000f, -5000f), center, viewport, image)
+        assertEquals(4f, enlarged.scale)
+        assertEquals(Offset(450f, -200f), enlarged.offset)
+        val fitted = viewerZoomTransform(enlarged, 0.01f, Offset(100f, 100f), center, viewport, image)
+        assertEquals(ViewerZoom(), fitted, "pinch is never below fit and recenters immediately")
+        assertEquals(ViewerZoom(), viewerZoomOnRelease(ViewerZoom(1.04f, Offset(1f, 1f))))
+        assertEquals(ViewerZoom(1.05f, Offset.Zero), viewerZoomOnRelease(ViewerZoom(1.05f, Offset.Zero)))
+        val tapped = viewerZoomTransform(ViewerZoom(), 2.5f, Offset.Zero, Offset(250f, 200f), viewport, image)
+        assertEquals(2.5f, tapped.scale)
+        assertTrue(tapped.offset.x < 0f)
+    }
 
     // ---- extended read trigger --------------------------------------------------------------------
 
