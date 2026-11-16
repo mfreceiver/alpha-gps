@@ -32,6 +32,7 @@ internal class SonyWifiBootstrap(
 
     suspend fun prepare(identifier: String): CameraWifiCredentials? {
         var startAccepted = false
+        var alreadyOn = false
         var stage = "activation"
         val credentials = withTimeoutOrNull(overallTimeoutMs) {
             if (!ble.isConnected(identifier)) return@withTimeoutOrNull null
@@ -45,35 +46,37 @@ internal class SonyWifiBootstrap(
                     identifier,
                     BleOperation.Subscribe(SonyBluetoothConstants.CAMERA_STATUS_UUID, true)
                 )
-                ble.execute(
+                alreadyOn = (ble.execute(
                     identifier,
                     BleOperation.Read(SonyBluetoothConstants.CAMERA_STATUS_UUID)
-                )
+                ) as? BleOperationResult.Success)?.value?.let(::parseWifiStatus)?.first == 2
             }
-            if (ble.execute(
-                    identifier, BleOperation.Write(
-                        SonyBluetoothConstants.WIFI_ON_UUID, SonyBluetoothConstants.WIFI_ON_COMMAND,
-                    )
-                ) !is BleOperationResult.Success
-            ) return@withTimeoutOrNull null
-            startAccepted = true
-            stage = "camera status"
-            log.i { "Camera accepted Wi-Fi start command; waiting for connection details" }
+            if (!alreadyOn) {
+                if (ble.execute(
+                        identifier, BleOperation.Write(
+                            SonyBluetoothConstants.WIFI_ON_UUID, SonyBluetoothConstants.WIFI_ON_COMMAND,
+                        )
+                    ) !is BleOperationResult.Success
+                ) return@withTimeoutOrNull null
+                startAccepted = true
+                stage = "camera status"
+                log.i { "Camera accepted Wi-Fi start command; waiting for connection details" }
 
-            if (ble.hasCharacteristic(identifier, SonyBluetoothConstants.CAMERA_STATUS_UUID)) {
-                while (ble.isConnected(identifier)) {
-                    val status = (ble.execute(
-                        identifier,
-                        BleOperation.Read(SonyBluetoothConstants.CAMERA_STATUS_UUID)
-                    )
-                            as? BleOperationResult.Success)?.value?.let(::parseWifiStatus) ?: break
-                    if (status.first == 2) break
-                    if (status.first == 0 && status.second in 2..5) {
-                        startAccepted = false
-                        log.w { "Camera reported Wi-Fi startup error=${status.second}" }
-                        return@withTimeoutOrNull null
+                if (ble.hasCharacteristic(identifier, SonyBluetoothConstants.CAMERA_STATUS_UUID)) {
+                    while (ble.isConnected(identifier)) {
+                        val status = (ble.execute(
+                            identifier,
+                            BleOperation.Read(SonyBluetoothConstants.CAMERA_STATUS_UUID)
+                        )
+                                as? BleOperationResult.Success)?.value?.let(::parseWifiStatus) ?: break
+                        if (status.first == 2) break
+                        if (status.first == 0 && status.second in 2..5) {
+                            startAccepted = false
+                            log.w { "Camera reported Wi-Fi startup error=${status.second}" }
+                            return@withTimeoutOrNull null
+                        }
+                        delay(credentialPollMs)
                     }
-                    delay(credentialPollMs)
                 }
             }
 
@@ -113,7 +116,7 @@ internal class SonyWifiBootstrap(
         }
         if (credentials == null) {
             log.w { "Camera Wi-Fi setup failed during $stage; startAccepted=$startAccepted" }
-            if (startAccepted) throw WifiRemoteConnectException(WifiRemoteFailure.CameraCredentialsUnavailable)
+            if (startAccepted || alreadyOn) throw WifiRemoteConnectException(WifiRemoteFailure.CameraCredentialsUnavailable)
         } else {
             log.i { "Camera Wi-Fi connection details read successfully" }
         }

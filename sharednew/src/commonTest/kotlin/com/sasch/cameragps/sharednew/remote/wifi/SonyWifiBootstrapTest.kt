@@ -92,6 +92,33 @@ class SonyWifiBootstrapTest {
     }
 
     @Test
+    fun alreadyOnReadsCredentialsWithoutStartingAgain() = runTest {
+        val ble = FakeBle().apply {
+            statuses.add(byteArrayOf(4, 0, 1, 2, 0))
+            ssidReads = 1
+        }
+        val credentials = SonyWifiBootstrap(ble).prepare("camera")!!
+        assertEquals("DIRECT-A6700", credentials.ssid)
+        assertEquals("secret-pass", credentials.password)
+        assertEquals("01:02:03:04:05:06", credentials.bssid)
+        assertTrue(ble.operations.none { it is BleOperation.Write })
+        assertEquals(1, ble.operations.filterIsInstance<BleOperation.Read>().count { it.characteristicUuid == Sony.CAMERA_STATUS_UUID })
+    }
+
+    @Test
+    fun alreadyOnCredentialTimeoutIsUnavailable() = runTest {
+        val ble = FakeBle().apply {
+            statuses.add(byteArrayOf(4, 0, 1, 2, 0))
+            emptySsid = true
+        }
+        val error = assertFailsWith<WifiRemoteConnectException> {
+            SonyWifiBootstrap(ble, overallTimeoutMs = 100, credentialPollMs = 10).prepare("camera")
+        }
+        assertEquals(WifiRemoteFailure.CameraCredentialsUnavailable, error.failure)
+        assertTrue(ble.operations.none { it is BleOperation.Write })
+    }
+
+    @Test
     fun missingOptionalBssidDoesNotFail() = runTest {
         val ble = FakeBle().apply { hasBssid = false; ssidReads = 1 }
         val credentials = SonyWifiBootstrap(ble).prepare("camera")!!
