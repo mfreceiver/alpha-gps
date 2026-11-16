@@ -33,6 +33,9 @@ import androidx.navigationevent.compose.rememberNavigationEventState
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.arrow_back_24px
 import cameragps.sharednew.generated.resources.back
+import cameragps.sharednew.generated.resources.cancel_button
+import cameragps.sharednew.generated.resources.continue_button
+import cameragps.sharednew.generated.resources.wifi_remote_clear_selection_back
 import cameragps.sharednew.generated.resources.wifi_remote_approval
 import cameragps.sharednew.generated.resources.wifi_remote_auto_connect
 import cameragps.sharednew.generated.resources.wifi_remote_auto_setup
@@ -77,6 +80,8 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiShutdownStatus
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import com.sasch.cameragps.sharednew.remote.wifi.planDownloads
 import com.sasch.cameragps.sharednew.remote.wifi.toSummary
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
+import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassBackground
@@ -233,6 +238,22 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         if (browser.loading || state.imageTransfer.busy) return
         noteBatchCompletion()
         controller.browseDate(identifier, dateKey, expectedRevision = browser.pageRevision)
+    }
+
+    var confirmClearSelectionBack by mutableStateOf(false)
+        private set
+
+    fun cancelClearSelectionBack() { confirmClearSelectionBack = false }
+
+    fun confirmClearSelectionAndBack() {
+        if (!confirmClearSelectionBack) return
+        confirmClearSelectionBack = false
+        val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return
+        val browser = state.photoBrowser
+        if (!browser.open || !browser.grouped || browser.dateKey == null) return
+        if (browser.loading || state.imageTransfer.busy) { backBlockedNotice = true; return }
+        clearPhotoSelection()
+        controller.showDates(identifier)
     }
 
     /** Set when Back was pressed while a load or transfer made leaving impossible; auto-dismissed by the UI. */
@@ -512,7 +533,7 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     }
 
     /**
-     * Back: viewer -> grid; a day's grid -> the day list (local, no camera traffic, selection kept);
+     * Back: viewer -> grid; a day's grid -> the day list (confirm before clearing a selection);
      * a remaining selection -> cleared; then the existing exit. While a load or transfer runs the screen cannot
      * be left, and that is now said out loud ([backBlockedNotice]) instead of ignoring the press.
      */
@@ -520,11 +541,10 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         val browser = controller.sessions.value[identifier.uppercase()]?.wifiRemote?.photoBrowser
         when {
             viewedPhotoIndex != null -> closePhoto()
-            // A day's grid goes back to the day list with the selection kept (that is how a
-            // selection spans days); the X in the top bar is the explicit way to clear it.
             browser?.open == true && browser.grouped && browser.dateKey != null -> {
                 val state = controller.sessions.value[identifier.uppercase()]!!.wifiRemote
                 if (browser.loading || state.imageTransfer.busy) backBlockedNotice = true
+                else if (selectedPhotoIds.isNotEmpty()) confirmClearSelectionBack = true
                 else controller.showDates(identifier)
             }
             selectedPhotoIds.isNotEmpty() -> clearPhotoSelection()
@@ -679,6 +699,14 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
     }
     val shownFrame = frame ?: if (holdReady && ready) WifiConnectionFrame.Ready else null
     GlassBackground(contentIsBackdropSource = false) {
+        if (viewModel.confirmClearSelectionBack) {
+            CapsuleDialog(
+                onDismissRequest = viewModel::cancelClearSelectionBack,
+                title = stringResource(Res.string.wifi_remote_clear_selection_back),
+                dismiss = DialogAction(stringResource(Res.string.cancel_button), viewModel::cancelClearSelectionBack),
+                confirm = DialogAction(stringResource(Res.string.continue_button), viewModel::confirmClearSelectionAndBack),
+            ) { }
+        }
         // First entry: the one-time notice is a dialog over a blank glass background, never over the
         // manual connection controls. Continuing starts the automatic connection straight into the
         // overlay; the controls page only appears where automatic connection cannot run.

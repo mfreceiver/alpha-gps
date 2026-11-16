@@ -98,11 +98,7 @@ internal fun WifiPhotoBrowserTopBar(
         title = title,
         subtitle = subtitle,
         navigationIcon = {
-            if (selecting) GlassIconButton(
-                painterResource(Res.drawable.close_24px),
-                contentDescription = stringResource(Res.string.wifi_remote_selection_clear),
-                onClick = viewModel::clearPhotoSelection,
-            ) else GlassIconButton(
+            GlassIconButton(
                 painterResource(Res.drawable.arrow_back_24px),
                 contentDescription = stringResource(Res.string.back),
                 onClick = onBack,
@@ -110,7 +106,11 @@ internal fun WifiPhotoBrowserTopBar(
         },
         actions = {
             when {
-                selecting -> Unit
+                selecting -> GlassIconButton(
+                    painterResource(Res.drawable.close_24px),
+                    contentDescription = stringResource(Res.string.wifi_remote_selection_clear),
+                    onClick = viewModel::clearPhotoSelection,
+                )
                 gridShown -> {
                     var open by rememberSaveable { mutableStateOf(false) }
                     val anchor = rememberGlassAnchor()

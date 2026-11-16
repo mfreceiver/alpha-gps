@@ -3447,7 +3447,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     // ---- Date navigation through the ViewModel ----
 
     @Test
-    fun backWalksGridToDatesToExitLocallyAndKeepsTheSelectionAcrossDays() = runTest {
+    fun backConfirmsClearingSelectionBeforeReturningToDates() = runTest {
         val connection = datedConnection()
         val registry = CameraSessionRegistry()
         val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
@@ -3462,28 +3462,26 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         runCurrent()
         model.togglePhotoSelection("a")
         assertEquals(setOf("a"), model.selectedPhotoIds)
-        val generation = registry.get("camera")!!.wifiRemote.photoBrowser.browserGeneration
         var exited = false
         model.navigateBack { exited = true }
-        browser = registry.get("camera")!!.wifiRemote.photoBrowser
-        assertNull(browser.dateKey, "Back from a day's grid shows the day list")
-        assertEquals(setOf("a"), model.selectedPhotoIds, "the selection survives going back to the day list")
-        assertFalse(exited)
-        assertEquals(1, connection.catalogOpens, "no re-enumeration")
-        model.openDate("2024-05-02")
-        runCurrent()
-        model.togglePhotoSelection("b")
-        assertEquals(setOf("a", "b"), model.selectedPhotoIds, "selection spans days")
-        model.reconcilePhotoSelection()
-        assertEquals(setOf("a", "b"), model.selectedPhotoIds, "a day switch is not a new generation")
-        assertEquals(generation, registry.get("camera")!!.wifiRemote.photoBrowser.browserGeneration)
+        assertTrue(model.confirmClearSelectionBack)
+        assertEquals("2024-05-01", registry.get("camera")!!.wifiRemote.photoBrowser.dateKey)
+        model.cancelClearSelectionBack()
+        assertEquals(setOf("a"), model.selectedPhotoIds)
         model.navigateBack { exited = true }
-        model.navigateBack { exited = true } // day list with a selection: clears it first
+        model.confirmClearSelectionAndBack()
+        assertNull(registry.get("camera")!!.wifiRemote.photoBrowser.dateKey)
         assertTrue(model.selectedPhotoIds.isEmpty())
         assertFalse(exited)
+        assertEquals(1, connection.catalogOpens)
+        model.openDate("2024-05-02")
+        runCurrent()
+        model.navigateBack { exited = true }
+        assertFalse(model.confirmClearSelectionBack)
+        assertNull(registry.get("camera")!!.wifiRemote.photoBrowser.dateKey)
         model.navigateBack { exited = true }
         runCurrent()
-        assertTrue(exited, "the day list keeps the existing browse-only exit")
+        assertTrue(exited)
         controller.closeAndJoin()
     }
 
