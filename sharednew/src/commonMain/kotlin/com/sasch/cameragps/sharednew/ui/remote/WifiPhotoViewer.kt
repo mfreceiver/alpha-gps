@@ -978,19 +978,18 @@ private fun ColumnScope.ViewerDetailsContent(
             if (pair.size == 1) Spacer(Modifier.weight(1f))
         }
     }
-    if (details.files.isNotEmpty()) {
-        Text(stringResource(Res.string.b1_detail_files), color = AlphaTheme.colors.onPhotoMuted, style = AlphaType.Caption)
-        details.files.forEach { file ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(file.format, color = AlphaTheme.colors.onPhoto, style = AlphaType.Label, maxLines = 1)
-                if (file.bytes > 0) Text(formatByteSize(file.bytes), color = AlphaTheme.colors.onPhoto, style = AlphaType.Label, maxLines = 1)
+    if (details.files.isNotEmpty() || image != null) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
+            if (details.files.isNotEmpty()) Column(Modifier.weight(1f)) {
+                Text(stringResource(Res.string.b1_detail_files), color = AlphaTheme.colors.onPhotoMuted, style = AlphaType.Caption)
+                details.files.forEach { file ->
+                    val size = if (file.bytes > 0) " ${formatByteSize(file.bytes)}" else ""
+                    Text(file.format + size, color = AlphaTheme.colors.onPhoto, style = AlphaType.Label)
+                }
             }
-        }
-    }
-    if (image != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Spacer(Modifier.weight(1f))
-        Box(Modifier.weight(1f).height(HistogramHeight).background(AlphaTheme.colors.onPhoto.copy(alpha = 0.05f))) {
-            histogram?.let { HistogramGraph(it, Modifier.fillMaxSize()) }
+            if (image != null) Box(Modifier.weight(1f).height(HistogramHeight).background(AlphaTheme.colors.onPhoto.copy(alpha = 0.05f))) {
+                histogram?.let { HistogramGraph(it, Modifier.fillMaxSize()) }
+            }
         }
     }
 }
