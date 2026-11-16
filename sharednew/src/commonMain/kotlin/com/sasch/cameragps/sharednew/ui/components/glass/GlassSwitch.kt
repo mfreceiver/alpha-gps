@@ -91,6 +91,9 @@ fun GlassSwitch(
     enabled: Boolean = true,
 ) {
     val c = glassSwitchColors(checked, AlphaTheme.colors)
+    val frostedTrack = !checked && LocalGlassBackdrop.current != null && LocalGlassDepth.current == 0
+    val trackModifier = if (frostedTrack) Modifier.glass(GlassLevel.Float, AlphaShapes.capsule, shadow = false)
+        else Modifier.clip(AlphaShapes.capsule).background(c.track)
     val thumbShadow = GlassTokens.of(GlassLevel.Float, AlphaTheme.colors.isDark).keyShadow.color
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -111,8 +114,7 @@ fun GlassSwitch(
     Box(modifier.then(toggle).alpha(if (enabled) 1f else 0.38f), contentAlignment = Alignment.Center) {
         Box(
             Modifier.size(width = GlassSwitchTrackWidth, height = GlassSwitchTrackHeight)
-                .clip(AlphaShapes.capsule)
-                .background(c.track)
+                .then(trackModifier)
                 .drawWithCache {
                     val sheen = Brush.verticalGradient(
                         0f to GlassHighlight.copy(alpha = c.sheen),

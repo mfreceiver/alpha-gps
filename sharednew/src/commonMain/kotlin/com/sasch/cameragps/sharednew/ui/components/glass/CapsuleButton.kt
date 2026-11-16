@@ -75,7 +75,7 @@ enum class CapsuleRole { Primary, Secondary, Tonal, Danger, DangerOutlined, Glas
  * Height / padding of a capsule — **never** the text size (the label is always [AlphaType.Label]):
  * 32 dp chip inside a dense row ([Small] — the touch target is still padded to 48 dp), 48 dp
  * (dialogs, inline), 52 dp (bottom action of the device page), 56 dp (screen primary), 68 dp (hero).
- * [raised] sizes give an opaque primary capsule its light gradient and a soft accent glow.
+ * Opaque capsules have a sheen; [raised] primary sizes add a soft accent glow.
  */
 enum class CapsuleSize(val height: Dp, val iconSize: Dp, val horizontalPadding: Dp, val raised: Boolean) {
     Small(32.dp, 16.dp, 14.dp, raised = false),
@@ -87,7 +87,7 @@ enum class CapsuleSize(val height: Dp, val iconSize: Dp, val horizontalPadding: 
 
 /**
  * Resolved colours of a capsule. [containerTop]/[containerBottom] form a vertical gradient (equal for
- * flat roles; for [glass] both are the translucent tint laid over the frosted base); [rimAlpha] is
+ * opaque roles; for [glass] both are the translucent tint laid over the frosted base); [rimAlpha] is
  * the white 1 dp rim of opaque capsules (glass draws its own edge light); [glow] is the soft accent
  * shadow of a raised opaque primary (null = none, never black); [border] is the outline of
  * [CapsuleRole.DangerOutlined].
@@ -113,7 +113,7 @@ fun capsuleGlassTintRole(role: CapsuleRole): GlassTintRole = when (role) {
 
 /**
  * Pure colour resolution for [role] (design `lib3.primary_btn` / `pill_btn` / `tonal_btn`).
- * [raised] adds the primary gradient + accent glow (operation buttons ≥ 52 dp, not dialog
+ * [raised] adds the primary accent glow (operation buttons ≥ 52 dp, not dialog
  * capsules); [glass] resolves the glass variant ([CapsuleRole.GlassPrimary] is always glass).
  */
 fun capsuleColors(
@@ -142,8 +142,8 @@ fun capsuleColors(
     }
     return when (role) {
         CapsuleRole.Primary, CapsuleRole.GlassPrimary -> CapsuleColors(
-            // Raised: vertical gradient from a lightened primary; flat capsules (dialogs) stay solid.
-            containerTop = if (raised) lerp(colors.primary, GlassHighlight, if (colors.isDark) 0.25f else 0.16f) else colors.primary,
+            // Opaque primary uses a vertical sheen at every size.
+            containerTop = lerp(colors.primary, GlassHighlight, if (colors.isDark) 0.25f else 0.16f),
             containerBottom = colors.primary,
             content = colors.onPrimary,
             rimAlpha = if (raised) (if (colors.isDark) 0.5f else 0.35f) else 0.3f,
@@ -153,12 +153,19 @@ fun capsuleColors(
         )
         CapsuleRole.Secondary -> {
             val fill = colors.onSurface.copy(alpha = if (colors.isDark) 0.13f else 0.07f)
-            CapsuleColors(fill, fill, colors.onSurface, if (colors.isDark) 0.16f else 0.7f, null, null)
+            CapsuleColors(
+                lerp(fill, GlassHighlight.copy(alpha = fill.alpha), 0.20f), fill, colors.onSurface,
+                if (colors.isDark) 0.35f else 0.7f, null, null,
+            )
         }
         CapsuleRole.Tonal -> CapsuleColors(
-            colors.primaryContainer, colors.primaryContainer, colors.onPrimaryContainer, 0f, null, null,
+            lerp(colors.primaryContainer, GlassHighlight, if (colors.isDark) 0.25f else 0.16f),
+            colors.primaryContainer, colors.onPrimaryContainer, if (colors.isDark) 0.5f else 0.35f, null, null,
         )
-        CapsuleRole.Danger -> CapsuleColors(colors.error, colors.error, colors.onError, 0.3f, null, null)
+        CapsuleRole.Danger -> CapsuleColors(
+            lerp(colors.error, GlassHighlight, if (colors.isDark) 0.25f else 0.16f),
+            colors.error, colors.onError, if (colors.isDark) 0.5f else 0.35f, null, null,
+        )
         CapsuleRole.DangerOutlined -> CapsuleColors(
             Color.Transparent, Color.Transparent, colors.error, 0f, null, colors.error,
         )

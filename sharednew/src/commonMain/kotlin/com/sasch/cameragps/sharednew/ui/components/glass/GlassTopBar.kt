@@ -62,7 +62,7 @@ fun GlassTopBar(
     windowInsets: WindowInsets = WindowInsets.statusBars,
 ) {
     val colors = AlphaTheme.colors
-    val glassAlpha by animateFloatAsState(if (scrolled) 1f else 0f, tween(180), label = "topBarGlass")
+    val glassAlpha by animateFloatAsState(if (scrolled) 0.55f else 0f, tween(180), label = "topBarGlass")
     Box(modifier.fillMaxWidth()) {
         if (glassAlpha > 0f) {
             Box(

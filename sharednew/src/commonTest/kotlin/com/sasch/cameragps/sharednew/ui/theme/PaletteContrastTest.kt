@@ -351,7 +351,12 @@ class PaletteContrastTest {
                     // The label sits in the vertical middle of the gradient.
                     val middle = modal.map { Contrast.over(lerp(cc.containerTop, cc.containerBottom, 0.5f), it) }
                     assertTrue(minRatio(cc.content, middle) >= Contrast.AA_TEXT, "$role raised=$raised dark=${c.isDark}")
-                    if (!raised) assertEquals(cc.containerTop, cc.containerBottom, "flat $role must be solid")
+                    if (role != CapsuleRole.DangerOutlined) {
+                        assertTrue(cc.containerTop != cc.containerBottom, "$role must have a sheen")
+                        assertTrue(cc.rimAlpha > 0f, "$role must have a rim")
+                    } else {
+                        assertEquals(cc.containerTop, cc.containerBottom)
+                    }
                     assertTrue(!cc.glass)
                 }
             }
