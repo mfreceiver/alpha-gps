@@ -292,6 +292,7 @@ internal fun WifiPhotoViewer(
             val scope = rememberCoroutineScope()
             val currentIndex = pager.currentPage - preceding
             val current = captures.getOrNull(currentIndex)
+            val zoom = remember(current?.id) { ViewerZoomState() }
             val changingPage = browser.loading && (viewModel.viewedPhotoIndex ?: browser.offset) !in
                     browser.offset until browser.offset + captures.size
             // Swiping and the filmstrip are locked while a download runs (design page 21 ⑥).
@@ -394,6 +395,7 @@ internal fun WifiPhotoViewer(
                         preview?.takeIf { it.handle == capture.preview.handle }?.loading == true
                     },
                     userScrollEnabled = navigationEnabled,
+                    zoomState = zoom,
                     onRetry = { page -> viewModel.viewPhotoAt(browser.offset + page - preceding) },
                     modifier = modifier.glassSource(backdrop),
                 )
@@ -413,7 +415,7 @@ internal fun WifiPhotoViewer(
                 )
             }
             CompositionLocalProvider(LocalGlassBackdrop provides backdrop) {
-                ViewerBody(windowClass, parts, drawer, stripFocus, photo, strip, film)
+                ViewerBody(windowClass, parts, drawer, stripFocus, photo, strip, film, zoom)
             }
         }
     }
@@ -495,6 +497,7 @@ internal fun ViewerBody(
     photo: @Composable (Modifier) -> Unit,
     strip: @Composable (Modifier) -> Unit,
     film: @Composable (Modifier) -> Unit,
+    zoomState: ViewerZoomState = remember { ViewerZoomState() },
 ) {
     val portrait = windowClass == WindowClass.Portrait
     val hasDetails = parts.capture != null
@@ -505,7 +508,7 @@ internal fun ViewerBody(
         // The wide layouts' side panel is not modal and never hides the photo.
         ViewerSemanticsGate(hidden = { viewerHidesBackgroundSemantics(portrait, drawer.open, hasDetails) }) {
             when (windowClass) {
-                WindowClass.Portrait -> PortraitViewer(parts, photo, strip, film)
+                WindowClass.Portrait -> PortraitViewer(parts, photo, strip, film, zoomState)
                 WindowClass.NearSquare -> WideViewer(parts, photo, strip, film, landscape = false)
                 WindowClass.Landscape -> WideViewer(parts, photo, strip, film, landscape = true)
             }
@@ -537,12 +540,13 @@ private fun PortraitViewer(
     photo: @Composable (Modifier) -> Unit,
     strip: @Composable (Modifier) -> Unit,
     film: @Composable (Modifier) -> Unit,
+    zoomState: ViewerZoomState,
 ) {
     viewerCompositionProbe("layout")
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
         ViewerTopBar(parts)
         ViewerStatusTags(parts, Modifier.padding(start = 16.dp, bottom = 4.dp))
-        Box(Modifier.weight(1f).fillMaxWidth().detailsSwipeUpToOpen(parts.onOpenDetails)) {
+        Box(Modifier.weight(1f).fillMaxWidth().detailsSwipeUpToOpen(parts.onOpenDetails) { zoomState.value.scale > 1f }) {
             photo(Modifier.fillMaxSize())
             strip(
                 Modifier.align(Alignment.BottomCenter).padding(horizontal = 12.dp, vertical = 8.dp)
@@ -652,8 +656,13 @@ private fun ViewerStatusTags(parts: ViewerParts, modifier: Modifier = Modifier) 
     }
 }
 
+@Stable
+internal class ViewerZoomState {
+    var value by mutableStateOf(ViewerZoom())
+}
+
 @Composable
-private fun ViewerPager(
+internal fun ViewerPager(
     pager: PagerState,
     captures: List<WifiCameraCapture>,
     preceding: Int,
@@ -661,6 +670,7 @@ private fun ViewerPager(
     previewImage: (WifiCameraCapture) -> ImageBitmap?,
     previewLoading: (WifiCameraCapture) -> Boolean,
     userScrollEnabled: Boolean,
+    zoomState: ViewerZoomState,
     onRetry: (Int) -> Unit,
     modifier: Modifier,
 ) {
@@ -672,8 +682,7 @@ private fun ViewerPager(
         }
         return
     }
-    val currentId = captures.getOrNull(pager.currentPage - preceding)?.id
-    var zoom by remember(currentId) { mutableStateOf(ViewerZoom()) }
+    var zoom by zoomState::value
     HorizontalPager(
         state = pager, modifier = modifier,
         userScrollEnabled = userScrollEnabled && zoom.scale <= 1f,
@@ -715,6 +724,11 @@ private fun ViewerPager(
                     var viewport by remember(capture.id) { mutableStateOf(Size.Zero) }
                     val imageSize = Size(image.width.toFloat(), image.height.toFloat())
                     val active = page == pager.currentPage
+                    LaunchedEffect(active, imageSize, viewport) {
+                        if (active) {
+                            zoom = viewerZoomTransform(zoom, 1f, Offset.Zero, Offset.Zero, viewport, imageSize)
+                        }
+                    }
                     Box(
                         Modifier.fillMaxSize().clipToBounds()
                             .onSizeChanged { viewport = Size(it.width.toFloat(), it.height.toFloat()) }
@@ -769,7 +783,7 @@ private fun ViewerPager(
  * [onOpenDetails] (portrait) the strip is a button opening the details drawer, marked by a chevron.
  */
 @Composable
-private fun ViewerInfoStripBar(
+internal fun ViewerInfoStripBar(
     info: ViewerInfoStrip,
     onOpenDetails: (() -> Unit)?,
     modifier: Modifier,
@@ -816,17 +830,17 @@ private fun ViewerInfoStripBar(
  * consuming it until the swipe qualifies, so the pager keeps horizontal page swipes (once the pager
  * consumes a drag, this gesture gives up) and taps still reach the strip.
  */
-private fun Modifier.detailsSwipeUpToOpen(onOpen: (() -> Unit)?): Modifier {
+private fun Modifier.detailsSwipeUpToOpen(onOpen: (() -> Unit)?, isZoomed: () -> Boolean): Modifier {
     if (onOpen == null) return this
-    return pointerInput(onOpen) {
+    return pointerInput(onOpen, isZoomed) {
         val distance = DETAILS_SWIPE_DISTANCE_DP.dp.toPx()
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
-            if (!inDetailsSwipeZone(down.position.y, size.height.toFloat())) return@awaitEachGesture
+            if (isZoomed() || !inDetailsSwipeZone(down.position.y, size.height.toFloat())) return@awaitEachGesture
             while (true) {
                 val event = awaitPointerEvent()
                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                if (!change.pressed || change.isConsumed) break
+                if (isZoomed() || !change.pressed || change.isConsumed) break
                 val moved = change.position - down.position
                 if (detailsSwipeOpens(moved.x, moved.y, distance)) {
                     change.consume()

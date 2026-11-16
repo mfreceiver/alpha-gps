@@ -58,6 +58,9 @@ class WifiPhotoViewerModelTest {
         val tapped = viewerZoomTransform(ViewerZoom(), 2.5f, Offset.Zero, Offset(250f, 200f), viewport, image)
         assertEquals(2.5f, tapped.scale)
         assertTrue(tapped.offset.x < 0f)
+        assertEquals(ViewerZoom(), viewerZoomTransform(enlarged, 1f, Offset.Zero, Offset.Zero, Size.Zero, image))
+        assertEquals(ViewerZoom(), viewerZoomTransform(enlarged.copy(offset = Offset(Float.NaN, 0f)), 1f, Offset.Zero, Offset.Zero, viewport, image))
+        assertEquals(ViewerZoom(), viewerZoomTransform(enlarged, 1f, Offset.Zero, Offset.Zero, viewport, Size(Float.POSITIVE_INFINITY, 1f)))
     }
 
     // ---- extended read trigger --------------------------------------------------------------------

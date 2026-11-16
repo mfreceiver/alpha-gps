@@ -31,6 +31,11 @@ internal data class ViewerZoom(val scale: Float = 1f, val offset: Offset = Offse
 internal fun viewerZoomTransform(
     current: ViewerZoom, zoom: Float, pan: Offset, centroid: Offset, viewport: Size, image: Size,
 ): ViewerZoom {
+    if (!current.scale.isFinite() || current.scale <= 0f || !zoom.isFinite() ||
+        !current.offset.x.isFinite() || !current.offset.y.isFinite() ||
+        !pan.x.isFinite() || !pan.y.isFinite() || !centroid.x.isFinite() || !centroid.y.isFinite() ||
+        !viewport.width.isFinite() || !viewport.height.isFinite() || !image.width.isFinite() || !image.height.isFinite()
+    ) return ViewerZoom()
     val scale = (current.scale * zoom).coerceIn(1f, 4f)
     if (scale <= 1f || viewport.width <= 0f || viewport.height <= 0f || image.width <= 0f || image.height <= 0f) return ViewerZoom()
     val fit = minOf(viewport.width / image.width, viewport.height / image.height)
@@ -39,6 +44,7 @@ internal fun viewerZoomTransform(
     val ratio = scale / current.scale
     val center = Offset(viewport.width / 2f, viewport.height / 2f)
     val offset = current.offset + pan + (centroid - center - current.offset) * (1f - ratio)
+    if (!limitX.isFinite() || !limitY.isFinite() || !offset.x.isFinite() || !offset.y.isFinite()) return ViewerZoom()
     return ViewerZoom(scale, Offset(offset.x.coerceIn(-limitX, limitX), offset.y.coerceIn(-limitY, limitY)))
 }
 
