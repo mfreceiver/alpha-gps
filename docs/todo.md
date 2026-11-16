@@ -72,6 +72,34 @@
 
 ## P2
 
+### 本轮 UI：按钮材质
+- 做什么：统一实心 CapsuleButton 的渐变、高光与边缘光；玻璃按钮和标签保持不变。
+- 验收：四种实心角色有一致光泽，组件风格守卫通过；依据：`CapsuleButton.kt`。
+
+### 本轮 UI：设备页返回
+- 做什么：设备详情返回改用 NavigationBackHandler。
+- 验收：保持分层返回，无预测式手势；依据：`DeviceDetailScreen.kt`。
+
+### 本轮 UI：帮助 FAQ
+- 做什么：每条 FAQ 添加副标题并分行排版文档与反馈链接。
+- 验收：英中资源齐全，链接无粘连；依据：`HelpScreen.kt`。
+
+### 本轮 UI：顶栏和开关玻璃
+- 做什么：调淡滚动顶栏浮层、关闭态开关按玻璃取样源模糊并在嵌套时降级。
+- 验收：顶栏保持 pinned，开关开启态与动画不变；依据：`GlassTopBar.kt`、`GlassSwitch.kt`。
+
+### 本轮 UI：照片详情和直方图
+- 做什么：中文 ISO 改感光度，强化标签/值层级；RGB 直方图移至通栏并对齐曝光补偿列。
+- 验收：共用跨平台 ARGB 数据，边界可见；依据：`WifiPhotoViewer.kt`、`ViewerHistogram.kt`。
+
+### 本轮 UI：日期页返回选区
+- 做什么：日期照片页带选区返回时弹确认，确认清选后返回。
+- 验收：两种返回入口一致，取消不变、无选区直接返回，更新控制器测试；依据：`WifiRemoteScreen.kt`、`WifiRemoteControllerTest.kt`。
+
+### 本轮 UI：设备信息状态图标
+- 做什么：给蓝牙连接、位置写入、自动校时成功状态添加确认图标。
+- 验收：仅三处显示成功色矢量图标，无新增依赖；依据：`DeviceInfoDialogs.kt`。
+
 ### 13. 恢复遥控拍摄功能（后续计划，暂不实现）
 - 做什么：遥控与"照片传输"做平级入口。**协议层整体保留**（BLE FF01/FF02 + RemoteControlCoordinator + `triggerShutterSequence`、Wi-Fi capture/liveview、DB `remoteControlEnabled`），UI 入口已移除。研究与设计见 `docs/design/remote-control/`（`research.md`、`remote-control-design.pdf`）。拆分：R1 蓝牙单次拍摄恢复（入口/状态/防重复/离页释放/与位置联动互斥提示）；R2 Wi-Fi 取景+单拍（按用途建会话，当前 Android `AppServices.kt:72` 固定 `browseOnly=true` 是取景被关的原因，并非 v4 不支持 HTTP 取景）；R3 参数面板（缺 access/form 完整属性模型与写入读回链，先单机型单属性白名单）；R4 独立对焦。后台语义沿用 v3：后台/划卡结束 Wi-Fi，蓝牙+GPS 常驻（有用户指定下载时保留 Wi-Fi 至完成）。
 - 验收：设计评审后分阶段实施；恢复入口不得影响 GPS 写入/时间校正/照片下载；保留的协议层测试继续通过；需实机矩阵（型号/固件/协议版本/GPS 并用/单拍释放/取景首帧/浏览切换）。
