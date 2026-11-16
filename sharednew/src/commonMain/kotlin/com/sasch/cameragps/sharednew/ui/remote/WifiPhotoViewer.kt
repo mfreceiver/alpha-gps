@@ -545,7 +545,6 @@ private fun PortraitViewer(
     viewerCompositionProbe("layout")
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
         ViewerTopBar(parts)
-        ViewerStatusTags(parts, Modifier.padding(start = 16.dp, bottom = 4.dp))
         Box(Modifier.weight(1f).fillMaxWidth().detailsSwipeUpToOpen(parts.onOpenDetails) { zoomState.value.scale > 1f }) {
             photo(Modifier.fillMaxSize())
             strip(
@@ -580,9 +579,7 @@ private fun WideViewer(
                 if (landscape) {
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         photo(Modifier.fillMaxSize())
-                        ViewerTopBar(parts, Modifier.align(Alignment.TopStart)) {
-                            ViewerStatusTags(parts)
-                        }
+                        ViewerTopBar(parts, Modifier.align(Alignment.TopStart))
                     }
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
@@ -594,8 +591,7 @@ private fun WideViewer(
                     }
                 } else {
                     ViewerTopBar(parts)
-                    ViewerStatusTags(parts, Modifier.padding(start = 16.dp, bottom = 4.dp))
-                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                                Box(Modifier.weight(1f).fillMaxWidth()) {
                         photo(Modifier.fillMaxSize())
                         strip(
                             Modifier.align(Alignment.BottomStart).padding(12.dp)
@@ -614,10 +610,12 @@ private fun WideViewer(
 private fun ViewerTopBar(
     parts: ViewerParts,
     modifier: Modifier = Modifier,
-    trailing: @Composable () -> Unit = {},
 ) {
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+    // Keep the position and navigation usable on narrow photo panes and at large font scales.
+    val showSelection = maxWidth >= 320.dp && LocalDensity.current.fontScale <= 1.3f
     Row(
-        modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
+        Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -640,19 +638,12 @@ private fun ViewerTopBar(
                 )
             }
         }
-        trailing()
-        parts.position?.let { Text(it, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Label) }
-    }
-}
-
-/** Status tag: the shared selection count. Informational, not clickable. */
-@Composable
-private fun ViewerStatusTags(parts: ViewerParts, modifier: Modifier = Modifier) {
-    if (parts.selectedCount == 0) return
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (parts.selectedCount > 0) InfoTag(
-            stringResource(Res.string.m7_viewer_selected_count, parts.selectedCount), style = InfoTagStyle.OnPhoto,
+        if (showSelection && parts.selectedCount > 0) InfoTag(
+            stringResource(Res.string.m7_viewer_selected_count, parts.selectedCount),
+            modifier = Modifier.widthIn(max = 96.dp), style = InfoTagStyle.OnPhoto,
         )
+        parts.position?.let { Text(it, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Label, maxLines = 1) }
+    }
     }
 }
 

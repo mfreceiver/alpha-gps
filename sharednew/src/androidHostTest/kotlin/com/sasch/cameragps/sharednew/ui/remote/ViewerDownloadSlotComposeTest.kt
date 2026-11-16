@@ -12,6 +12,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -92,8 +93,9 @@ class ViewerDownloadSlotComposeTest {
             WifiImageTransferState(WifiImageTransferStatus.PermissionDenied)),
     )
 
+    private var selectedCount by mutableStateOf(0)
     private fun parts(case: Case) = ViewerParts(
-        title = "A.JPG", capturedAt = null, position = "1 / 1", selectedCount = 0,
+        title = "A.JPG", capturedAt = null, position = "1 / 1", selectedCount = selectedCount,
         info = viewerInfoStrip(case.capture, case.policy),
         capture = case.capture, image = null as ImageBitmap?,
         metadata = MutableStateFlow<PhotoMetadataState>(PhotoMetadataState.Idle),
@@ -106,7 +108,7 @@ class ViewerDownloadSlotComposeTest {
     private var current by mutableStateOf(cases.first())
 
     private fun show(windowClass: WindowClass, fontScale: Float) {
-        val photo: @Composable (Modifier) -> Unit = { modifier -> Box(modifier.fillMaxSize()) }
+        val photo: @Composable (Modifier) -> Unit = { modifier -> Box(modifier.fillMaxSize().testTag("photo-bounds")) }
         val slot: @Composable (Modifier) -> Unit = { modifier -> Box(modifier) }
         compose.setContent {
             val density = LocalDensity.current
@@ -145,6 +147,19 @@ class ViewerDownloadSlotComposeTest {
 
     @Test
     fun widePanelRowKeepsItsBoundsAtLargeFontScale() = assertRowNeverMoves(WindowClass.Landscape, 1.5f)
+
+    private fun selectionDoesNotMovePhoto(windowClass: WindowClass, fontScale: Float) {
+        show(windowClass, fontScale)
+        val before = compose.onNodeWithTag("photo-bounds").fetchSemanticsNode().boundsInRoot
+        compose.runOnIdle { selectedCount = 9 }
+        compose.waitForIdle()
+        assertEquals(before, compose.onNodeWithTag("photo-bounds").fetchSemanticsNode().boundsInRoot)
+        compose.onNodeWithText("1 / 1").assertExists()
+    }
+
+    @Test fun selectionDoesNotMovePortraitPhoto() = selectionDoesNotMovePhoto(WindowClass.Portrait, 1f)
+    @Test fun selectionDoesNotMoveNearSquarePhoto() = selectionDoesNotMovePhoto(WindowClass.NearSquare, 1f)
+    @Test fun selectionDoesNotMoveLandscapePhoto() = selectionDoesNotMovePhoto(WindowClass.Landscape, 2f)
 
     @Test
     fun rowIsTheTouchTargetHeight() {
