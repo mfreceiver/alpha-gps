@@ -2,7 +2,9 @@ package com.saschl.cameragps.ui.device
 
 import android.Manifest
 import android.companion.CompanionDeviceManager
-import androidx.activity.compose.BackHandler
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import androidx.annotation.RequiresPermission
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -78,7 +80,11 @@ fun DeviceDetailScreen(
         },
     ) { innerPadding ->
         // An open in-tree dialog handles Back itself (closes the dialog, not the page).
-        BackHandler(enabled = overlayHost?.hasOverlay != true) { onClose() }
+        NavigationBackHandler(
+            state = rememberNavigationEventState(NavigationEventInfo.None),
+            isBackEnabled = overlayHost?.hasOverlay != true,
+            onBackCompleted = onClose,
+        )
 
         DeviceDetailContent(
             onWifiRemote = { wifiRemoteOpen = true },

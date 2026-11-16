@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
@@ -22,6 +24,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import cameragps.sharednew.generated.resources.check_circle_24px
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.a1_bt_connected_short
 import cameragps.sharednew.generated.resources.a1_bt_connecting_short
@@ -281,6 +284,7 @@ internal fun DeviceInfoDialog(
                         },
                     ),
                     tone = connectionTone(headline),
+                    confirmed = headline == ConnectionHeadline.Connected,
                 )
             }
 
@@ -289,6 +293,7 @@ internal fun DeviceInfoDialog(
                 InfoStatusValue(
                     stringResource(if (writing) Res.string.m2_info_location_active else Res.string.m2_info_location_idle),
                     tone = if (writing) StatusTone.Success else StatusTone.Neutral,
+                    confirmed = writing,
                 )
             }
             InfoRow(stringResource(Res.string.q_info_auto_time_area)) {
@@ -355,9 +360,10 @@ private fun InfoRow(label: String, value: @Composable () -> Unit) {
     }
 }
 
-/** A row value: text only, in the tone's text colour (no leading mark). */
+/** A row value with an optional decorative confirmation mark. */
 @Composable
-private fun InfoStatusValue(text: String, tone: StatusTone) {
+private fun InfoStatusValue(text: String, tone: StatusTone, confirmed: Boolean = false) {
+    if (confirmed) Icon(painterResource(Res.drawable.check_circle_24px), contentDescription = null, tint = AlphaTheme.colors.success, modifier = Modifier.size(20.dp))
     Text(text, style = InfoValueStyle, color = statusToneColor(tone, AlphaTheme.colors), maxLines = 1)
 }
 
@@ -381,6 +387,7 @@ private fun AutoCorrectionValue(summary: AutoCorrectionSummary) {
             },
         ),
         tone = autoCorrectionTone(summary),
+        confirmed = summary == AutoCorrectionSummary.Enabled,
     )
 }
 
