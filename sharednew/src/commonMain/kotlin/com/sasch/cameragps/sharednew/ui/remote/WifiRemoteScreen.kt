@@ -683,21 +683,7 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
         awaitingAutoConnect = autoConnectOnEntry && !autoConnectAttempted && noticeAcknowledged && !otherCamera,
         catalogShown = viewModel.catalogShown,
     )
-    var readingCatalog by remember { mutableStateOf(false) }
-    var holdReady by remember { mutableStateOf(false) }
-    LaunchedEffect(frame) {
-        when {
-            frame == WifiConnectionFrame.Progress(WifiConnectStep.ReadCatalog) -> readingCatalog = true
-            frame == null && readingCatalog && ready -> {
-                readingCatalog = false
-                holdReady = true
-                delay(CONNECTION_READY_HOLD_MS)
-                holdReady = false
-            }
-            frame != null -> readingCatalog = false
-        }
-    }
-    val shownFrame = shownWifiConnectionFrame(frame, readingCatalog, holdReady, ready)
+    val shownFrame = rememberShownWifiConnectionFrame(frame, ready)
     GlassBackground(contentIsBackdropSource = false) {
         if (viewModel.confirmClearSelectionBack) {
             CapsuleDialog(
@@ -768,6 +754,28 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
             )
         }
     }
+}
+
+@Composable
+internal fun rememberShownWifiConnectionFrame(frame: WifiConnectionFrame?, ready: Boolean): WifiConnectionFrame? {
+    var readingCatalog by remember { mutableStateOf(false) }
+    var holdReady by remember { mutableStateOf(false) }
+    LaunchedEffect(frame, ready) {
+        when {
+            frame == WifiConnectionFrame.Progress(WifiConnectStep.ReadCatalog) -> readingCatalog = true
+            frame == null && readingCatalog && ready -> {
+                readingCatalog = false
+                holdReady = true
+                delay(CONNECTION_READY_HOLD_MS)
+                holdReady = false
+            }
+            frame != null || !ready -> {
+                readingCatalog = false
+                holdReady = false
+            }
+        }
+    }
+    return shownWifiConnectionFrame(frame, readingCatalog, holdReady, ready)
 }
 
 /**
