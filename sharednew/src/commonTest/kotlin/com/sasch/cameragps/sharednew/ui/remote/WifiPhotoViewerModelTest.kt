@@ -340,7 +340,6 @@ class WifiPhotoViewerModelTest {
         val loading = viewerDetails(jpgOnly, PhotoMetadataState.Loading(1, metadata(1)))
         val pending = viewerPendingExifFields(loading)
         assertTrue(ViewerExifField.Aperture in pending && ViewerExifField.Lens in pending && ViewerExifField.Camera in pending)
-        assertFalse(ViewerExifField.FocalLength35mm in pending, "an optional row gets no placeholder (it may never appear)")
         val ready = viewerDetails(jpgOnly, PhotoMetadataState.Ready(metadata(1, sampleExif)))
         assertTrue(viewerPendingExifFields(ready).isEmpty())
     }
@@ -356,27 +355,16 @@ class WifiPhotoViewerModelTest {
     }
 
     @Test
-    fun theEquivalentFocalLengthIsItsOwnRowNextToTheActualOne() {
-        // Both present: two rows, "focal length 50mm" and "focal length (35 mm equiv.) 75mm".
-        assertEquals(
-            listOf(
-                ViewerExifField.FocalLength to "50mm",
-                ViewerExifField.FocalLength35mm to "75mm",
-            ),
-            viewerExifRows(metadata(1, PhotoExif(focalLengthMm = 50.0, focalLength35mm = 75))).map { it },
-        )
-        // Only the equivalent (no actual focal length): still shown.
-        assertEquals(
-            listOf(ViewerExifField.FocalLength35mm to "40mm"),
-            viewerExifRows(metadata(1, PhotoExif(focalLength35mm = 40))),
-        )
-        // Same as the actual focal length (full frame): no second row.
-        assertEquals(
-            listOf(ViewerExifField.FocalLength to "50mm"),
-            viewerExifRows(metadata(1, PhotoExif(focalLengthMm = 50.0, focalLength35mm = 50))),
-        )
-        // Neither: no focal row at all.
-        assertTrue(viewerExifRows(metadata(1, PhotoExif())).none { it.first == ViewerExifField.FocalLength35mm })
+    fun equivalentFocalLengthOnlyAugmentsAnExistingDifferentFocalRow() {
+        fun details(exif: PhotoExif) = viewerDetails(jpgOnly, PhotoMetadataState.Ready(metadata(1, exif)))
+        val different = details(PhotoExif(focalLengthMm = 50.0, focalLength35mm = 75))
+        assertEquals(listOf(ViewerExifField.FocalLength to "50mm"), different.exif)
+        assertEquals("75mm", different.focalLength35mm)
+        assertEquals(null, details(PhotoExif(focalLengthMm = 50.0, focalLength35mm = 50)).focalLength35mm)
+        assertEquals(null, details(PhotoExif(focalLengthMm = 50.0)).focalLength35mm)
+        val equivalentOnly = details(PhotoExif(focalLength35mm = 40))
+        assertTrue(equivalentOnly.exif.isEmpty())
+        assertEquals(null, equivalentOnly.focalLength35mm)
     }
 
     // ---- download button ---------------------------------------------------------------------------

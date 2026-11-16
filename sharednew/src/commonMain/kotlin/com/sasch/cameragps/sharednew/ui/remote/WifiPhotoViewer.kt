@@ -1029,7 +1029,12 @@ private fun ColumnScope.ViewerDetailsContent(
     ViewerExifField.entries.filter { !it.inGrid }.forEach { field ->
         val value = values[field]
         when {
-            value != null -> DetailRow(exifFieldLabel(field), value)
+            value != null -> DetailRow(
+                exifFieldLabel(field),
+                if (field == ViewerExifField.FocalLength && details.focalLength35mm != null)
+                    stringResource(Res.string.d1_exif_focal_35mm, value, details.focalLength35mm)
+                else value,
+            )
             field in pending -> PlaceholderRow(exifFieldLabel(field))
         }
     }
@@ -1064,7 +1069,6 @@ private fun exifFieldLabel(field: ViewerExifField): String = stringResource(
         ViewerExifField.Iso -> Res.string.b1_exif_iso
         ViewerExifField.ExposureBias -> Res.string.b1_exif_bias
         ViewerExifField.FocalLength -> Res.string.b1_exif_focal
-        ViewerExifField.FocalLength35mm -> Res.string.d1_exif_focal_35mm
         ViewerExifField.Lens -> Res.string.m7_viewer_lens
         ViewerExifField.Camera -> Res.string.b1_exif_camera
     }

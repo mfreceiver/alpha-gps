@@ -188,8 +188,6 @@ internal data class ViewerFileEntry(val format: String, val bytes: Long)
  */
 internal enum class ViewerExifField(val inGrid: Boolean = false) {
     Camera, Lens, FocalLength,
-    /** 35 mm-equivalent focal length; only shown when it differs from the actual one. */
-    FocalLength35mm,
     Aperture(inGrid = true), Shutter(inGrid = true), Iso(inGrid = true), ExposureBias(inGrid = true),
 }
 
@@ -209,6 +207,7 @@ internal data class ViewerDetails(
     val capturedAt: String?,
     val resolutionText: String?,
     val exif: List<Pair<ViewerExifField, String>>,
+    val focalLength35mm: String?,
     val files: List<ViewerFileEntry>,
     val loading: Boolean,
 )
@@ -217,14 +216,10 @@ internal data class ViewerDetails(
 internal fun viewerExifRows(metadata: PhotoMetadata?): List<Pair<ViewerExifField, String>> {
     val exif = metadata?.exif ?: return emptyList()
     val shutter = exif.exposureTimeText?.let { if (it.endsWith("s")) it else it + "s" }
-    val focal = exif.focalLengthText
-    // The equivalent is written like focalLengthText ("50mm") and left out when it says the same.
-    val focal35 = exif.focalLength35mm?.let { PhotoExif.decimal(it.toDouble(), 0) + "mm" }?.takeIf { it != focal }
     val values = mapOf(
         ViewerExifField.Camera to exif.cameraModel?.trim(),
         ViewerExifField.Lens to exif.lensModel?.trim(),
-        ViewerExifField.FocalLength to focal,
-        ViewerExifField.FocalLength35mm to focal35,
+        ViewerExifField.FocalLength to exif.focalLengthText,
         ViewerExifField.Aperture to exif.apertureText,
         ViewerExifField.Shutter to shutter,
         ViewerExifField.Iso to exif.isoText,
@@ -243,7 +238,7 @@ internal fun viewerExifRows(metadata: PhotoMetadata?): List<Pair<ViewerExifField
 internal fun viewerPendingExifFields(details: ViewerDetails): List<ViewerExifField> {
     if (!details.loading) return emptyList()
     val known = details.exif.map { it.first }.toSet()
-    return ViewerExifField.entries.filter { it != ViewerExifField.FocalLength35mm && it !in known }
+    return ViewerExifField.entries.filter { it !in known }
 }
 
 internal fun viewerDetails(capture: WifiCameraCapture, metadataState: PhotoMetadataState): ViewerDetails {
@@ -268,6 +263,11 @@ internal fun viewerDetails(capture: WifiCameraCapture, metadataState: PhotoMetad
         capturedAt = viewerCaptureTimeText(capture.preview.capturedAt),
         resolutionText = if (hasDeveloped) resolution else null,
         exif = viewerExifRows(metadata),
+        focalLength35mm = metadata?.exif?.let { exif ->
+            val focal = exif.focalLengthText
+            exif.focalLength35mm?.let { PhotoExif.decimal(it.toDouble(), 0) + "mm" }
+                ?.takeIf { focal != null && it != focal }
+        },
         files = files,
         loading = metadataState is PhotoMetadataState.Loading && metadataState.handle == capture.metadataHandle,
     )

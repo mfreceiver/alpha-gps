@@ -577,7 +577,7 @@
     <string name="b1_exif_camera">相机</string>
     <string name="d1_tile_too_large">超过大小上限，将跳过</string>
     <string name="d1_tile_saved">已保存</string>
-    <string name="d1_exif_focal_35mm">等效焦距</string>
+    <string name="d1_exif_focal_35mm">%1$s（等效 %2$s）</string>
     <string name="q_info_auto_time_area">自动校时与区域调整</string>
     <string name="q_info_auto_time_off">自动校时未启用</string>
     <string name="q_info_auto_area_off">区域调整未启用</string>
