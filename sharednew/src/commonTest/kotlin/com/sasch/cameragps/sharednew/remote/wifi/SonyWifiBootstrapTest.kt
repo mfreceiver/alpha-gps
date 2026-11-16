@@ -8,6 +8,7 @@ import com.sasch.cameragps.sharednew.bluetooth.transport.BleOperation
 import com.sasch.cameragps.sharednew.bluetooth.transport.BleOperationResult
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
@@ -53,6 +54,7 @@ class SonyWifiBootstrapTest {
         var ssidReads = 0
         var hasBssid = true
         val statuses = ArrayDeque<ByteArray>()
+        var fallbackStatus: ByteArray = byteArrayOf()
         var emptySsid = false
         var passwordReads = 0
         var delayPassword = false
@@ -65,7 +67,7 @@ class SonyWifiBootstrapTest {
             operations += operation
             return when (operation) {
                 is BleOperation.Read -> when (operation.characteristicUuid) {
-                    Sony.CAMERA_STATUS_UUID -> BleOperationResult.Success(statuses.removeFirstOrNull() ?: byteArrayOf())
+                    Sony.CAMERA_STATUS_UUID -> BleOperationResult.Success(statuses.removeFirstOrNull() ?: fallbackStatus)
                     Sony.WIFI_SSID_UUID -> {
                         ssidReads++
                         if (emptySsid || ssidReads == 1) BleOperationResult.Failure(
@@ -163,6 +165,71 @@ class SonyWifiBootstrapTest {
         assertEquals(1, ble.operations.filterIsInstance<BleOperation.Write>().size)
         val firstCredential = ble.operations.indexOfFirst { it is BleOperation.Read && it.characteristicUuid == Sony.WIFI_SSID_UUID }
         assertEquals(4, ble.operations.take(firstCredential).filterIsInstance<BleOperation.Read>().size)
+    }
+
+    private fun status(state: Int, error: Int = 0) = byteArrayOf(4, 0, 1, state.toByte(), error.toByte())
+
+    @Test
+    fun waitsForStoppingBeforeStarting() = runTest {
+        val ble = FakeBle().apply { statuses.addAll(listOf(status(3), status(0), status(1), status(2))) }
+        assertTrue(SonyWifiBootstrap(ble, credentialPollMs = 10, stoppingTimeoutMs = 100).prepare("camera") != null)
+        assertEquals(1, ble.operations.filterIsInstance<BleOperation.Write>().size)
+        val writeIndex = ble.operations.indexOfFirst { it is BleOperation.Write }
+        assertEquals(2, ble.operations.take(writeIndex).filterIsInstance<BleOperation.Read>().size)
+    }
+
+    @Test
+    fun retriesOnceWhenStoppingThenOffBeyondGrace() = runTest {
+        val ble = FakeBle().apply { statuses.addAll(listOf(status(0), status(3), status(0), status(0), status(0), status(2))) }
+        assertTrue(SonyWifiBootstrap(ble, credentialPollMs = 10, restartGraceMs = 30, nowMs = { testScheduler.currentTime }).prepare("camera") != null)
+        assertEquals(2, ble.operations.filterIsInstance<BleOperation.Write>().size)
+    }
+
+    @Test
+    fun startupWithinGraceDoesNotRetry() = runTest {
+        val ble = FakeBle().apply { statuses.addAll(listOf(status(0), status(3), status(0), status(1), status(2))) }
+        assertTrue(SonyWifiBootstrap(ble, credentialPollMs = 10, restartGraceMs = 30, nowMs = { testScheduler.currentTime }).prepare("camera") != null)
+        assertEquals(1, ble.operations.filterIsInstance<BleOperation.Write>().size)
+    }
+
+    @Test
+    fun stuckOffAfterRetryTimesOutWithoutThirdWrite() = runTest {
+        val ble = FakeBle().apply { fallbackStatus = status(0) }
+        val error = assertFailsWith<WifiRemoteConnectException> {
+            SonyWifiBootstrap(ble, overallTimeoutMs = 100, credentialPollMs = 10, restartGraceMs = 30, nowMs = { testScheduler.currentTime }).prepare("camera")
+        }
+        assertEquals(WifiRemoteFailure.CameraCredentialsUnavailable, error.failure)
+        assertEquals(2, ble.operations.filterIsInstance<BleOperation.Write>().size)
+    }
+
+    @Test
+    fun cancellationDuringGraceNeverRetries() = runTest {
+        val ble = FakeBle().apply { fallbackStatus = status(0) }
+        val job = launch {
+            SonyWifiBootstrap(ble, credentialPollMs = 10, restartGraceMs = 30, nowMs = { testScheduler.currentTime }).prepare("camera")
+        }
+        advanceTimeBy(20)
+        job.cancel()
+        advanceTimeBy(100)
+        runCurrent()
+        assertEquals(1, ble.operations.filterIsInstance<BleOperation.Write>().size)
+    }
+
+    @Test
+    fun stoppingCanBecomeAlreadyOnWithoutStart() = runTest {
+        val ble = FakeBle().apply { statuses.addAll(listOf(status(3), status(2))) }
+        assertTrue(SonyWifiBootstrap(ble, credentialPollMs = 10).prepare("camera") != null)
+        assertTrue(ble.operations.none { it is BleOperation.Write })
+    }
+
+    @Test
+    fun stoppingWaitTimeoutOrReadFailureNeverWrites() = runTest {
+        val timedOut = FakeBle().apply { fallbackStatus = status(3) }
+        assertNull(SonyWifiBootstrap(timedOut, credentialPollMs = 10, stoppingTimeoutMs = 30).prepare("camera"))
+        assertTrue(timedOut.operations.none { it is BleOperation.Write })
+        val failedRead = FakeBle().apply { statuses.add(status(3)) }
+        assertNull(SonyWifiBootstrap(failedRead, credentialPollMs = 10).prepare("camera"))
+        assertTrue(failedRead.operations.none { it is BleOperation.Write })
     }
 
     @Test

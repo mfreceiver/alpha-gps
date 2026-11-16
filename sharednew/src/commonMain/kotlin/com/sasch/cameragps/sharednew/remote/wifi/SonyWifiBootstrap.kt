@@ -6,6 +6,9 @@ import com.sasch.cameragps.sharednew.bluetooth.transport.BleOperation
 import com.sasch.cameragps.sharednew.bluetooth.transport.BleOperationResult
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.TimeSource
+
+private val wifiBootstrapClockOrigin = TimeSource.Monotonic.markNow()
 
 /** Every BLE operation is delegated to the existing per-device GATT queue. */
 internal interface WifiBootstrapBlePort {
@@ -27,6 +30,9 @@ internal class SonyWifiBootstrap(
     private val ble: WifiBootstrapBlePort,
     private val overallTimeoutMs: Long = 45_000,
     private val credentialPollMs: Long = 500,
+    private val stoppingTimeoutMs: Long = 10_000,
+    private val restartGraceMs: Long = 4_000,
+    private val nowMs: () -> Long = { wifiBootstrapClockOrigin.elapsedNow().inWholeMilliseconds },
 ) {
     private val log = logging()
 
@@ -61,7 +67,29 @@ internal class SonyWifiBootstrap(
                     identifier,
                     BleOperation.Subscribe(SonyBluetoothConstants.CAMERA_STATUS_UUID, true)
                 )
-                alreadyOn = readStatus()?.first == 2
+                val initialStatus = readStatus()
+                alreadyOn = initialStatus?.first == 2
+                if (initialStatus?.first == 3) {
+                    stage = "waiting for Wi-Fi to stop"
+                    log.i { "Camera Wi-Fi stopping; waiting before start state=${initialStatus.first} err=${initialStatus.second}" }
+                    val stopped = withTimeoutOrNull(stoppingTimeoutMs) {
+                        while (ble.isConnected(identifier)) {
+                            delay(credentialPollMs)
+                            if (!ble.isConnected(identifier)) return@withTimeoutOrNull false
+                            val status = readStatus() ?: return@withTimeoutOrNull false
+                            if (status.first == 2) {
+                                alreadyOn = true
+                                return@withTimeoutOrNull true
+                            }
+                            if (status.first == 0) return@withTimeoutOrNull true
+                        }
+                        false
+                    } == true
+                    if (!stopped) {
+                        log.w { "Camera Wi-Fi stop wait failed state=${lastStatus?.first} err=${lastStatus?.second}" }
+                        return@withTimeoutOrNull null
+                    }
+                }
             }
             if (alreadyOn) log.i { "Camera Wi-Fi already on; skipping start command" }
             if (!alreadyOn) {
@@ -76,6 +104,8 @@ internal class SonyWifiBootstrap(
                 log.i { "Camera accepted Wi-Fi start command; waiting for connection details" }
 
                 if (ble.hasCharacteristic(identifier, SonyBluetoothConstants.CAMERA_STATUS_UUID)) {
+                    var stalledSinceMs: Long? = null
+                    var retried = false
                     while (ble.isConnected(identifier)) {
                         val status = readStatus() ?: break
                         if (status.first == 2) break
@@ -83,6 +113,24 @@ internal class SonyWifiBootstrap(
                             startAccepted = false
                             log.w { "Camera reported Wi-Fi startup error=${status.second}" }
                             return@withTimeoutOrNull null
+                        }
+                        if (status.first == 1) {
+                            stalledSinceMs = null
+                        } else if (stalledSinceMs == null && (status.first == 0 || status.first == 3)) {
+                            stalledSinceMs = nowMs()
+                        }
+                        // Wait until the camera is off before retrying: a write while stopping can be swallowed.
+                        if (!retried && status.first == 0 && stalledSinceMs != null &&
+                            nowMs() - stalledSinceMs >= restartGraceMs
+                        ) {
+                            log.i { "Camera Wi-Fi start stalled; retrying state=${status.first} err=${status.second}" }
+                            retried = true
+                            if (ble.execute(
+                                    identifier, BleOperation.Write(
+                                        SonyBluetoothConstants.WIFI_ON_UUID, SonyBluetoothConstants.WIFI_ON_COMMAND,
+                                    )
+                                ) !is BleOperationResult.Success
+                            ) return@withTimeoutOrNull null
                         }
                         delay(credentialPollMs)
                     }
