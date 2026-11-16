@@ -79,3 +79,34 @@ internal fun ImageBitmap.luminanceHistogram(binCount: Int = HISTOGRAM_BINS): Flo
         null
     }
 }
+
+/** Count sampled ARGB pixels into equally sized red, green and blue bins; alpha is ignored. */
+internal fun accumulateRgb(argb: IntArray, bins: List<IntArray>, step: Int = 1) {
+    require(bins.size == 3 && bins[0].isNotEmpty() && bins.all { it.size == bins[0].size } && step > 0)
+    var x = 0
+    while (x < argb.size) {
+        val pixel = argb[x]
+        for (channel in 0..2) bins[channel][((pixel shr (16 - channel * 8)) and 255) * bins[channel].size / 256]++
+        x += step
+    }
+}
+
+/** RGB channel histograms from the same sampled ARGB pixels as the preview. */
+internal fun ImageBitmap.rgbHistogram(binCount: Int = HISTOGRAM_BINS): List<FloatArray>? {
+    if (width <= 0 || height <= 0) return null
+    val step = histogramSampleStep(width, height)
+    val bins = List(3) { IntArray(binCount) }
+    val row = IntArray(width)
+    return try {
+        var y = 0
+        while (y < height) {
+            readPixels(row, startX = 0, startY = y, width = width, height = 1)
+            accumulateRgb(row, bins, step)
+            y += step
+        }
+        // One scale preserves the relative magnitudes of the three channels.
+        val max = bins.maxOf { it.maxOrNull() ?: 0 }
+        val top = sqrt(max.toDouble())
+        bins.map { channel -> FloatArray(binCount) { if (top == 0.0) 0f else (sqrt(channel[it].toDouble()) / top).toFloat() } }
+    } catch (_: Exception) { null }
+}

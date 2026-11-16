@@ -322,3 +322,8 @@ fun AlphaColors.toColorScheme(): ColorScheme =
             surfaceContainerLowest = surfaceContainerLowest,
         )
     }
+
+// Data encoding colours for RGB image histograms, not UI status or text roles.
+internal val HistogramRed = Color(0xFFFF6666)
+internal val HistogramGreen = Color(0xFF67E58B)
+internal val HistogramBlue = Color(0xFF6DAEFF)

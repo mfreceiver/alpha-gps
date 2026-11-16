@@ -488,6 +488,16 @@ class WifiPhotoViewerModelTest {
     }
 
     @Test
+    fun rgbHistogramCountsIndependentChannelsAndIgnoresAlpha() {
+        val bins = List(3) { IntArray(4) }
+        val pixels = intArrayOf(0xFFFF0000.toInt(), 0xFFFFFFFF.toInt(), 0x0000FF00, 0xFF0000FF.toInt())
+        accumulateRgb(pixels, bins, step = 2)
+        assertContentEquals(intArrayOf(1, 0, 0, 1), bins[0])
+        assertContentEquals(intArrayOf(1, 0, 0, 1), bins[1])
+        assertContentEquals(intArrayOf(2, 0, 0, 0), bins[2])
+    }
+
+    @Test
     fun sampleStepBoundsTheWorkOfLargePreviews() {
         assertEquals(1, histogramSampleStep(100, 100))
         assertEquals(1, histogramSampleStep(0, 100))

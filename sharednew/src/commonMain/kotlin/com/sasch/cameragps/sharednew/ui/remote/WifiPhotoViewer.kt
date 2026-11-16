@@ -195,6 +195,9 @@ import com.sasch.cameragps.sharednew.ui.components.glass.glassSource
 import com.sasch.cameragps.sharednew.ui.components.glass.rememberGlassBackdrop
 import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
 import com.sasch.cameragps.sharednew.ui.theme.AlphaType
+import com.sasch.cameragps.sharednew.ui.theme.HistogramRed
+import com.sasch.cameragps.sharednew.ui.theme.HistogramGreen
+import com.sasch.cameragps.sharednew.ui.theme.HistogramBlue
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.sasch.cameragps.sharednew.ui.theme.CameraGpsTheme
 import com.sasch.cameragps.sharednew.ui.theme.GlassLevel
@@ -622,7 +625,7 @@ private fun ViewerTopBar(
             )
             parts.capturedAt?.let {
                 Text(
-                    it, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption,
+                    it, color = AlphaTheme.colors.onPhotoMuted, style = AlphaType.Caption,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
@@ -934,13 +937,13 @@ private val DetailsSpacing = 10.dp
 
 /** Row height reserved by a details row and its placeholder, so a value replacing it does not jump. */
 private val DetailRowHeight = 24.dp
-private val HistogramHeight = 64.dp
+private val HistogramHeight = 80.dp
 
 /**
  * The details shared by the portrait drawer and the wide side panel, derived here (not in the page)
  * so a metadata result or the histogram recomposes only the details: capture time, resolution,
  * camera, lens, focal length (and the 35 mm equivalent when it differs), aperture / shutter / ISO /
- * exposure bias in a compact two-column grid, then each file's format and size next to the
+ * exposure bias in a compact two-column grid, then each file's format and size and the RGB
  * histogram of the shown preview. Unknown values are left out; while the extended read is pending
  * the fields it may still fill show placeholders of the same height.
  */
@@ -952,10 +955,10 @@ private fun ColumnScope.ViewerDetailsContent(
 ) {
     val metadataState by metadata.collectAsState()
     val details = remember(capture, metadataState) { viewerDetails(capture, metadataState) }
-    val histogram by produceState<FloatArray?>(null, image) {
+    val histogram by produceState<List<FloatArray>?>(null, image) {
         value = null
         // Down-sampled and off the main thread: a preview can be several megapixels.
-        value = image?.let { withContext(Dispatchers.Default) { it.luminanceHistogram() } }
+        value = image?.let { withContext(Dispatchers.Default) { it.rgbHistogram() } }
     }
     val pending = viewerPendingExifFields(details)
     val values = details.exif.toMap()
@@ -975,26 +978,19 @@ private fun ColumnScope.ViewerDetailsContent(
             if (pair.size == 1) Spacer(Modifier.weight(1f))
         }
     }
-    Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (details.files.isNotEmpty()) {
-                Text(stringResource(Res.string.b1_detail_files), color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption)
-                details.files.forEach { file ->
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(file.format, color = AlphaTheme.colors.onPhoto, style = AlphaType.Label, maxLines = 1)
-                        if (file.bytes > 0) Text(formatByteSize(file.bytes), color = AlphaTheme.colors.onPhoto, style = AlphaType.Body, maxLines = 1)
-                    }
-                }
+    if (details.files.isNotEmpty()) {
+        Text(stringResource(Res.string.b1_detail_files), color = AlphaTheme.colors.onPhotoMuted, style = AlphaType.Caption)
+        details.files.forEach { file ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(file.format, color = AlphaTheme.colors.onPhoto, style = AlphaType.Label, maxLines = 1)
+                if (file.bytes > 0) Text(formatByteSize(file.bytes), color = AlphaTheme.colors.onPhoto, style = AlphaType.Label, maxLines = 1)
             }
         }
-        // Same two equal columns and 16 dp gap as the exposure grid above: the histogram starts at the
-        // left edge of the second grid column ("Exposure compensation") and ends at the details' right edge.
-        if (image != null) Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(stringResource(Res.string.m7_viewer_histogram), color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption)
-            // Fixed height whether or not the bins are computed yet: no jump when they arrive.
-            Box(Modifier.fillMaxWidth().height(HistogramHeight)) {
-                histogram?.let { HistogramGraph(it, Modifier.fillMaxSize()) }
-            }
+    }
+    if (image != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Spacer(Modifier.weight(1f))
+        Box(Modifier.weight(1f).height(HistogramHeight).background(AlphaTheme.colors.onPhoto.copy(alpha = 0.05f))) {
+            histogram?.let { HistogramGraph(it, Modifier.fillMaxSize()) }
         }
     }
 }
@@ -1021,9 +1017,9 @@ private fun DetailRow(label: String, value: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(label, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption)
+        Text(label, color = AlphaTheme.colors.onPhotoMuted, style = AlphaType.Caption)
         Spacer(Modifier.weight(1f))
-        Text(value, color = AlphaTheme.colors.onPhoto, style = AlphaType.Body, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(value, color = AlphaTheme.colors.onPhoto, style = AlphaType.Label, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -1035,7 +1031,7 @@ private fun PlaceholderRow(label: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(label, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption)
+        Text(label, color = AlphaTheme.colors.onPhotoMuted, style = AlphaType.Caption)
         Spacer(Modifier.weight(1f))
         PlaceholderBar(Modifier.width(96.dp))
     }
@@ -1045,9 +1041,9 @@ private fun PlaceholderRow(label: String) {
 @Composable
 private fun ExifGridCell(label: String, value: String?, modifier: Modifier) {
     Column(modifier) {
-        Text(label, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption, maxLines = 1)
+        Text(label, color = AlphaTheme.colors.onPhotoMuted, style = AlphaType.Caption, maxLines = 1)
         Box(Modifier.fillMaxWidth().height(DetailRowHeight), contentAlignment = Alignment.CenterStart) {
-            if (value != null) Text(value, color = AlphaTheme.colors.onPhoto, style = AlphaType.Body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (value != null) Text(value, color = AlphaTheme.colors.onPhoto, style = AlphaType.Label, maxLines = 1, overflow = TextOverflow.Ellipsis)
             else PlaceholderBar(Modifier.fillMaxWidth(0.6f))
         }
     }
@@ -1064,19 +1060,18 @@ private fun PlaceholderBar(modifier: Modifier) {
 }
 
 @Composable
-private fun HistogramGraph(bins: FloatArray, modifier: Modifier) {
+private fun HistogramGraph(channels: List<FloatArray>, modifier: Modifier) {
     val label = stringResource(Res.string.m7_viewer_histogram)
-    val bar = AlphaTheme.colors.onPhotoMuted
+    val colors = listOf(HistogramRed, HistogramGreen, HistogramBlue)
     Canvas(modifier.semantics { contentDescription = label }) {
-        if (bins.isEmpty()) return@Canvas
-        val barWidth = size.width / bins.size
-        bins.forEachIndexed { index, value ->
-            val h = value.coerceIn(0f, 1f) * size.height
-            if (h > 0f) drawRect(
-                color = bar,
-                topLeft = Offset(index * barWidth, size.height - h),
-                size = Size(barWidth, h),
-            )
+        channels.forEachIndexed { channel, bins ->
+            if (bins.isNotEmpty()) {
+                val barWidth = size.width / bins.size
+                bins.forEachIndexed { index, value ->
+                    val h = value.coerceIn(0f, 1f) * size.height
+                    if (h > 0f) drawRect(colors[channel].copy(alpha = 0.45f), Offset(index * barWidth, size.height - h), Size(barWidth, h))
+                }
+            }
         }
     }
 }
@@ -1338,7 +1333,7 @@ private fun ProgressLine(title: String, detail: String?, modifier: Modifier) {
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             if (detail != null) {
-                Text(detail, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Caption, maxLines = 1)
+                Text(detail, color = AlphaTheme.colors.onPhotoMuted, style = AlphaType.Caption, maxLines = 1)
             }
         },
         modifier = modifier,

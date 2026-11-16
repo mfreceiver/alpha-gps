@@ -72,10 +72,6 @@
 
 ## P2
 
-### 本轮 UI：照片详情和直方图
-- 做什么：中文 ISO 改感光度，强化标签/值层级；RGB 直方图移至通栏并对齐曝光补偿列。
-- 验收：共用跨平台 ARGB 数据，边界可见；依据：`WifiPhotoViewer.kt`、`ViewerHistogram.kt`。
-
 ### 本轮 UI：日期页返回选区
 - 做什么：日期照片页带选区返回时弹确认，确认清选后返回。
 - 验收：两种返回入口一致，取消不变、无选区直接返回，更新控制器测试；依据：`WifiRemoteScreen.kt`、`WifiRemoteControllerTest.kt`。
