@@ -34,6 +34,21 @@ internal class SonyWifiBootstrap(
         var startAccepted = false
         var alreadyOn = false
         var stage = "activation"
+        var lastStatus: Pair<Int, Int>? = null
+        var loggedFailure = false
+        suspend fun readStatus(): Pair<Int, Int>? {
+            val result = ble.execute(identifier, BleOperation.Read(SonyBluetoothConstants.CAMERA_STATUS_UUID))
+            val status = (result as? BleOperationResult.Success)?.value?.let(::parseWifiStatus)
+            if (status != null) {
+                if (status != lastStatus) log.i { "Camera Wi-Fi status state=${status.first} err=${status.second}" }
+                lastStatus = status
+            } else if (!loggedFailure) {
+                loggedFailure = true
+                val reason = if (result is BleOperationResult.Success) "parse failed" else "read failed"
+                log.i { "Camera Wi-Fi status $reason" }
+            }
+            return status
+        }
         val credentials = withTimeoutOrNull(overallTimeoutMs) {
             if (!ble.isConnected(identifier)) return@withTimeoutOrNull null
             if (!ble.hasCharacteristic(identifier, SonyBluetoothConstants.WIFI_ON_UUID) ||
@@ -46,11 +61,9 @@ internal class SonyWifiBootstrap(
                     identifier,
                     BleOperation.Subscribe(SonyBluetoothConstants.CAMERA_STATUS_UUID, true)
                 )
-                alreadyOn = (ble.execute(
-                    identifier,
-                    BleOperation.Read(SonyBluetoothConstants.CAMERA_STATUS_UUID)
-                ) as? BleOperationResult.Success)?.value?.let(::parseWifiStatus)?.first == 2
+                alreadyOn = readStatus()?.first == 2
             }
+            if (alreadyOn) log.i { "Camera Wi-Fi already on; skipping start command" }
             if (!alreadyOn) {
                 if (ble.execute(
                         identifier, BleOperation.Write(
@@ -64,11 +77,7 @@ internal class SonyWifiBootstrap(
 
                 if (ble.hasCharacteristic(identifier, SonyBluetoothConstants.CAMERA_STATUS_UUID)) {
                     while (ble.isConnected(identifier)) {
-                        val status = (ble.execute(
-                            identifier,
-                            BleOperation.Read(SonyBluetoothConstants.CAMERA_STATUS_UUID)
-                        )
-                                as? BleOperationResult.Success)?.value?.let(::parseWifiStatus) ?: break
+                        val status = readStatus() ?: break
                         if (status.first == 2) break
                         if (status.first == 0 && status.second in 2..5) {
                             startAccepted = false

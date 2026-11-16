@@ -2,6 +2,7 @@ package com.sasch.cameragps.sharednew.remote.wifi
 
 import com.diamondedge.logging.FixedLogLevel
 import com.diamondedge.logging.KmLogging
+import com.diamondedge.logging.Logger
 import com.diamondedge.logging.PlatformLogger
 import com.sasch.cameragps.sharednew.bluetooth.transport.BleOperation
 import com.sasch.cameragps.sharednew.bluetooth.transport.BleOperationResult
@@ -30,6 +31,20 @@ class SonyWifiBootstrapTest {
     @AfterTest
     fun restoreLogs() {
         KmLogging.setLoggers(PlatformLogger(FixedLogLevel(true)))
+    }
+
+    private class RecordingLogger : Logger {
+        val messages = mutableListOf<String>()
+        override fun verbose(tag: String, msg: String) = Unit
+        override fun debug(tag: String, msg: String) = Unit
+        override fun info(tag: String, msg: String) { messages += msg }
+        override fun warn(tag: String, msg: String, t: Throwable?) = Unit
+        override fun error(tag: String, msg: String, t: Throwable?) = Unit
+        override fun isLoggingVerbose() = false
+        override fun isLoggingDebug() = false
+        override fun isLoggingInfo() = true
+        override fun isLoggingWarning() = true
+        override fun isLoggingError() = true
     }
 
     private class FakeBle : WifiBootstrapBlePort {
@@ -97,7 +112,10 @@ class SonyWifiBootstrapTest {
             statuses.add(byteArrayOf(4, 0, 1, 2, 0))
             ssidReads = 1
         }
+        val logger = RecordingLogger().also { KmLogging.setLoggers(it) }
         val credentials = SonyWifiBootstrap(ble).prepare("camera")!!
+        assertTrue(logger.messages.contains("Camera Wi-Fi status state=2 err=0"))
+        assertTrue(logger.messages.contains("Camera Wi-Fi already on; skipping start command"))
         assertEquals("DIRECT-A6700", credentials.ssid)
         assertEquals("secret-pass", credentials.password)
         assertEquals("01:02:03:04:05:06", credentials.bssid)
@@ -135,14 +153,16 @@ class SonyWifiBootstrapTest {
     @Test
     fun waitsForWifiStartupAndPasswordReadinessWithoutRepeatingStart() = runTest {
         val ble = FakeBle().apply {
-            statuses.addAll(listOf(byteArrayOf(4, 0, 1, 0, 0), byteArrayOf(4, 0, 1, 1, 0), byteArrayOf(4, 0, 1, 2, 0)))
+            statuses.addAll(listOf(byteArrayOf(4, 0, 1, 0, 0), byteArrayOf(4, 0, 1, 1, 0), byteArrayOf(4, 0, 1, 1, 0), byteArrayOf(4, 0, 1, 2, 0)))
             delayPassword = true
         }
+        val logger = RecordingLogger().also { KmLogging.setLoggers(it) }
         assertTrue(SonyWifiBootstrap(ble).prepare("camera") != null)
+        assertEquals(listOf("Camera Wi-Fi status state=0 err=0", "Camera Wi-Fi status state=1 err=0", "Camera Wi-Fi status state=2 err=0"), logger.messages.filter { it.startsWith("Camera Wi-Fi status") })
         assertEquals(2, ble.passwordReads)
         assertEquals(1, ble.operations.filterIsInstance<BleOperation.Write>().size)
         val firstCredential = ble.operations.indexOfFirst { it is BleOperation.Read && it.characteristicUuid == Sony.WIFI_SSID_UUID }
-        assertEquals(3, ble.operations.take(firstCredential).filterIsInstance<BleOperation.Read>().size)
+        assertEquals(4, ble.operations.take(firstCredential).filterIsInstance<BleOperation.Read>().size)
     }
 
     @Test
