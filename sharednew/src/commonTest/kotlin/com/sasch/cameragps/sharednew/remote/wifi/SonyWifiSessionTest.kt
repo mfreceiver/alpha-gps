@@ -188,7 +188,8 @@ class SonyWifiSessionTest : WifiLoggingTest() {
                     "Remote session need not advertise transfer operations"
                 )
                 assertTrue(connection.canCapture)
-                val page = connection.openPhotoBrowser()
+                val dates = connection.openCatalog()
+                val page = connection.dayPhotos(dates.single().key)
                 assertEquals("DSC0007.JPG", page.photos.single().filename)
                 assertFalse(connection.canCapture)
                 assertEquals(
@@ -197,7 +198,7 @@ class SonyWifiSessionTest : WifiLoggingTest() {
                 )
                 assertEquals(listOf<Byte>(1, 2, 3), camera.saved)
                 assertTrue(camera.committed)
-                connection.openPhotoBrowser() // Refresh reuses transfer session.
+                connection.openCatalog() // Refresh reuses transfer session.
                 assertEquals(4, camera.channels.size)
                 connection.closePhotoBrowser()
                 assertTrue(connection.canCapture)
@@ -234,7 +235,8 @@ class SonyWifiSessionTest : WifiLoggingTest() {
             assertTrue(connection.canTransferImages)
             assertFalse(connection.hasLiveViewStream, "Browse-only must not advertise a live-view stream")
             assertEquals(listOf(listOf(1L, 1L)), camera.openModes())
-            assertEquals("DSC0007.JPG", connection.openPhotoBrowser().photos.single().filename)
+            val dates = connection.openCatalog()
+            assertEquals("DSC0007.JPG", connection.dayPhotos(dates.single().key).photos.single().filename)
             assertEquals(
                 listOf(listOf(1L, 1L)),
                 camera.openModes(),
@@ -274,7 +276,8 @@ class SonyWifiSessionTest : WifiLoggingTest() {
             // One combined session, opened as mode 2 — no dedicated transfer session.
             assertEquals(listOf(listOf(1L, 2L)), camera.openModes())
             assertEquals(2, camera.channels.size, "No second session may be opened")
-            assertEquals("DSC0007.JPG", connection.openPhotoBrowser().photos.single().filename)
+            val dates = connection.openCatalog()
+            assertEquals("DSC0007.JPG", connection.dayPhotos(dates.single().key).photos.single().filename)
             assertEquals(
                 listOf(listOf(1L, 2L)),
                 camera.openModes(),
@@ -310,7 +313,7 @@ class SonyWifiSessionTest : WifiLoggingTest() {
             }
             val connection = camera.open(backgroundScope)
             try {
-                connection.openPhotoBrowser()
+                connection.openCatalog()
                 connection.closePhotoBrowser()
                 assertEquals(2, camera.channels.size)
                 assertEquals(
@@ -346,12 +349,12 @@ class SonyWifiSessionTest : WifiLoggingTest() {
         val camera = Camera().apply { rejectOpenSession = 2 }
         val connection = camera.open(backgroundScope)
         try {
-            assertFailsWith<WifiRemoteConnectException> { connection.openPhotoBrowser() }
+            assertFailsWith<WifiRemoteConnectException> { connection.openCatalog() }
             assertTrue(camera.channels.all { it.closed })
             assertFalse(connection.canCapture)
             connection.closePhotoBrowser()
             assertTrue(connection.canCapture)
-            connection.openPhotoBrowser()
+            connection.openCatalog()
             assertEquals(listOf(1L, 1L), camera.openModes().last())
         } finally {
             connection.close()
@@ -364,7 +367,7 @@ class SonyWifiSessionTest : WifiLoggingTest() {
         val camera = Camera()
         val connection = camera.open(backgroundScope)
         try {
-            connection.openPhotoBrowser()
+            connection.openCatalog()
             camera.rejectExit = true
             assertFailsWith<IllegalStateException> { connection.closePhotoBrowser() }
             assertFalse(connection.canCapture)
@@ -382,7 +385,7 @@ class SonyWifiSessionTest : WifiLoggingTest() {
         val camera = Camera().apply { blockOpenSession = 2 }
         val connection = camera.open(backgroundScope)
         try {
-            val browse = launch { connection.openPhotoBrowser() }
+            val browse = launch { connection.openCatalog() }
             runCurrent()
             assertEquals(listOf(1L, 1L), camera.openModes().last())
             browse.cancelAndJoin()
@@ -400,7 +403,7 @@ class SonyWifiSessionTest : WifiLoggingTest() {
         val camera = Camera().apply { rejectOpenSession = 3 }
         val connection = camera.open(backgroundScope)
         try {
-            connection.openPhotoBrowser()
+            connection.openCatalog()
             assertFailsWith<WifiRemoteConnectException> { connection.closePhotoBrowser() }
             assertFalse(connection.canCapture)
             assertTrue(camera.channels.all { it.closed })
@@ -417,7 +420,7 @@ class SonyWifiSessionTest : WifiLoggingTest() {
         val camera = Camera().apply { blockOpenSession = 2 }
         val connection = camera.open(backgroundScope)
         try {
-            assertFailsWith<WifiRemoteConnectException> { connection.openPhotoBrowser() }
+            assertFailsWith<WifiRemoteConnectException> { connection.openCatalog() }
             assertTrue(camera.channels.all { it.closed })
             assertEquals(0, camera.releaseCount)
             connection.prepareToDisconnect()
@@ -442,7 +445,7 @@ class SonyWifiSessionTest : WifiLoggingTest() {
         val connection = camera.open(backgroundScope)
         try {
             assertTrue(connection.hasLiveViewStream, "A shooting session must advertise the live-view stream")
-            connection.openPhotoBrowser()
+            connection.openCatalog()
             val loss = async { connection.lost.first() }
             camera.channels.last().replies.close()
             loss.await()
@@ -463,7 +466,10 @@ class SonyWifiSessionTest : WifiLoggingTest() {
             controller.connect("camera", "192.168.1.1")
             runCurrent()
             assertEquals(1, camera.previewOpened)
-            controller.browsePhotos("camera")
+            controller.browseDates("camera")
+            runCurrent()
+            val dateKey = registry.get("camera")!!.wifiRemote.photoBrowser.dates.single().key
+            controller.browseDate("camera", dateKey)
             runCurrent()
             assertEquals(1, camera.previewClosed)
             assertTrue(registry.get("camera")!!.wifiRemote.photoBrowser.open)
@@ -478,7 +484,7 @@ class SonyWifiSessionTest : WifiLoggingTest() {
                 registry.get("camera")!!.wifiRemote.photoBrowser.savedDownloads.isEmpty(),
                 "Saved markers must not apply to reused handles in another MTP session"
             )
-            controller.browsePhotos("camera")
+            controller.browseDates("camera")
             runCurrent()
             assertEquals(8, camera.channels.size)
         } finally {

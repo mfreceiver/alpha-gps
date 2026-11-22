@@ -3,6 +3,7 @@ package com.sasch.cameragps.sharednew.ui.device
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -55,7 +56,14 @@ import cameragps.sharednew.generated.resources.m2_info_location_idle
 import cameragps.sharednew.generated.resources.m2_info_remove
 import cameragps.sharednew.generated.resources.m2_info_rename
 import cameragps.sharednew.generated.resources.m2_rename_title
+import cameragps.sharednew.generated.resources.m2_schedule_24px
+import cameragps.sharednew.generated.resources.m2_warning_24px
+import cameragps.sharednew.generated.resources.q_alert_time_sync_failed
+import cameragps.sharednew.generated.resources.q_alert_time_sync_rejected
 import cameragps.sharednew.generated.resources.q_info_auto_area_off
+import cameragps.sharednew.generated.resources.q_info_time_sync
+import cameragps.sharednew.generated.resources.q_info_time_sync_applied
+import cameragps.sharednew.generated.resources.q_info_time_sync_unconfirmed
 import cameragps.sharednew.generated.resources.q_info_auto_time_area
 import cameragps.sharednew.generated.resources.q_info_auto_time_off
 import cameragps.sharednew.generated.resources.remove
@@ -65,6 +73,8 @@ import cameragps.sharednew.generated.resources.rename_camera_save
 import com.sasch.cameragps.sharednew.bluetooth.BleSessionPhase
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSession
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSettingState
+import com.sasch.cameragps.sharednew.bluetooth.status.TimeSyncOutcome
+import com.sasch.cameragps.sharednew.bluetooth.status.TimeSyncStatus
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
@@ -82,6 +92,13 @@ import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import kotlin.time.Clock
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.State
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.foundation.layout.wrapContentHeight
+import cameragps.sharednew.generated.resources.bg_conditions_title
 
 /**
  * The one dialog a device screen can show at a time. A single route instead of several booleans
@@ -140,10 +157,22 @@ fun DeviceDialogs(
             val sessions by viewModel.sessions.collectAsState()
             val pending by viewModel.pending.collectAsState()
             val session = sessions[deviceId.uppercase()]
+            val live by remember(deviceId) { viewModel.liveStatus(deviceId) }.collectAsState(initial = null)
+            val now by rememberTickingNowMillis()
+            val openBackgroundConditions = LocalOpenBackgroundConditions.current
             DeviceInfoDialog(
                 deviceName = deviceName,
                 session = session,
                 pending = pending,
+                timeSync = live?.timeSync,
+                nowMillis = now,
+                onOpenBackgroundConditions = openBackgroundConditions?.let { open ->
+                    {
+                        // Leave the dialog first so Back from the explainer returns to the page.
+                        onRoute(DeviceDialogRoute.None)
+                        open()
+                    }
+                },
                 onConnect = { viewModel.connect(deviceId) },
                 onCancelConnecting = { viewModel.cancelConnecting(deviceId) },
                 onDisconnect = { onRoute(DeviceDialogRoute.ConfirmDisconnect) },
@@ -214,6 +243,10 @@ internal fun DeviceInfoDialog(
     onClose: () -> Unit,
     onRename: () -> Unit,
     onRemove: (() -> Unit)?,
+    timeSync: TimeSyncStatus? = null,
+    nowMillis: Long = 0L,
+    /** Opens the "Background & running conditions" explainer; null hides the link. */
+    onOpenBackgroundConditions: (() -> Unit)? = null,
 ) {
     val colors = AlphaTheme.colors
     CapsuleDialog(
@@ -299,6 +332,11 @@ internal fun DeviceInfoDialog(
             InfoRow(stringResource(Res.string.q_info_auto_time_area)) {
                 AutoCorrectionValue(autoCorrectionSummary(session))
             }
+            // Positive / neutral confirmation of the last time correction (the warning cases
+            // reuse the status card's wording).
+            timeSyncInfo(timeSync, nowMillis)?.let { info ->
+                InfoRow(stringResource(Res.string.q_info_time_sync)) { TimeSyncValue(info) }
+            }
 
             GlassInsetBlock(modifier = Modifier.fillMaxWidth()) {
                 // The whole row is the toggle (one target, one announcement); the switch only draws.
@@ -324,6 +362,20 @@ internal fun DeviceInfoDialog(
                     }
                     GlassSwitch(checked = keepActive, onCheckedChange = null)
                 }
+                if (onOpenBackgroundConditions != null) {
+                    // Its own target below the toggle row (so it never flips the switch); the text
+                    // wraps, so 200 % font scale grows the row instead of cutting the label.
+                    Text(
+                        stringResource(Res.string.bg_conditions_title),
+                        style = AlphaType.Label,
+                        color = colors.accent,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = AlphaDimens.minTouchTarget)
+                            .clickable(role = Role.Button, onClick = onOpenBackgroundConditions)
+                            .wrapContentHeight(Alignment.CenterVertically),
+                    )
+                }
             }
 
             if (onRemove != null) {
@@ -340,6 +392,22 @@ internal fun DeviceInfoDialog(
 }
 
 private val InfoValueStyle = AlphaType.Body
+
+/**
+ * Opens the app's "Background & running conditions" explainer. Provided by the host (the page lives
+ * in the app module); null = no such page, the dialog shows no link.
+ */
+val LocalOpenBackgroundConditions = staticCompositionLocalOf<(() -> Unit)?> { null }
+
+/** Wall clock that refreshes every [tickMillis] so relative ages in a dialog do not freeze. */
+@Composable
+internal fun rememberTickingNowMillis(tickMillis: Long = 30_000L): State<Long> =
+    produceState(Clock.System.now().toEpochMilliseconds()) {
+        while (true) {
+            delay(tickMillis)
+            value = Clock.System.now().toEpochMilliseconds()
+        }
+    }
 
 @Composable
 private fun InfoRow(label: String, value: @Composable () -> Unit) {
@@ -368,6 +436,48 @@ private fun InfoStatusValue(text: String, tone: StatusTone, confirmed: Boolean =
     } else {
         Text(text, style = InfoValueStyle, color = statusToneColor(tone, AlphaTheme.colors), maxLines = 1)
     }
+}
+
+/** What the info dialog's time-sync row shows; [atMillis] is when the outcome was reached. */
+internal enum class TimeSyncInfoKind { Applied, Unconfirmed, Rejected, Failed }
+
+internal data class TimeSyncInfo(val kind: TimeSyncInfoKind, val age: RelativeAge)
+
+/** Outcomes that never ran, are still running or are unsupported say nothing and hide the row. */
+internal fun timeSyncInfo(status: TimeSyncStatus?, nowMillis: Long): TimeSyncInfo? {
+    val kind = when (status?.outcome) {
+        TimeSyncOutcome.Applied -> TimeSyncInfoKind.Applied
+        TimeSyncOutcome.Unconfirmed -> TimeSyncInfoKind.Unconfirmed
+        TimeSyncOutcome.Rejected -> TimeSyncInfoKind.Rejected
+        TimeSyncOutcome.Failed -> TimeSyncInfoKind.Failed
+        else -> return null
+    }
+    return TimeSyncInfo(kind, relativeAge(status.atMillis, nowMillis))
+}
+
+/** Icon beside the text (never colour alone): applied = check, unconfirmed = neutral clock, errors = warning. */
+@Composable
+private fun TimeSyncValue(info: TimeSyncInfo) {
+    val colors = AlphaTheme.colors
+    val age = ageText(info.age)
+    val text = when (info.kind) {
+        TimeSyncInfoKind.Applied -> stringResource(Res.string.q_info_time_sync_applied, age ?: "")
+        TimeSyncInfoKind.Unconfirmed -> stringResource(Res.string.q_info_time_sync_unconfirmed, age ?: "")
+        TimeSyncInfoKind.Rejected -> stringResource(Res.string.q_alert_time_sync_rejected)
+        TimeSyncInfoKind.Failed -> stringResource(Res.string.q_alert_time_sync_failed)
+    }.removeSuffix(" · ").trim()
+    val tint = when (info.kind) {
+        TimeSyncInfoKind.Applied -> colors.success
+        TimeSyncInfoKind.Unconfirmed -> colors.textSecondary
+        TimeSyncInfoKind.Rejected, TimeSyncInfoKind.Failed -> statusToneColor(StatusTone.Warning, colors)
+    }
+    val icon = when (info.kind) {
+        TimeSyncInfoKind.Applied -> Res.drawable.check_circle_24px
+        TimeSyncInfoKind.Unconfirmed -> Res.drawable.m2_schedule_24px
+        TimeSyncInfoKind.Rejected, TimeSyncInfoKind.Failed -> Res.drawable.m2_warning_24px
+    }
+    Icon(painterResource(icon), contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+    Text(text, style = InfoValueStyle, color = if (info.kind == TimeSyncInfoKind.Unconfirmed) colors.textSecondary else tint)
 }
 
 /** Compact in-row action (32 dp capsule, 48 dp touch target). */

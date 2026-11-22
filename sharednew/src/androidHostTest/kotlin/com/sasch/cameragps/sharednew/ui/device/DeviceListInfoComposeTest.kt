@@ -17,7 +17,11 @@ import com.sasch.cameragps.sharednew.bluetooth.BluetoothDeviceInfo
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSession
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSettingState
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassBackground
+import com.sasch.cameragps.sharednew.bluetooth.status.TimeSyncOutcome
+import com.sasch.cameragps.sharednew.bluetooth.status.TimeSyncStatus
+import com.sasch.cameragps.sharednew.ui.devicelist.DeviceListItem
 import com.sasch.cameragps.sharednew.ui.devicelist.SharedDeviceList
+import kotlin.time.Clock
 import com.sasch.cameragps.sharednew.ui.theme.CameraGpsTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -92,7 +96,14 @@ class DeviceListInfoComposeTest {
     private var session by mutableStateOf<CameraSession?>(null)
     private var pending by mutableStateOf(PendingConnection.None)
 
-    private fun showDialog(onConnect: () -> Unit = {}, onCancel: () -> Unit = {}, onDisconnect: () -> Unit = {}) {
+    private fun showDialog(
+        onConnect: () -> Unit = {},
+        onCancel: () -> Unit = {},
+        onDisconnect: () -> Unit = {},
+        timeSync: TimeSyncStatus? = null,
+        nowMillis: Long = 0L,
+        onOpenBackgroundConditions: (() -> Unit)? = null,
+    ) {
         compose.setContent {
             CameraGpsTheme {
                 GlassBackground {
@@ -108,6 +119,9 @@ class DeviceListInfoComposeTest {
                         onClose = {},
                         onRename = {},
                         onRemove = {},
+                        timeSync = timeSync,
+                        nowMillis = nowMillis,
+                        onOpenBackgroundConditions = onOpenBackgroundConditions,
                     )
                 }
             }
@@ -158,5 +172,84 @@ class DeviceListInfoComposeTest {
         compose.onNodeWithText("Auto time & area", substring = true).assertExists()
         compose.onNodeWithText("Area adjustment off", substring = true).assertExists()
         compose.onAllNodesWithText("AA:BB", substring = true).assertCountEquals(0)
+    }
+
+    private val syncedAt = 1_000_000L
+
+    @Test
+    fun timeSyncRowShowsTheAppliedOutcomeWithItsAge() {
+        session = phase(BleSessionPhase.Transmitting)
+        showDialog(
+            timeSync = TimeSyncStatus(TimeSyncOutcome.Applied, atMillis = syncedAt),
+            nowMillis = syncedAt + 5 * 60_000L,
+        )
+        compose.onNodeWithText("Time sync").assertExists()
+        compose.onNodeWithText("Applied · 5 min ago").assertExists()
+    }
+
+    @Test
+    fun timeSyncRowSaysNotConfirmedWhenTheCameraSentNoResult() {
+        session = phase(BleSessionPhase.Transmitting)
+        showDialog(
+            timeSync = TimeSyncStatus(TimeSyncOutcome.Unconfirmed, atMillis = syncedAt),
+            nowMillis = syncedAt + 2 * 60 * 60_000L,
+        )
+        compose.onNodeWithText("Sent, not confirmed · 2 h ago").assertExists()
+    }
+
+    @Test
+    fun timeSyncRowReportsARejectionAndNeverNotRun() {
+        session = phase(BleSessionPhase.Transmitting)
+        showDialog(
+            timeSync = TimeSyncStatus(TimeSyncOutcome.Rejected, atMillis = syncedAt, rejectReason = 3),
+            nowMillis = syncedAt,
+        )
+        compose.onNodeWithText("The camera rejected the time correction").assertExists()
+    }
+
+    @Test
+    fun timeSyncRowIsHiddenWithoutAResult() {
+        session = phase(BleSessionPhase.Transmitting)
+        showDialog(timeSync = TimeSyncStatus(TimeSyncOutcome.NotRun), nowMillis = syncedAt)
+        compose.onAllNodesWithText("Time sync").assertCountEquals(0)
+    }
+
+    @Test
+    fun keepActiveLinksToTheBackgroundConditionsPage() {
+        var opened = 0
+        showDialog(onOpenBackgroundConditions = { opened++ })
+        compose.onNodeWithText("Background & running conditions").performClick()
+        assertEquals(1, opened)
+    }
+
+    @Test
+    fun connectedRowShowsWriteAgeAndOnlyAFreshBatteryTag() {
+        compose.setContent {
+            CameraGpsTheme {
+                GlassBackground {
+                    SharedDeviceList(
+                        devices = listOf(camera.copy(isConnected = true)),
+                        items = mapOf(
+                            camera.identifier to DeviceListItem(
+                                identifier = camera.identifier,
+                                customName = null,
+                                isAlwaysOnEnabled = false,
+                                isTransmissionActive = true,
+                                isRemoteFeatureActive = false,
+                                isShutterActive = false,
+                                lastWriteAtMillis = Clock.System.now().toEpochMilliseconds() - 3 * 60_000L,
+                                freshBatteryPercent = 87,
+                            ),
+                        ),
+                        onConnect = {},
+                        onOpenInfo = {},
+                        onOpenDetails = {},
+                        onOpenTroubleshooting = {},
+                    )
+                }
+            }
+        }
+        compose.onNodeWithText("Sending location · 3 min ago").assertExists()
+        compose.onNodeWithText("87%").assertExists()
     }
 }

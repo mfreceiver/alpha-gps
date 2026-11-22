@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.annotation.RequiresPermission
+import com.sasch.cameragps.sharednew.bluetooth.BleFailureReason
 import com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants
 import com.sasch.cameragps.sharednew.bluetooth.transport.BleOperationStatus
 import com.sasch.cameragps.sharednew.bluetooth.transport.BlePeripheralTransport
@@ -59,17 +60,42 @@ class AndroidBleTransport(
     private val pendingSubscribeEnable =
         Collections.synchronizedMap(mutableMapOf<String, Boolean>())
 
-    fun connect(mac: String): Boolean {
+    enum class ConnectStartResult {
+        Started,
+        BluetoothOff,
+        PermissionMissing,
+        BondLost,
+        GattFailure;
+
+        fun toFailureReason(): BleFailureReason = when (this) {
+            Started -> BleFailureReason.Unknown
+            BluetoothOff -> BleFailureReason.BluetoothOff
+            PermissionMissing -> BleFailureReason.PermissionMissing
+            BondLost -> BleFailureReason.BondLost
+            GattFailure -> BleFailureReason.GattFailure
+        }
+    }
+
+    fun connect(mac: String): Boolean = connectWithResult(mac) == ConnectStartResult.Started
+
+    @SuppressLint("MissingPermission")
+    fun connectWithResult(mac: String): ConnectStartResult {
         val address = mac.uppercase()
         if (registry.has(address)) {
-            return true
+            return ConnectStartResult.Started
+        }
+
+        val adapter = bluetoothManager.adapter
+        if (adapter == null || !adapter.isEnabled) {
+            Timber.w("Bluetooth adapter is disabled; cannot connect to %s", address)
+            return ConnectStartResult.BluetoothOff
         }
 
         try {
-            val device: BluetoothDevice = bluetoothManager.adapter.getRemoteDevice(address)
+            val device: BluetoothDevice = adapter.getRemoteDevice(address)
             if (device.bondState != BluetoothDevice.BOND_BONDED) {
-                //Timber.w("Device $address is not paired. Cannot connect.")
-                return false
+                Timber.w("Device %s is not paired (bondState=%d). Cannot connect.", address, device.bondState)
+                return ConnectStartResult.BondLost
             }
             val gatt: BluetoothGatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN) {
                 device.connectGatt(
@@ -92,17 +118,17 @@ class AndroidBleTransport(
                     BluetoothDevice.PHY_LE_1M,
                     Handler(Looper.getMainLooper())
                 )
-            } ?: throw IllegalStateException("Failed to connect to device $address: GATT is null")
+            } ?: return ConnectStartResult.GattFailure
             if (!registry.register(address, gatt)) {
                 // Lost a connect race for this address: the older handle keeps it.
                 runCatching { gatt.close() }
             }
         } catch (e: SecurityException) {
             Timber.e("SecurityException while connecting to device $address: ${e.message}")
-            return false
+            return ConnectStartResult.PermissionMissing
         }
 
-        return true
+        return ConnectStartResult.Started
     }
 
     /** `true` if a GATT handle exists for this device (connected or waiting for autoConnect). */
@@ -144,7 +170,7 @@ class AndroidBleTransport(
                 connection.gatt.close()
             }
         }.onFailure { Timber.w(it) }
-        eventChannel.trySend(BleTransportEvent.Disconnected(address, statusCode = null))
+        eventChannel.trySend(BleTransportEvent.Disconnected(address, statusCode = null, isManual = true))
         return true
     }
 
@@ -156,7 +182,7 @@ class AndroidBleTransport(
     fun pauseDevice(mac: String) {
         val address = mac.uppercase()
         if (registry.pause(address)) {
-            eventChannel.trySend(BleTransportEvent.Disconnected(address, statusCode = null))
+            eventChannel.trySend(BleTransportEvent.Disconnected(address, statusCode = null, isManual = true))
         }
     }
 
@@ -196,7 +222,7 @@ class AndroidBleTransport(
             }
         }.onFailure { Timber.w(it) }
         if (!entry.disconnectedReported) {
-            eventChannel.trySend(BleTransportEvent.Disconnected(address, statusCode = null))
+            eventChannel.trySend(BleTransportEvent.Disconnected(address, statusCode = null, isManual = false))
         }
         return true
     }

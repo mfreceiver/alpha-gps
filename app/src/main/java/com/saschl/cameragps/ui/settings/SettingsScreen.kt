@@ -15,6 +15,8 @@ import cameragps.sharednew.generated.resources.a1_settings_help_title
 import cameragps.sharednew.generated.resources.a1_settings_logs_desc
 import cameragps.sharednew.generated.resources.a1_settings_logs_title
 import cameragps.sharednew.generated.resources.battery_optimization_settings_title
+import cameragps.sharednew.generated.resources.bg_conditions_desc
+import cameragps.sharednew.generated.resources.bg_conditions_title
 import cameragps.sharednew.generated.resources.event_sounds_open_section_description
 import cameragps.sharednew.generated.resources.event_sounds_title
 import cameragps.sharednew.generated.resources.m9_photo_transfer_title
@@ -83,6 +85,12 @@ fun SettingsScreen(
                 }
             }
 
+            SettingsDestination.BackgroundConditions -> {
+                NavEntry(SettingsDestination.BackgroundConditions) {
+                    BackgroundConditionsScreen(onBackClick = { navigateBack() })
+                }
+            }
+
             else -> {
                 NavEntry(destination) {}
             }
@@ -132,6 +140,11 @@ private fun SettingsOverviewScreen(
                     title = stringResource(Res.string.battery_optimization_settings_title),
                     onClick = { onOpenDestination(SettingsDestination.BatteryOptimization) }
                 )
+                SharedSettingsNavRow(
+                    title = stringResource(Res.string.bg_conditions_title),
+                    description = stringResource(Res.string.bg_conditions_desc),
+                    onClick = { onOpenDestination(SettingsDestination.BackgroundConditions) }
+                )
                 AutoStartAfterRebootRow()
             }
             // Help, the activity log (with its log level) and the release notes.
@@ -172,6 +185,9 @@ private sealed interface SettingsDestination : NavKey {
 
     @Serializable
     data object BatteryOptimization : SettingsDestination
+
+    @Serializable
+    data object BackgroundConditions : SettingsDestination
 
     @Serializable
     data object Language : SettingsDestination

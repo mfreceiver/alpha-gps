@@ -6,13 +6,15 @@ import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.guide_title
 import com.sasch.cameragps.sharednew.ui.components.glass.isScrolledUnderTopBar
 import com.sasch.cameragps.sharednew.ui.components.page.GlassPageScaffold
+import com.sasch.cameragps.sharednew.ui.help.GuideTopic
 import com.sasch.cameragps.sharednew.ui.help.TroubleshootingGuideContent
 import org.jetbrains.compose.resources.stringResource
 
 /** Connection troubleshooting guide page: glass page with the shared step-by-step guide. */
 @Composable
 fun TroubleshootingScreen(
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    topic: GuideTopic? = null,
 ) {
     val listState = rememberLazyListState()
     GlassPageScaffold(
@@ -20,6 +22,6 @@ fun TroubleshootingScreen(
         onBackClick = onBackClick,
         scrolled = listState.isScrolledUnderTopBar,
     ) { innerPadding ->
-        TroubleshootingGuideContent(innerPadding, listState)
+        TroubleshootingGuideContent(innerPadding, listState, topic)
     }
 }

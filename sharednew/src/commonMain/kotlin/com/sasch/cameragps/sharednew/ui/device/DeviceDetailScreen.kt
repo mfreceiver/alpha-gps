@@ -21,8 +21,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
@@ -36,6 +37,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LifecycleStartEffect
 import cameragps.sharednew.generated.resources.Res
+import cameragps.sharednew.generated.resources.ble_failure_auth_failed
+import cameragps.sharednew.generated.resources.ble_failure_bluetooth_off
+import cameragps.sharednew.generated.resources.ble_failure_bond_lost
+import cameragps.sharednew.generated.resources.ble_failure_gatt
+import cameragps.sharednew.generated.resources.ble_failure_out_of_range
+import cameragps.sharednew.generated.resources.ble_failure_permission_missing
+import cameragps.sharednew.generated.resources.ble_failure_timeout
+import cameragps.sharednew.generated.resources.ble_failure_unknown
 import cameragps.sharednew.generated.resources.cancel
 import cameragps.sharednew.generated.resources.device_connection_connect
 import cameragps.sharednew.generated.resources.m2_age_days
@@ -57,14 +66,23 @@ import cameragps.sharednew.generated.resources.m2_photo_transfer_hint_bt_first
 import cameragps.sharednew.generated.resources.m2_schedule_24px
 import cameragps.sharednew.generated.resources.m2_upload_24px
 import cameragps.sharednew.generated.resources.m2_value_none
+import cameragps.sharednew.generated.resources.camera_24px
+import cameragps.sharednew.generated.resources.remote_entry
+import cameragps.sharednew.generated.resources.remote_gps_disabled_by_camera
+import cameragps.sharednew.generated.resources.remote_gps_restored
 import cameragps.sharednew.generated.resources.m2_gps_fixed_24px
 import cameragps.sharednew.generated.resources.q_alert_location_disabled
+import cameragps.sharednew.generated.resources.q_alert_open_guide
+import cameragps.sharednew.generated.resources.q_alert_signal_weak
 import cameragps.sharednew.generated.resources.q_alert_location_write_failed
 import cameragps.sharednew.generated.resources.q_alert_time_sync_failed
 import cameragps.sharednew.generated.resources.q_alert_time_sync_rejected
 import cameragps.sharednew.generated.resources.q_cell_location_signal
 import cameragps.sharednew.generated.resources.q_cell_location_writes
 import cameragps.sharednew.generated.resources.q_location_accuracy
+import com.sasch.cameragps.sharednew.bluetooth.coordinator.GpsRecoveryBaseline
+import com.sasch.cameragps.sharednew.bluetooth.coordinator.GpsRecoveryStatus
+import com.sasch.cameragps.sharednew.bluetooth.coordinator.evaluateGpsRecoveryStatus
 import com.sasch.cameragps.sharednew.bluetooth.location.PhoneLocationFix
 import com.sasch.cameragps.sharednew.bluetooth.status.CameraLiveStatus
 import com.sasch.cameragps.sharednew.bluetooth.status.SignalLevel
@@ -74,10 +92,14 @@ import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleSize
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressCircle
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressSize
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSnackbarHost
+import com.sasch.cameragps.sharednew.ui.components.glass.rememberGlassSnackbarHostState
+import com.sasch.cameragps.sharednew.ui.remote.shouldAnnounceGpsRecovery
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusItem
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusRow
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusTone
 import com.sasch.cameragps.sharednew.ui.components.glass.statusToneColor
+import com.sasch.cameragps.sharednew.ui.help.GuideTopic
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.sasch.cameragps.sharednew.ui.theme.AlphaType
@@ -105,6 +127,12 @@ import kotlin.time.Clock
  *   flow ([onWifiRemote]) once Bluetooth is ready, connecting Bluetooth first when needed
  *   ([DeviceDetailViewModel.requestPhotoTransfer]).
  *
+ * - "Remote shooting" ([onRemoteControl], R1/R2) sits right under "Photo transfer" as a secondary action of the
+ *   same level; it only opens the mode picker and never connects. After leaving the BLE shutter page the host
+ *   passes a [gpsRecoveryBaseline]: a camera-acknowledged new write announces "location linking restored"
+ *   ([onGpsRecoveryResolved] then clears it); a camera that still reports linking off keeps a warning with a
+ *   Remote troubleshooting link.
+ *
  * Auto time correction / auto area adjustment have no switches: they are kept on automatically
  * ([DeviceDetailViewModel.enforceAutoCorrection]). The page never opens a Wi-Fi session on its
  * own (the battery shown is whatever the last photo transfer cached).
@@ -117,6 +145,10 @@ fun DeviceDetailContent(
     modifier: Modifier = Modifier,
     onDeviceReEnabled: (() -> Unit)? = null,
     onWifiRemote: (() -> Unit)? = null,
+    onRemoteControl: (() -> Unit)? = null,
+    gpsRecoveryBaseline: GpsRecoveryBaseline? = null,
+    onGpsRecoveryResolved: () -> Unit = {},
+    onOpenTroubleshooting: ((GuideTopic) -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
     val sessions by viewModel.sessions.collectAsState()
@@ -126,10 +158,19 @@ fun DeviceDetailContent(
     val photoTransfer by viewModel.photoTransfer.collectAsState()
     val live by remember(deviceId) { viewModel.liveStatus(deviceId) }.collectAsState(initial = null)
     val phoneFix by viewModel.phoneLocation.collectAsState(initial = null)
-    val now by produceState(Clock.System.now().toEpochMilliseconds()) {
+    var now by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
+    LaunchedEffect(Unit) {
         while (true) {
             delay(TICK_MILLIS)
-            value = Clock.System.now().toEpochMilliseconds()
+            now = Clock.System.now().toEpochMilliseconds()
+        }
+    }
+    // The ring must go stale when its reading expires, not up to a page tick later.
+    LaunchedEffect(live?.rssiAtMillis) {
+        val wait = rssiStaleInMillis(live?.rssiAtMillis, Clock.System.now().toEpochMilliseconds())
+        if (wait != null) {
+            delay(wait)
+            now = Clock.System.now().toEpochMilliseconds()
         }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
@@ -149,6 +190,19 @@ fun DeviceDetailContent(
     // Keep the camera's auto time/area settings on whenever the camera reports them off.
     LaunchedEffect(session?.phase, session?.autoTimeCorrection, session?.autoAreaAdjustment) {
         viewModel.enforceAutoCorrection(deviceId)
+    }
+
+    // Location linking after leaving the BLE shutter page: only camera-acknowledged new writes count.
+    val snackbar = rememberGlassSnackbarHostState()
+    val fixNow = phoneFix
+    val hasRecentFix = fixNow != null && now - fixNow.timeMillis < RECENT_FIX_MILLIS
+    val recovery = evaluateGpsRecoveryStatus(gpsRecoveryBaseline, session, live, hasRecentFix)
+    val restoredText = stringResource(Res.string.remote_gps_restored)
+    LaunchedEffect(recovery) {
+        if (shouldAnnounceGpsRecovery(recovery)) {
+            snackbar.show(restoredText)
+            onGpsRecoveryResolved()
+        }
     }
 
     // Bluetooth became ready for a pending "Photo transfer" tap: hand over to the Wi-Fi flow.
@@ -174,23 +228,62 @@ fun DeviceDetailContent(
                 locationDisabledByCamera = session?.locationDisabledByCamera == true,
                 gps = live?.gps,
                 timeSync = live?.timeSync?.outcome,
+                weakSignal = isSignalWeak(live?.rssiDbm, live?.rssiAtMillis, now),
+                bleFailure = session?.failure ?: live?.lastFailure,
             ),
             live = live,
             phoneFix = phoneFix,
             nowMillis = now,
             onConnect = { viewModel.connect(deviceId) },
             onCancelConnecting = { viewModel.cancelConnecting(deviceId) },
+            onOpenTroubleshooting = onOpenTroubleshooting,
         )
     }
+    val recoveryNotice: @Composable () -> Unit = {
+        if (recovery == GpsRecoveryStatus.DisabledByCamera) {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text(
+                    stringResource(Res.string.remote_gps_disabled_by_camera),
+                    style = AlphaType.Caption,
+                    color = AlphaTheme.colors.warningText,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
+                if (onOpenTroubleshooting != null) {
+                    CapsuleButton(
+                        text = stringResource(Res.string.q_alert_open_guide),
+                        onClick = { onOpenTroubleshooting(GuideTopic.Remote) },
+                        role = CapsuleRole.Tonal,
+                        size = CapsuleSize.Small,
+                    )
+                }
+            }
+        }
+    }
+    // Bottom actions: "Photo transfer" (primary) with "Remote shooting" (secondary) at the same level.
     val photoEntry: @Composable (Modifier) -> Unit = { entryModifier ->
-        if (onWifiRemote != null) {
-            PhotoTransferEntryBlock(
-                entry = photoTransfer,
-                bluetoothReady = status == DeviceConnectionStatus.Connected,
-                enabled = pending != PendingConnection.Disconnecting,
-                onClick = { viewModel.requestPhotoTransfer(deviceId) },
-                modifier = entryModifier,
-            )
+        if (onWifiRemote != null || onRemoteControl != null) {
+            Column(entryModifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (onWifiRemote != null) {
+                    PhotoTransferEntryBlock(
+                        entry = photoTransfer,
+                        bluetoothReady = status == DeviceConnectionStatus.Connected,
+                        enabled = pending != PendingConnection.Disconnecting,
+                        onClick = { viewModel.requestPhotoTransfer(deviceId) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                if (onRemoteControl != null) {
+                    CapsuleButton(
+                        text = stringResource(Res.string.remote_entry),
+                        onClick = onRemoteControl,
+                        role = CapsuleRole.Secondary,
+                        size = CapsuleSize.Medium,
+                        icon = painterResource(Res.drawable.camera_24px),
+                        enabled = pending != PendingConnection.Disconnecting,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
         }
     }
 
@@ -207,6 +300,7 @@ fun DeviceDetailContent(
                     verticalArrangement = Arrangement.spacedBy(AlphaDimens.cardGap),
                 ) {
                     statusCard()
+                    recoveryNotice()
                 }
                 Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.BottomCenter) {
                     photoEntry(Modifier.fillMaxWidth())
@@ -232,10 +326,12 @@ fun DeviceDetailContent(
                     verticalArrangement = Arrangement.spacedBy(AlphaDimens.cardGap),
                 ) {
                     statusCard()
+                    recoveryNotice()
                 }
                 photoEntry(Modifier.widthIn(max = maxContentWidth).fillMaxWidth())
             }
         }
+        GlassSnackbarHost(snackbar)
     }
 }
 
@@ -254,6 +350,7 @@ private fun DeviceStatusCard(
     nowMillis: Long,
     onConnect: () -> Unit,
     onCancelConnecting: () -> Unit,
+    onOpenTroubleshooting: ((GuideTopic) -> Unit)?,
 ) {
     val colors = AlphaTheme.colors
     GlassCard(Modifier.fillMaxWidth()) {
@@ -275,7 +372,21 @@ private fun DeviceStatusCard(
             ) {
                 Text(title, style = AlphaType.Heading, color = colors.textPrimary)
                 if (alertText != null) {
-                    Text(alertText, style = AlphaType.Caption, color = statusToneColor(StatusTone.Warning, colors))
+                    Text(
+                        alertText,
+                        style = AlphaType.Caption,
+                        color = statusToneColor(statusCardAlertTone(alert), colors),
+                    )
+                    // Alerts the guide can explain link straight to the matching section.
+                    val topic = statusCardAlertTopic(alert)
+                    if (topic != null && onOpenTroubleshooting != null) {
+                        CapsuleButton(
+                            text = stringResource(Res.string.q_alert_open_guide),
+                            onClick = { onOpenTroubleshooting(topic) },
+                            role = CapsuleRole.Tonal,
+                            size = CapsuleSize.Small,
+                        )
+                    }
                 }
             }
             Row(
@@ -289,6 +400,7 @@ private fun DeviceStatusCard(
                 BluetoothSignalRing(
                     connected = connected,
                     level = if (connected && live?.connected == true) live.signalLevel else SignalLevel.Unknown,
+                    stale = isRssiStale(live?.rssiAtMillis, nowMillis),
                 )
                 // The two actions the page needs stay here; a connected link is a state, not a button
                 // (the manual disconnect lives in Ⓘ).
@@ -416,6 +528,16 @@ private fun PhotoTransferEntryBlock(
     }
 }
 
+private fun statusCardAlertTone(alert: StatusCardAlert): StatusTone = when (alert) {
+    StatusCardAlert.BleBondLost,
+    StatusCardAlert.BleAuthenticationFailed,
+    StatusCardAlert.BleBluetoothOff,
+    StatusCardAlert.BlePermissionMissing,
+    StatusCardAlert.BleGattFailed,
+    StatusCardAlert.BleUnknown -> StatusTone.Error
+    else -> StatusTone.Warning
+}
+
 @Composable
 private fun statusCardAlertText(alert: StatusCardAlert): String? = when (alert) {
     StatusCardAlert.None -> null
@@ -423,10 +545,19 @@ private fun statusCardAlertText(alert: StatusCardAlert): String? = when (alert) 
     StatusCardAlert.LocationWriteFailing -> stringResource(Res.string.q_alert_location_write_failed)
     StatusCardAlert.TimeSyncFailed -> stringResource(Res.string.q_alert_time_sync_failed)
     StatusCardAlert.TimeSyncRejected -> stringResource(Res.string.q_alert_time_sync_rejected)
+    StatusCardAlert.WeakSignal -> stringResource(Res.string.q_alert_signal_weak)
+    StatusCardAlert.BleBondLost -> stringResource(Res.string.ble_failure_bond_lost)
+    StatusCardAlert.BleAuthenticationFailed -> stringResource(Res.string.ble_failure_auth_failed)
+    StatusCardAlert.BleTimeout -> stringResource(Res.string.ble_failure_timeout)
+    StatusCardAlert.BleOutOfRange -> stringResource(Res.string.ble_failure_out_of_range)
+    StatusCardAlert.BleBluetoothOff -> stringResource(Res.string.ble_failure_bluetooth_off)
+    StatusCardAlert.BlePermissionMissing -> stringResource(Res.string.ble_failure_permission_missing)
+    StatusCardAlert.BleGattFailed -> stringResource(Res.string.ble_failure_gatt)
+    StatusCardAlert.BleUnknown -> stringResource(Res.string.ble_failure_unknown)
 }
 
 @Composable
-private fun ageText(age: RelativeAge): String? = when (age) {
+internal fun ageText(age: RelativeAge): String? = when (age) {
     RelativeAge.Never -> null
     RelativeAge.JustNow -> stringResource(Res.string.m2_age_just_now)
     is RelativeAge.Minutes -> stringResource(Res.string.m2_age_minutes, age.value.toInt())
@@ -435,3 +566,4 @@ private fun ageText(age: RelativeAge): String? = when (age) {
 }
 
 private const val TICK_MILLIS = 30_000L
+private const val RECENT_FIX_MILLIS = 60_000L

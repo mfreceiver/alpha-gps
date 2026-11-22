@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
@@ -35,10 +36,13 @@ import com.sasch.cameragps.sharednew.whatsnew.rememberWhatsNewState
 import com.saschl.cameragps.service.LocationSenderService
 import com.saschl.cameragps.ui.EnhancedLocationPermissionBox
 import com.saschl.cameragps.ui.HelpScreen
+import com.sasch.cameragps.sharednew.ui.help.GuideTopic
 import com.saschl.cameragps.ui.TroubleshootingScreen
 import com.saschl.cameragps.ui.WelcomeScreen
 import com.saschl.cameragps.ui.device.CameraDeviceManager
+import com.saschl.cameragps.ui.settings.BackgroundConditionsScreen
 import com.saschl.cameragps.ui.settings.SettingsScreen
+import com.sasch.cameragps.sharednew.ui.device.LocalOpenBackgroundConditions
 import com.saschl.cameragps.service.FileTree
 import com.saschl.cameragps.utils.PreferencesManager
 import com.saschl.cameragps.utils.logging.AndroidLogFormatter
@@ -185,110 +189,121 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        NavDisplay(
-            backStack = backStack,
-            onBack = {
-                popBackStackIfPossible()
-            }
-        ) { destination ->
-            when (destination) {
-                AppDestination.Welcome -> {
-                    NavEntry(AppDestination.Welcome) {
-                        WelcomeScreen(
-                            onGetStarted = {
-                                PreferencesManager.setFirstLaunchCompleted(context)
-                                resetBackStackTo(AppDestination.Devices)
-                                Timber.i("Welcome screen completed, navigating to main app")
-                            }
-                        )
-                    }
+        CompositionLocalProvider(
+            LocalOpenBackgroundConditions provides { backStack.add(AppDestination.BackgroundConditions) },
+        ) {
+            NavDisplay(
+                backStack = backStack,
+                onBack = {
+                    popBackStackIfPossible()
                 }
-
-                AppDestination.Settings -> {
-                    NavEntry(AppDestination.Settings) {
-                        SettingsScreen(
-                            whatsNew = whatsNew,
-                            onBackClick = {
-                                popBackStackIfPossible()
-                            },
-                            // Help and the activity log are top-level destinations: Back from
-                            // them returns to Settings.
-                            onHelpClick = {
-                                backStack.add(AppDestination.Help)
-                            },
-                            onLogsClick = {
-                                backStack.add(AppDestination.Logs)
-                            }
-                        )
+            ) { destination ->
+                when (destination) {
+                    AppDestination.Welcome -> {
+                        NavEntry(AppDestination.Welcome) {
+                            WelcomeScreen(
+                                onGetStarted = {
+                                    PreferencesManager.setFirstLaunchCompleted(context)
+                                    resetBackStackTo(AppDestination.Devices)
+                                    Timber.i("Welcome screen completed, navigating to main app")
+                                }
+                            )
+                        }
                     }
-                }
 
-                AppDestination.Help -> {
-                    NavEntry(AppDestination.Help) {
-                        HelpScreen(
-                            onBackClick = {
-                                popBackStackIfPossible()
-                            },
-                            onTroubleshootingClick = {
-                                backStack.add(AppDestination.Troubleshooting)
-                            }
-                        )
+                    AppDestination.Settings -> {
+                        NavEntry(AppDestination.Settings) {
+                            SettingsScreen(
+                                whatsNew = whatsNew,
+                                onBackClick = {
+                                    popBackStackIfPossible()
+                                },
+                                // Help and the activity log are top-level destinations: Back from
+                                // them returns to Settings.
+                                onHelpClick = {
+                                    backStack.add(AppDestination.Help)
+                                },
+                                onLogsClick = {
+                                    backStack.add(AppDestination.Logs)
+                                }
+                            )
+                        }
                     }
-                }
 
-                AppDestination.Troubleshooting -> {
-                    NavEntry(AppDestination.Troubleshooting) {
-                        TroubleshootingScreen(
-                            onBackClick = {
-                                popBackStackIfPossible()
-                            }
-                        )
+                    AppDestination.Help -> {
+                        NavEntry(AppDestination.Help) {
+                            HelpScreen(
+                                onBackClick = {
+                                    popBackStackIfPossible()
+                                },
+                                onTroubleshootingClick = {
+                                    backStack.add(AppDestination.Troubleshooting())
+                                }
+                            )
+                        }
+                    }
+
+                    is AppDestination.Troubleshooting -> {
+                        NavEntry(destination) {
+                            TroubleshootingScreen(
+                                onBackClick = {
+                                    popBackStackIfPossible()
+                                },
+                                topic = destination.topic,
+                            )
+                        }
+                    }
+
+                    AppDestination.BackgroundConditions -> {
+                    NavEntry(AppDestination.BackgroundConditions) {
+                        BackgroundConditionsScreen(onBackClick = { popBackStackIfPossible() })
                     }
                 }
 
                 AppDestination.Devices -> {
-                    NavEntry(AppDestination.Devices) {
-                        EnhancedLocationPermissionBox {
-                            CameraDeviceManager(
-                                whatsNew = whatsNew,
-                                onSettingsClick = {
-                                    backStack.add(AppDestination.Settings)
-                                },
-                                onTroubleshootingClick = {
-                                    backStack.add(AppDestination.Troubleshooting)
-                                }
-                            )
-                        }                    }
-                }
-
-                AppDestination.Logs -> {
-                    NavEntry(AppDestination.Logs) {
-                        val logFormatter =
-                            remember(logRepository) { AndroidLogFormatter(logRepository) }
-                        val context = LocalContext.current
-                        var logLevel by remember { mutableIntStateOf(PreferencesManager.logLevel(context)) }
-                        SharedLogViewerScreen(
-                            logFormatter,
-                            logRepository = logRepository,
-                            onBackClick = {
-                                popBackStackIfPossible()
-                            },
-                            // Moved here from the settings page: applied at once (file tree
-                            // replanted with the new minimum) and stored under the same key.
-                            logLevel = logLevel,
-                            onLogLevelChange = { level ->
-                                logLevel = level
-                                PreferencesManager.setLogLevel(context, level)
-                                Timber.uprootAll()
-                                Timber.plant(FileTree(level))
-                            },
-                        )
+                        NavEntry(AppDestination.Devices) {
+                            EnhancedLocationPermissionBox {
+                                CameraDeviceManager(
+                                    whatsNew = whatsNew,
+                                    onSettingsClick = {
+                                        backStack.add(AppDestination.Settings)
+                                    },
+                                    onTroubleshootingClick = { topic ->
+                                        backStack.add(AppDestination.Troubleshooting(topic))
+                                    }
+                                )
+                            }                    }
                     }
-                }
 
-                else -> {
-                    NavEntry(destination) {
-                        // Unknown destination fallback
+                    AppDestination.Logs -> {
+                        NavEntry(AppDestination.Logs) {
+                            val logFormatter =
+                                remember(logRepository) { AndroidLogFormatter(logRepository) }
+                            val context = LocalContext.current
+                            var logLevel by remember { mutableIntStateOf(PreferencesManager.logLevel(context)) }
+                            SharedLogViewerScreen(
+                                logFormatter,
+                                logRepository = logRepository,
+                                onBackClick = {
+                                    popBackStackIfPossible()
+                                },
+                                // Moved here from the settings page: applied at once (file tree
+                                // replanted with the new minimum) and stored under the same key.
+                                logLevel = logLevel,
+                                onLogLevelChange = { level ->
+                                    logLevel = level
+                                    PreferencesManager.setLogLevel(context, level)
+                                    Timber.uprootAll()
+                                    Timber.plant(FileTree(level))
+                                },
+                            )
+                        }
+                    }
+
+                    else -> {
+                        NavEntry(destination) {
+                            // Unknown destination fallback
+                        }
                     }
                 }
             }
@@ -308,8 +323,11 @@ private sealed interface AppDestination : NavKey {
     data object Help : AppDestination
 
     @Serializable
-    data object Troubleshooting : AppDestination
+    data class Troubleshooting(val topic: GuideTopic? = null) : AppDestination
 
     @Serializable
     data object Logs : AppDestination
+
+    @Serializable
+    data object BackgroundConditions : AppDestination
 }

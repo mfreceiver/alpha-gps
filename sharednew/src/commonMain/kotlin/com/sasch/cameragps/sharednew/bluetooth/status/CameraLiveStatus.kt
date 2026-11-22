@@ -1,5 +1,6 @@
 package com.sasch.cameragps.sharednew.bluetooth.status
 
+import com.sasch.cameragps.sharednew.bluetooth.BleFailure
 import com.sasch.cameragps.sharednew.bluetooth.BleSessionPhase
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
@@ -24,6 +25,8 @@ data class CameraLiveStatus(
     val mtu: Int? = null,
     /** Last battery reading obtained over the Wi-Fi/PTP session, cached across sessions. */
     val battery: CameraBattery? = null,
+    /** Most recent BLE connection/handshake failure, cleared on a new attempt or manual disconnect. */
+    val lastFailure: BleFailure? = null,
 ) {
     /** Convenience: the 4-step signal bucket of [rssiDbm]. */
     val signalLevel: SignalLevel get() = signalLevelFromRssi(rssiDbm)

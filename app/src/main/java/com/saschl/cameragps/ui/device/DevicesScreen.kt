@@ -38,6 +38,7 @@ import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
+import com.sasch.cameragps.sharednew.ui.help.GuideTopic
 import com.sasch.cameragps.sharednew.ui.device.SharedDevicesScreen
 import com.sasch.cameragps.sharednew.ui.devicelist.DeviceListLayout
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
@@ -63,7 +64,7 @@ fun DevicesScreen(
     onConnect: (AssociatedDeviceCompat) -> Unit,
     onDisassociate: (AssociatedDeviceCompat) -> Unit,
     onSettingsClick: () -> Unit = {},
-    onTroubleshootingClick: () -> Unit = {},
+    onTroubleshootingClick: (GuideTopic?) -> Unit = {},
 ) {
     val context = LocalContext.current
     // State for managing pairing after association
@@ -99,7 +100,7 @@ fun DevicesScreen(
     ) {
 
         DeviceListLayout(
-            onNeedHelp = onTroubleshootingClick,
+            onNeedHelp = { onTroubleshootingClick(null) },
             header = {
                 if (missingPermissions.isNotEmpty()) {
                     val missingPermissionNames = missingPermissions
@@ -140,7 +141,7 @@ fun DevicesScreen(
                 deviceManager = deviceManager,
                 onConnect = onConnect,
                 onDisassociate = onDisassociate,
-                onOpenTroubleshooting = onTroubleshootingClick,
+                onOpenTroubleshooting = { onTroubleshootingClick(null) },
             )
         }
 

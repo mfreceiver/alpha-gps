@@ -16,9 +16,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -148,9 +151,12 @@ internal fun WifiConnectionOverlay(
 ) {
     val ended = frame is WifiConnectionFrame.Failed || frame is WifiConnectionFrame.Unsupported
     val permission = frame.needsPermissionAction() && onAppSettings != null
-    if (ended && !permission) {
-        LaunchedEffect(frame) {
-            delay(CONNECTION_FAILURE_AUTO_DISMISS_MS)
+    val (title, hint) = frameTexts(frame, networkPermissionMessage)
+    val accessibilityEnabled = rememberAccessibilityEnabled()
+    val autoDismissMs = connectionFailureAutoDismissMs(hint.length, accessibilityEnabled)
+    if (ended && !permission && autoDismissMs != null) {
+        LaunchedEffect(frame, autoDismissMs) {
+            delay(autoDismissMs)
             onDismiss()
         }
     }
@@ -159,7 +165,7 @@ internal fun WifiConnectionOverlay(
     ) else Modifier
     Box(modifier.fillMaxSize().then(dismissModifier), contentAlignment = Alignment.Center) {
         Column(
-            Modifier.width(CardWidth).height(CardHeight)
+            Modifier.width(CardWidth).heightIn(min = CardHeight)
                 .glass(GlassLevel.Modal, AlphaShapes.dialog)
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -167,20 +173,20 @@ internal fun WifiConnectionOverlay(
             Box(Modifier.fillMaxWidth().height(IconSlot), contentAlignment = Alignment.Center) {
                 FrameIcon(frame)
             }
-            val (title, hint) = frameTexts(frame, networkPermissionMessage)
             Column(
-                Modifier.fillMaxWidth().height(TextSlot)
+                Modifier.fillMaxWidth().heightIn(min = TextSlot, max = 220.dp)
+                    .verticalScroll(rememberScrollState())
                     .semantics { liveRegion = LiveRegionMode.Polite },
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    title, style = AlphaType.Heading, maxLines = 1,
+                    title, style = AlphaType.Heading, maxLines = if (ended) 2 else 1,
                     overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
                     color = if (ended) AlphaTheme.colors.danger else AlphaTheme.colors.textPrimary,
                 )
                 Text(
-                    hint, style = AlphaType.Body, minLines = 2, maxLines = 2,
+                    hint, style = AlphaType.Body, minLines = 2, maxLines = if (ended) Int.MAX_VALUE else 2,
                     overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
                     color = AlphaTheme.colors.textSecondary,
                 )

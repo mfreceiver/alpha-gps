@@ -79,6 +79,14 @@ GlassIconButton(icon: Painter, contentDescription: String?, onClick, modifier = 
 // IconEmphasis { Standard, Primary, Subtle, Danger }；长按显示页内 tooltip（不开窗口）
 ```
 
+```kotlin
+GlassShutterButton(onClick, contentDescription: String /* 必传 */, modifier = Modifier, enabled = true,
+                   pressing = false, onPhoto = false, diameter = ShutterButtonSize /* 72dp，最小夹到 48dp */)
+```
+- 遥控拍摄快门：圆形双环（外环 + 内圆盘）。`enabled = false` 整体变暗且不响应；`pressing = true` 是一次按下尚未结束的抑制态（内圆盘收缩、后续点击被忽略，防连点），语义上两者都读作禁用。
+- `onPhoto = true` 用于 R2 取景画面上（`onPhoto` / `onPhotoSecondary` / `onPhotoMuted`）；`false` 用于玻璃页（`accent` / `textMuted`）。只用 `AlphaTheme.colors` 角色，不带文字。
+- 用法：R1 `BleShutterScreen`（`enabled = state.canTrigger`、`pressing = Pressing/Releasing`）、R2 `WifiRemoteControlScreen`（`enabled = isControlReady && canCaptureStill`、`pressing = capture == Shooting`）。
+
 ### 选择控件（N1–N3、N7）
 ```kotlin
 GlassSwitch(checked, onCheckedChange: ((Boolean) -> Unit)?, modifier = Modifier, enabled = true)          // 52×32 轨道
@@ -224,3 +232,13 @@ SharedRadioOption(label, selected, onClick, description = null, enabled = true) 
 - 基线 `docs/ui-style-guard-baseline.txt`（`<违规行数> <路径>`）：不在基线的文件必须 0；基线文件只能下降。**迁移完一个页面后运行 `scripts/ui_style_guard.sh --update-baseline`**（只接受下降）并提交基线变化。最后一批清空基线后改用 `--strict`。
 - 扫描必须真实发生：仓库根或任一扫描目录缺失、受管 `*.kt` 为 0 个、grep 出错（如文件不可读）均 rc=2 失败，不当作"无违规"；成功输出报告"扫描了 N 个文件"。
 - 自测：`scripts/ui_style_guard_test.sh`。
+
+## 7. 错误呈现层级
+
+| 层级 | 触发场景 | 组件 / 样式 | 说明 |
+|---|---|---|---|
+| 1. 主动取消 / 拒绝 | 用户主动关闭弹窗、取消授权或拒绝对话框 | 不提示，或仅弱化灰色 `AlphaType.Caption`（`textMuted`） | 不使用 `danger` / 红色，不打断操作 |
+| 2. 可自恢复 / 状态说明 | 相机关闭位置联动、弱信号、临时超限等状态提示 | 状态卡 / 行内 `AlphaType.Caption`（Amber `warningText` 或 `statusToneColor(StatusTone.Warning, colors)`） | 可选附带小胶囊引导按钮，不弹框 |
+| 3. 需要用户动作 | 缺少权限、蓝牙/定位关闭、配对失效、CDM 超时等需用户处理 | `GlassWarningCard`（`StatusTone.Warning` 或 `StatusTone.Error` + 明确动作按钮） | 给出可执行的下一步（去设置、重试、排障深链） |
+| 4. 不可恢复 / 需阻断确认 | 删除相机、断开连接、清空选区等高风险或无法自动继续的异常 | `CapsuleDialog`（页内模态，取消左、确认右，危险操作 `destructive = true`） | 不开系统 `AlertDialog` |
+| 5. 瞬时结果 | 复制日志、单张下载失败/取消、权限缺失等即时反馈 | `GlassSnackbarHost` + `snackbar.show(...)` | 页内底部叠层，live region 播报，不占常规布局 |

@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
 import com.sasch.cameragps.sharednew.remote.wifi.PhotoMetadataState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
@@ -78,6 +79,7 @@ class ViewerDownloadSlotComposeTest {
         Case("converting", pair, WifiFormatPolicy.JpegOnly,
             WifiImageTransferState(WifiImageTransferStatus.Converting, filename = "A.ARW")),
         Case("saved", pair, WifiFormatPolicy.Original, saved = setOf(WifiPhotoDownload(1), WifiPhotoDownload(2))),
+        Case("savedJpgWithRaw", pair, WifiFormatPolicy.JpegOnly, saved = setOf(WifiPhotoDownload(1))),
         Case("noJpeg", rawOnly, WifiFormatPolicy.JpegOnly),
         Case("noRaw", jpgOnly, WifiFormatPolicy.RawOnly),
         Case("otherTransfer", pair, WifiFormatPolicy.JpegOnly, downloading.copy(filename = "Z.JPG")),
@@ -94,6 +96,7 @@ class ViewerDownloadSlotComposeTest {
     )
 
     private var selectedCount by mutableStateOf(0)
+    private var lastDownloads: List<WifiPhotoDownload>? = null
     private fun parts(case: Case) = ViewerParts(
         title = "A.JPG", capturedAt = null, position = "1 / 1", selectedCount = selectedCount,
         info = viewerInfoStrip(case.capture, case.policy),
@@ -101,7 +104,7 @@ class ViewerDownloadSlotComposeTest {
         metadata = MutableStateFlow<PhotoMetadataState>(PhotoMetadataState.Idle),
         download = viewerDownloadState(case.capture, case.policy, case.saved, case.transfer, case.browserLoading),
         transfer = case.transfer, selected = false, selectEnabled = true,
-        onBack = {}, onToggleSelected = {}, onDownload = {}, onCancel = {},
+        onBack = {}, onToggleSelected = {}, onDownload = { lastDownloads = it }, onCancel = {},
         onOpenDetails = null,
     )
 
@@ -180,6 +183,19 @@ class ViewerDownloadSlotComposeTest {
         current = cases.first { it.name == "failedGeneric" }
         compose.waitForIdle()
         compose.onNodeWithText("Download failed. Any incomplete file was removed. You can retry the download.").assertExists()
+        assertEquals(before, rowBounds())
+    }
+
+    @Test
+    fun savedJpgWithRawOffersAlsoDownloadRawAndTriggersRawDownload() {
+        lastDownloads = null
+        current = cases.first { it.name == "savedJpgWithRaw" }
+        show(WindowClass.Portrait, 1f)
+        val before = rowBounds()
+        compose.onNodeWithText("Saved").assertExists()
+        compose.onNodeWithText("Also download RAW").assertExists().performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(WifiPhotoDownload(2)), lastDownloads)
         assertEquals(before, rowBounds())
     }
 }

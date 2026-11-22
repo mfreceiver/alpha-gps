@@ -14,6 +14,7 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
+import com.sasch.cameragps.sharednew.bluetooth.BleFailureReason
 import com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants.locationTransmissionNotificationId
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionOrchestrator
 import com.sasch.cameragps.sharednew.bluetooth.session.OrchestratorEvent
@@ -25,6 +26,7 @@ import com.saschl.cameragps.notification.NotificationsHelper
 import com.saschl.cameragps.service.coordinator.ConnectionDemandGate
 import com.saschl.cameragps.service.coordinator.DeviceDisconnectCoordinator
 import com.saschl.cameragps.service.coordinator.ServicePresenceCoordinator
+import com.saschl.cameragps.service.coordinator.bootReconnectTargets
 import com.saschl.cameragps.service.coordinator.isConnectAllowed
 import com.saschl.cameragps.service.coordinator.ServiceShutdownCoordinator
 import com.saschl.cameragps.service.transport.AndroidBleTransport
@@ -66,6 +68,7 @@ class LocationSenderService : LifecycleService() {
             transport = services.transport,
             onShutdownRequested = { startId -> requestShutdown(startId) },
             isAppEnabled = { PreferencesManager.isAppEnabled(this) },
+            onConnectFailed = { mac, reason -> orchestrator.onConnectFailed(mac, reason) },
         )
     }
 
@@ -132,7 +135,6 @@ class LocationSenderService : LifecycleService() {
     @SuppressLint("MissingPermission")
     override fun onCreate() {
         super.onCreate()
-        isRunning = true
     }
 
     @SuppressLint("MissingPermission")
@@ -180,7 +182,7 @@ class LocationSenderService : LifecycleService() {
         }
         if (hasForegroundSession) {
             com.saschl.cameragps.AppServices.from(this).wifiRemote.disconnect()
-            orchestrator.shutdownAll()
+            orchestrator.shutdownAll(preserveFailures = true)
             transport.disconnectAll()
         }
         if (::eventSoundPlayer.isInitialized) eventSoundPlayer.release()
@@ -210,7 +212,25 @@ class LocationSenderService : LifecycleService() {
         if (!bluetoothManager.adapter.isEnabled) {
             Timber.w("Bluetooth is disabled, will shutdown service")
             startAsForegroundService()
-            requestShutdown(startId)
+            when (command) {
+                is ServiceCommand.Connect -> {
+                    orchestrator.onConnectFailed(command.address, BleFailureReason.BluetoothOff)
+                    requestShutdown(startId)
+                }
+                is ServiceCommand.ReconnectAlwaysOn -> {
+                    lifecycleScope.launch {
+                        try {
+                            commandMutex.withLock {
+                                bootReconnectTargets(services.deviceDao.getAllCameraDevices())
+                                    .forEach { orchestrator.onConnectFailed(it.mac, BleFailureReason.BluetoothOff) }
+                            }
+                        } finally {
+                            requestShutdown(startId)
+                        }
+                    }
+                }
+                else -> requestShutdown(startId)
+            }
             return START_NOT_STICKY
         }
 
@@ -303,6 +323,7 @@ class LocationSenderService : LifecycleService() {
                     return
                 }
                 Timber.i("Manual disconnect of ${command.address}")
+                orchestrator.onManualDisconnect(command.address)
                 disconnectCoordinator.disconnect(command.address)
                 if (connectionDemandGate.mayStopService()) {
                     requestShutdown(startId)
@@ -329,11 +350,17 @@ class LocationSenderService : LifecycleService() {
                 if (!transport.hasConnection(command.address)) {
                     Timber.i("Service initialized")
                     orchestrator.onConnectRequested(command.address)
-                    val started = runCatching { transport.connect(command.address) }
+                    val result = runCatching { transport.connectWithResult(command.address) }
                         .onFailure { Timber.e("Failed to connect to device, bluetooth is likely turned off") }
-                        .getOrDefault(false)
-                    // A refused connect (not bonded, no GATT) is a failure just like an exception.
-                    if (!started) orchestrator.onConnectFailed(command.address)
+                        .getOrDefault(AndroidBleTransport.ConnectStartResult.GattFailure)
+                    if (result != AndroidBleTransport.ConnectStartResult.Started) {
+                        orchestrator.onConnectFailed(command.address, result.toFailureReason())
+                    }
+                } else if (orchestrator.registry.get(command.address.uppercase())?.phase ==
+                    com.sasch.cameragps.sharednew.bluetooth.BleSessionPhase.Error &&
+                    transport.isConnected(command.address)
+                ) {
+                    orchestrator.retryDiscoveryAndHandshake(command.address)
                 }
             }
         }
@@ -344,6 +371,9 @@ class LocationSenderService : LifecycleService() {
             bluetoothStateReceiver = BluetoothStateBroadcastReceiver { enabled ->
                 if (!enabled) {
                     Timber.w("Bluetooth turned off, will shutdown service")
+                    orchestrator.registry.sessions.value.keys.forEach { address ->
+                        orchestrator.onConnectFailed(address, BleFailureReason.BluetoothOff)
+                    }
                     requestShutdown()
                 }
             }
@@ -367,9 +397,11 @@ class LocationSenderService : LifecycleService() {
             )
         } catch (e: SecurityException) {
             Timber.e("Failed to start foreground service due to missing permissions: ${e.message}")
+            isRunning = false
             stopSelf()
             return false
         }
+        isRunning = true
         return true
     }
 

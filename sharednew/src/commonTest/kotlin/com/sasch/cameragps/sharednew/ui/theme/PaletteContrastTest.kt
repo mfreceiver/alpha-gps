@@ -24,6 +24,7 @@ import com.sasch.cameragps.sharednew.ui.device.LastWriteMetricTone
 import com.sasch.cameragps.sharednew.ui.device.LocationSignalLevel
 import com.sasch.cameragps.sharednew.ui.device.WrittenMetricTone
 import com.sasch.cameragps.sharednew.ui.device.locationSignalTone
+import com.sasch.cameragps.sharednew.ui.device.signalArcColor
 import com.sasch.cameragps.sharednew.ui.device.signalTone
 import com.sasch.cameragps.sharednew.ui.remote.ViewerDownloadPhase
 import com.sasch.cameragps.sharednew.ui.remote.viewerFormatColor
@@ -204,9 +205,23 @@ class PaletteContrastTest {
      * glass of its close button on it (with and without the sheen).
      */
     private fun viewerSurfaces(c: AlphaColors): List<Color> {
-        val solid = Contrast.over(GlassTokens.of(GlassLevel.Viewer, c.isDark).solidFill, Color.Black)
-        return glassBackgrounds(GlassLevel.Viewer, c) + Color.Black + solid + c.viewerSheet +
+        val solid = Contrast.over(GlassTokens.of(GlassLevel.Viewer, c.isDark).solidFill, c.viewerBackground)
+        return glassBackgrounds(GlassLevel.Viewer, c) + c.viewerBackground + solid + c.viewerSheet +
             glassBackgrounds(GlassLevel.Viewer, c, under = listOf(c.viewerSheet))
+    }
+
+    @Test
+    fun staleSignalArcKeepsNonTextContrastOnCardAndInset() {
+        // The stale arc is the level colour muted by STALE_ARC_ALPHA; judge the composite, not the token.
+        listOf(light, dark).forEach { colors ->
+            val card = glassBackgrounds(GlassLevel.Card, colors)
+            val inset = card.map { Contrast.over(colors.onSurface.copy(alpha = if (colors.isDark) 0.07f else 0.05f), it) }
+            SignalLevel.entries.forEach { level ->
+                val arc = signalArcColor(level, colors, stale = true)
+                assertTrue(minRatio(arc, card) >= Contrast.AA_LARGE, "stale arc $level on card dark=${colors.isDark}: ${minRatio(arc, card)}")
+                assertTrue(minRatio(arc, inset) >= Contrast.AA_LARGE, "stale arc $level on inset dark=${colors.isDark}: ${minRatio(arc, inset)}")
+            }
+        }
     }
 
     @Test
@@ -214,7 +229,7 @@ class PaletteContrastTest {
         listOf(light, dark).forEach { c ->
             assertEquals(1f, c.viewerSheet.alpha, "the details sheet must not show the viewer through")
             // A visible (if quiet) edge against the black viewer behind the scrim.
-            assertTrue(Contrast.ratio(c.viewerSheet, Color.Black) >= 1.2, "sheet vs black ${Contrast.ratio(c.viewerSheet, Color.Black)}")
+            assertTrue(Contrast.ratio(c.viewerSheet, c.viewerBackground) >= 1.2, "sheet vs viewer bg ${Contrast.ratio(c.viewerSheet, c.viewerBackground)}")
         }
         assertEquals(light.viewerSheet, dark.viewerSheet, "the Viewer is dark in both themes")
     }

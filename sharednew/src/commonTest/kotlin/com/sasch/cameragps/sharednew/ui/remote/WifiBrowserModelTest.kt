@@ -1,8 +1,10 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
 import com.sasch.cameragps.sharednew.remote.wifi.UNKNOWN_DATE_KEY
+import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraPhoto
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoBrowserState
+import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteFailure
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemotePhase
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
@@ -64,7 +66,7 @@ class WifiBrowserModelTest {
 
     @Test
     fun theFirstCatalogReadIsTheLastStepAndTheDayListEndsTheOverlay() {
-        val reading = WifiPhotoBrowserState(open = true, grouped = true, loading = true)
+        val reading = WifiPhotoBrowserState(open = true, loading = true)
         assertEquals(progress(WifiConnectStep.ReadCatalog), frame(WifiRemotePhase.Ready, browser = reading))
         val listed = reading.copy(loading = false)
         assertNull(frame(WifiRemotePhase.Ready, browser = listed))
@@ -179,5 +181,49 @@ class WifiBrowserModelTest {
         assertEquals(1, dateKeyWeekday("2024-04-29")) // Monday
         assertEquals(7, dateKeyWeekday("2024-05-05")) // Sunday
         assertNull(dateKeyWeekday(UNKNOWN_DATE_KEY))
+    }
+
+    @Test
+    fun onlyUnsavedFilterHidesFullySavedCapturesAndKeepsPartialOrTooLarge() {
+        val fullySaved = WifiCameraCapture(
+            id = "c1",
+            files = listOf(
+                WifiCameraPhoto(1, "DSC0001.JPG", 1000L, "image/jpeg", "2024-05-01T10:00:00Z"),
+                WifiCameraPhoto(2, "DSC0001.ARW", 2000L, "image/x-sony-arw", "2024-05-01T10:00:00Z"),
+            ),
+        )
+        val partiallySaved = WifiCameraCapture(
+            id = "c2",
+            files = listOf(
+                WifiCameraPhoto(3, "DSC0002.JPG", 1000L, "image/jpeg", "2024-05-01T10:01:00Z"),
+                WifiCameraPhoto(4, "DSC0002.ARW", 2000L, "image/x-sony-arw", "2024-05-01T10:01:00Z"),
+            ),
+        )
+        val tooLarge = WifiCameraCapture(
+            id = "c3",
+            files = listOf(
+                WifiCameraPhoto(5, "DSC0003.JPG", 1000L, "image/jpeg", "2024-05-01T10:02:00Z", downloadable = false),
+            ),
+        )
+        val mixedSavedAndTooLarge = WifiCameraCapture(
+            id = "c4",
+            files = listOf(
+                WifiCameraPhoto(6, "DSC0004.JPG", 1000L, "image/jpeg", "2024-05-01T10:03:00Z"),
+                WifiCameraPhoto(7, "DSC0004.ARW", 600_000_000L, "image/x-sony-arw", "2024-05-01T10:03:00Z", downloadable = false),
+            ),
+        )
+        val saved = setOf(WifiPhotoDownload(1), WifiPhotoDownload(2), WifiPhotoDownload(3), WifiPhotoDownload(6))
+        val all = listOf(fullySaved, partiallySaved, tooLarge, mixedSavedAndTooLarge)
+        assertEquals(all, filterGridCaptures(all, onlyUnsaved = false, saved))
+        assertEquals(listOf(partiallySaved, tooLarge, mixedSavedAndTooLarge), filterGridCaptures(all, onlyUnsaved = true, saved))
+    }
+
+    @Test
+    fun connectionFailureOverlayDisablesAutoDismissForA11yAndScalesForLongText() {
+        assertNull(connectionFailureAutoDismissMs(messageLength = 20, accessibilityEnabled = true))
+        assertEquals(5_000L, connectionFailureAutoDismissMs(messageLength = 20, accessibilityEnabled = false))
+        assertEquals(5_000L, connectionFailureAutoDismissMs(messageLength = 40, accessibilityEnabled = false))
+        assertEquals(9_000L, connectionFailureAutoDismissMs(messageLength = 90, accessibilityEnabled = false))
+        assertEquals(12_000L, connectionFailureAutoDismissMs(messageLength = 300, accessibilityEnabled = false))
     }
 }

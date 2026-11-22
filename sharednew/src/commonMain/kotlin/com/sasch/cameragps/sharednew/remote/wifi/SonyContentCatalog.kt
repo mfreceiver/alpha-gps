@@ -116,11 +116,6 @@ internal class SonyContentCatalog(
     private val files = linkedMapOf<Long, SonyContentFile>()
     private var captures = emptyList<WifiCameraCapture>()
 
-    suspend fun open(): CameraPhotoPage {
-        enumerate()
-        return page(0)
-    }
-
     /** Reads the whole card catalog (100 entries per request) and returns its captures, newest first. */
     suspend fun enumerate(): List<WifiCameraCapture> {
         if (!enabled) {
@@ -146,10 +141,6 @@ internal class SonyContentCatalog(
         }
         captures = groupCameraPhotos(files.values.sortedByDescending { it.created }.map { it.photo })
         return captures
-    }
-
-    fun page(offset: Int): CameraPhotoPage {
-        return cameraPhotoPage(captures, offset)
     }
 
     /** Full-catalog lookup so downloads are not limited to the currently displayed page. */

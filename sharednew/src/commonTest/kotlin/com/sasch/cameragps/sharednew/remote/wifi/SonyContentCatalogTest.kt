@@ -184,7 +184,8 @@ class SonyContentCatalogTest : WifiLoggingTest() {
             }
         }
         assertTrue(transfer.supported)
-        val page = transfer.openBrowser()
+        val dates = transfer.openCatalog()
+        val page = transfer.dayPhotos(dates.first().key)
         val handle = page.photos.first { it.mimeType == "image/x-sony-arw" }.handle
         val previewHandle = page.photos.first { it.mimeType == "image/jpeg" }.handle
         assertEquals(3, page.photos.size)
@@ -240,24 +241,19 @@ class SonyContentCatalogTest : WifiLoggingTest() {
         cardIdentity = 1
         returnedTimestamp = 3000L
         paginated = true
-        val initialPage = transfer.openBrowser()
-        assertEquals(101, initialPage.totalObjects)
-        assertEquals(SonyImageTransfer.PAGE_SIZE * 2, initialPage.photos.size)
-        assertTrue(initialPage.hasMore)
-        assertEquals(101L, initialPage.photos.first().handle and 0xffffffffL)
-        assertEquals(100L, initialPage.photos[2].handle and 0xffffffffL)
+        val paginatedDates = transfer.openCatalog()
+        assertEquals(101, paginatedDates.sumOf { it.count })
         assertEquals(0x923c to listOf(1099L, 0L, 100L, 1L, 0L), requests.last())
         val catalogRequests = requests.count { it.first == 0x923c }
-        val nextPage = transfer.page(SonyImageTransfer.PAGE_SIZE)
-        assertEquals(101L - SonyImageTransfer.PAGE_SIZE, nextPage.photos.first().handle and 0xffffffffL)
-        val lastPage = transfer.page(100)
-        assertEquals(101, lastPage.totalObjects)
-        assertEquals(2, lastPage.photos.size)
-        assertEquals(1L, lastPage.photos.first().handle and 0xffffffffL)
-        assertEquals(false, lastPage.hasMore)
+        val allDay = transfer.dayPhotos(paginatedDates.first().key)
+        assertEquals(101, allDay.totalObjects)
+        assertEquals(202, allDay.photos.size)
+        assertEquals(101L, allDay.photos.first().handle and 0xffffffffL)
+        assertEquals(1L, allDay.photos.last().handle and 0xffffffffL)
+        assertEquals(false, allDay.hasMore)
         assertEquals(catalogRequests, requests.count { it.first == 0x923c })
-        // Off-page download: a handle from the first page is resolvable while the last page shows.
-        val firstPageHandle = initialPage.photos.first().handle
+        // Off-day download: a handle from any catalog entry is resolvable.
+        val firstPageHandle = allDay.photos.first().handle
         assertEquals(WifiImageTransferStatus.Saved, transfer.download(firstPageHandle) {}.status)
         transfer.closeBrowser()
         assertEquals(0x9207, requests.last().first)
@@ -317,15 +313,22 @@ class SonyContentCatalogTest : WifiLoggingTest() {
             PtpDeviceInfo(setOf(0x9207, 0x923c, 0x923d, 0x923e)), null
         )
         val transfer = SonyImageTransfer(queue, ready, events) { error("No file") }
+        val may2Handle = (1L shl 56) or (1L shl 32) or 2L
+        val may1ArwHandle = (1L shl 56) or (2L shl 32) or 1L
+        val epochHandle = (1L shl 56) or (1L shl 32) or 3L
         assertEquals(
             listOf(
-                DateGroup("2024-05-02", 1), DateGroup("2024-05-01", 1), DateGroup("1970-01-01", 1)
+                DateGroup("2024-05-02", 1, may2Handle),
+                DateGroup("2024-05-01", 1, may1ArwHandle),
+                DateGroup("1970-01-01", 1, epochHandle),
             ), transfer.openCatalog(),
             "The recorded local day is used as is; the JPG+RAW pair is one capture"
         )
         val enumerated = requests.size
-        val hidden = (1L shl 56) or (1L shl 32) or 2L // The May 2 JPEG: no page shows it yet.
-        assertEquals(null, transfer.thumbnail(hidden))
+        // Non-cover handles and previews remain gated until a day is displayed.
+        val may1JpgHandle = (1L shl 56) or (1L shl 32) or 1L
+        assertEquals(null, transfer.thumbnail(may1JpgHandle))
+        assertEquals(null, transfer.preview(may2Handle))
         assertEquals(enumerated, requests.size)
         val day = transfer.dayPhotos("2024-05-01")
         assertEquals(2, day.photos.size)
@@ -336,7 +339,7 @@ class SonyContentCatalogTest : WifiLoggingTest() {
             day.photos.map { it.handle }.toSet()
         )
         assertEquals(enumerated, requests.size)
-        assertEquals(null, transfer.thumbnail(hidden))
+        assertEquals(null, transfer.thumbnail(999_999L))
         assertEquals(enumerated, requests.size)
         transfer.thumbnail(day.photos.first().handle)
         assertEquals(0x923e, requests.last().first)
@@ -408,7 +411,8 @@ class SonyContentCatalogTest : WifiLoggingTest() {
                 }
             }
         }
-        val handle = transfer.openBrowser().photos.single().handle
+        val dates = transfer.openCatalog()
+        val handle = transfer.dayPhotos(dates.single().key).photos.single().handle
         // A hanging or broken catalog revalidation query is a communication failure.
         hangCodes = setOf(0x923c)
         assertEquals(WifiTransferFailureReason.Timeout, transfer.download(handle) {}.failureReason)

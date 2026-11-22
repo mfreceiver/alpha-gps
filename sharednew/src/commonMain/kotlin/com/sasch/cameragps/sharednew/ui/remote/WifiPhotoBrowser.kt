@@ -76,6 +76,7 @@ import cameragps.sharednew.generated.resources.search_24px
 import cameragps.sharednew.generated.resources.m2_warning_24px
 import cameragps.sharednew.generated.resources.b1_tile_size
 import cameragps.sharednew.generated.resources.b1_tile_size_not_downloaded
+import cameragps.sharednew.generated.resources.wifi_remote_browser_all_saved
 import cameragps.sharednew.generated.resources.wifi_remote_browser_empty
 import cameragps.sharednew.generated.resources.wifi_remote_browser_failed
 import cameragps.sharednew.generated.resources.wifi_remote_batch_skip_hint
@@ -124,6 +125,7 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassCheckbox
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassTileAction
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressCircle
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressLinear
 import com.sasch.cameragps.sharednew.ui.components.glass.glassCheckboxColors
@@ -136,6 +138,7 @@ import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import cameragps.sharednew.generated.resources.wifi_remote_back_busy
+import cameragps.sharednew.generated.resources.wifi_remote_batch_retry_failed
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import org.jetbrains.compose.resources.painterResource
@@ -154,8 +157,17 @@ internal fun WifiPhotoBrowser(
     // Null = "ask each time": the batch asks for JPG / RAW / JPG+RAW when the button is tapped.
     val policy = downloadFormat.policy
     val thumbnails by controller.thumbnails.collectAsState()
+    val coverThumbnails by controller.dateCoverThumbnails.collectAsState()
     val thumbnailsLoading by controller.thumbnailsLoading.collectAsState()
-    val captures = remember(browser.photos) { groupCameraPhotos(browser.photos) }
+    val allCaptures = remember(browser.photos) { groupCameraPhotos(browser.photos) }
+    val captures = remember(allCaptures, gridOptions.onlyUnsaved, browser.savedDownloads) {
+        filterGridCaptures(allCaptures, gridOptions.onlyUnsaved, browser.savedDownloads)
+    }
+    LaunchedEffect(gridOptions.onlyUnsaved, browser.savedDownloads) {
+        if (gridOptions.onlyUnsaved) {
+            viewModel.pruneHiddenSelection(onlyUnsaved = true, saved = browser.savedDownloads)
+        }
+    }
     val transfer = state.imageTransfer
     val busy = browser.loading || transfer.busy
     val selectedIds = viewModel.selectedPhotoIds
@@ -174,7 +186,7 @@ internal fun WifiPhotoBrowser(
     // The grid reports where the user is looking so the thumbnail loader serves that area first.
     // A header item (error/empty text) shifts the capture indices by one.
     val headerItems = if (browser.failed || captures.isEmpty()) 1 else 0
-    val datesScreen = browser.grouped && browser.dateKey == null
+    val datesScreen = browser.dateKey == null
     // Long-press-and-drag range selection. The pointer handler is keyed on the day, never on the
     // selection, and reads the live day through rememberUpdatedState.
     val latestCaptures by rememberUpdatedState(captures)
@@ -199,7 +211,7 @@ internal fun WifiPhotoBrowser(
         val session = drag.session ?: return false
         val hit = hitTestTile(visibleTiles(), drag.x, drag.y, 0f)
         if (hit != null) drag.end = hit.captureIndex
-        return viewModel.updateRangeSelection(session, drag.end)
+        return viewModel.updateRangeSelection(session, drag.end, latestCaptures.map { it.id })
     }
     // Resting at the top/bottom edge scrolls the day slowly; a range never crosses into another day.
     LaunchedEffect(dragActive) {
@@ -216,30 +228,22 @@ internal fun WifiPhotoBrowser(
         }
     }
     val actionsEnabled = !busy && !dragActive
-    if (browser.grouped) {
-        // A day loads only what the viewport shows: the visible captures (stable keys, header
-        // filtered out) plus two rows of margin; scrolling replaces the demand, so requests for tiles
-        // that scrolled away are dropped before they reach the camera. The report is tied to the
-        // page revision, so a layout of an earlier day can never steer the loader of the current one.
-        LaunchedEffect(gridState, headerItems, browser.pageRevision, captures, datesScreen) {
-            if (datesScreen) return@LaunchedEffect
-            snapshotFlow {
-                val items = gridState.layoutInfo.visibleItemsInfo.filter { it.index >= headerItems }
-                val firstRow = items.minOfOrNull { it.offset.y }
-                items.map { it.index - headerItems } to items.count { it.offset.y == firstRow }
-            }.distinctUntilChanged().collect { (visible, columns) ->
-                val window = thumbnailWindow(visible, columns, captures.size)
-                controller.requestThumbnails(
-                    identifier, browser.pageRevision,
-                    window.visible.map { captures[it].id }, window.margin.map { captures[it].id }
-                )
-            }
-        }
-    } else {
-        LaunchedEffect(gridState, headerItems, browser.browserGeneration) {
-            snapshotFlow { gridState.firstVisibleItemIndex }.collect { first ->
-                controller.focusThumbnails(identifier, (first - headerItems).coerceAtLeast(0))
-            }
+    // A day loads only what the viewport shows: the visible captures (stable keys, header
+    // filtered out) plus two rows of margin; scrolling replaces the demand, so requests for tiles
+    // that scrolled away are dropped before they reach the camera. The report is tied to the
+    // page revision, so a layout of an earlier day can never steer the loader of the current one.
+    LaunchedEffect(gridState, headerItems, browser.pageRevision, captures, datesScreen) {
+        if (datesScreen) return@LaunchedEffect
+        snapshotFlow {
+            val items = gridState.layoutInfo.visibleItemsInfo.filter { it.index >= headerItems }
+            val firstRow = items.minOfOrNull { it.offset.y }
+            items.map { it.index - headerItems } to items.count { it.offset.y == firstRow }
+        }.distinctUntilChanged().collect { (visible, columns) ->
+            val window = thumbnailWindow(visible, columns, captures.size)
+            controller.requestThumbnails(
+                identifier, browser.pageRevision,
+                window.visible.map { captures[it].id }, window.margin.map { captures[it].id }
+            )
         }
     }
     // The batch covers the whole cross-day selection snapshot under the settings' download format:
@@ -283,6 +287,8 @@ internal fun WifiPhotoBrowser(
                     onOpen = viewModel::openDate,
                     onRetry = { controller.browseDates(identifier) },
                     modifier = Modifier.weight(1f).fillMaxWidth(),
+                    coverThumbnails = coverThumbnails,
+                    onVisibleCovers = { gen, handles -> controller.requestDateCovers(identifier, gen, handles) },
                 )
             } else {
                 val tileShape = RoundedCornerShape(gridSize.cornerDp.dp)
@@ -291,15 +297,16 @@ internal fun WifiPhotoBrowser(
                     // Small / medium / large: 4 / 3 / 2 columns on a phone, more on wider windows.
                     columns = GridCells.Adaptive(minSize = gridSize.minTileDp.dp),
                     modifier = Modifier.weight(1f).then(
-                        if (gestureEnabled) Modifier.pointerInput(gestureEnabled, browser.pageRevision) {
+                        if (gestureEnabled) Modifier.pointerInput(gestureEnabled, browser.pageRevision, gridOptions.onlyUnsaved) {
                             awaitEachGesture {
                                 val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                                 val hit = hitTestTile(visibleTiles(), down.position.x, down.position.y, actionPx)
                                 // The checkbox / magnifier corners stay independent actions.
                                 if (hit == null || hit.zone != TileZone.Body) return@awaitEachGesture
                                 val pressed = awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
-                                val anchorId = latestCaptures.getOrNull(hit.captureIndex)?.id ?: return@awaitEachGesture
-                                val session = viewModel.beginRangeSelection(anchorId) ?: return@awaitEachGesture
+                                val visibleIds = latestCaptures.map { it.id }
+                                val anchorId = visibleIds.getOrNull(hit.captureIndex) ?: return@awaitEachGesture
+                                val session = viewModel.beginRangeSelection(anchorId, visibleIds) ?: return@awaitEachGesture
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 drag.start(session, hit.captureIndex, pressed.position.x, pressed.position.y)
                                 dragActive = true
@@ -339,8 +346,12 @@ internal fun WifiPhotoBrowser(
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             Text(
                                 stringResource(
-                                    if (browser.failed) Res.string.wifi_remote_browser_failed
-                                    else Res.string.wifi_remote_browser_empty
+                                    when {
+                                        browser.failed -> Res.string.wifi_remote_browser_failed
+                                        gridOptions.onlyUnsaved && allCaptures.isNotEmpty() ->
+                                            Res.string.wifi_remote_browser_all_saved
+                                        else -> Res.string.wifi_remote_browser_empty
+                                    }
                                 ),
                                 style = AlphaType.Body,
                                 color = if (browser.failed) AlphaTheme.colors.danger else AlphaTheme.colors.textSecondary,
@@ -380,23 +391,34 @@ internal fun WifiPhotoBrowser(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 when {
-                    showTransfer && !showSummary -> GlassFloatingBar(
-                        Modifier.widthIn(max = 480.dp).fillMaxWidth(),
-                        shape = AlphaShapes.row,
-                        contentPadding = PaddingValues(start = 20.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
-                    ) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            PhotoTransferStatus(transfer)
+                    showTransfer && !showSummary -> {
+                        val retryable = if (!transfer.busy) viewModel.retryableBatchDownloads(state) else emptyList()
+                        GlassFloatingBar(
+                            Modifier.widthIn(max = 480.dp).fillMaxWidth(),
+                            shape = AlphaShapes.row,
+                            contentPadding = PaddingValues(start = 20.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+                        ) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                PhotoTransferStatus(transfer)
+                                if (retryable.isNotEmpty()) {
+                                    CapsuleButton(
+                                        text = stringResource(Res.string.wifi_remote_batch_retry_failed),
+                                        onClick = { viewModel.retryFailedBatchDownloads(state, onDownload) },
+                                        role = CapsuleRole.Secondary,
+                                        size = CapsuleSize.Small,
+                                    )
+                                }
+                            }
+                            if (transfer.busy) GlassIconButton(
+                                painterResource(Res.drawable.close_24px),
+                                contentDescription = stringResource(Res.string.wifi_remote_transfer_cancel),
+                                onClick = { controller.cancelPhotoOperation(identifier) },
+                            ) else if (!selecting) GlassIconButton(
+                                painterResource(Res.drawable.close_24px),
+                                contentDescription = stringResource(Res.string.dismiss_button),
+                                onClick = { viewModel.dismissTransferResult() },
+                            )
                         }
-                        if (transfer.busy) GlassIconButton(
-                            painterResource(Res.drawable.close_24px),
-                            contentDescription = stringResource(Res.string.wifi_remote_transfer_cancel),
-                            onClick = { controller.cancelPhotoOperation(identifier) },
-                        ) else if (!selecting) GlassIconButton(
-                            painterResource(Res.drawable.close_24px),
-                            contentDescription = stringResource(Res.string.dismiss_button),
-                            onClick = { controller.clearPhotoTransferResult(identifier) },
-                        )
                     }
                     showSummary -> GlassFloatingBar(
                         Modifier.widthIn(max = 480.dp),
@@ -596,43 +618,29 @@ private fun PhotoGridTile(
         // layer, so each is its own accessibility node and never double-fires the tile tap. A
         // load/transfer in flight disables them (the ViewModel refuses too).
         val checkboxCorner = tileCorner(TileElement.Checkbox).alignment
-        Box(
-            Modifier.align(checkboxCorner).size(TileActionSize).clickable(
-                enabled = actionsEnabled,
-                role = Role.Checkbox,
-                onClick = { viewModel.togglePhotoSelection(capture.id) },
-            ).semantics {
-                contentDescription = toggleLabel
-                selected = isSelected
-            }.padding(inset),
+        GlassTileAction(
+            onClick = { viewModel.togglePhotoSelection(capture.id) },
+            contentDescription = toggleLabel,
+            modifier = Modifier.align(checkboxCorner),
+            touchTarget = TileActionSize,
+            enabled = actionsEnabled,
+            role = Role.Checkbox,
+            selected = isSelected,
             contentAlignment = checkboxCorner,
+            contentPadding = inset,
         ) { GlassCheckbox(isSelected, onCheckedChange = null, onPhoto = true) }
         val previewLabel = stringResource(Res.string.wifi_remote_preview_photo)
         val previewCorner = tileCorner(TileElement.Preview).alignment
-        Box(
-            Modifier.align(previewCorner).size(TileActionSize).clickable(
-                enabled = actionsEnabled,
-                role = Role.Button,
-                onClick = { viewModel.previewPhoto(capture.id) },
-            ).semantics { contentDescription = previewLabel }.padding(inset),
+        GlassTileAction(
+            icon = painterResource(Res.drawable.search_24px),
+            contentDescription = previewLabel,
+            onClick = { viewModel.previewPhoto(capture.id) },
+            modifier = Modifier.align(previewCorner),
+            touchTarget = TileActionSize,
+            enabled = actionsEnabled,
             contentAlignment = previewCorner,
-        ) {
-            // The GlassTileAction badge (Viewer-glass square + white rim, like an unchecked
-            // GlassCheckbox) drawn inside this tile's own 40 dp corner target (the range-selection
-            // hit test reserves exactly that corner), so the component's 48 dp target is not used.
-            val badge = glassCheckboxColors(ToggleableState.Off, AlphaTheme.colors, onPhoto = true)
-            Box(
-                Modifier.size(TILE_BADGE_DP.dp)
-                    .background(badge.fill, TileBadgeShape)
-                    .border(1.dp, badge.rim ?: Color.Transparent, TileBadgeShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painterResource(Res.drawable.search_24px), contentDescription = null,
-                    tint = AlphaTheme.colors.onPhoto, modifier = Modifier.size(15.dp)
-                )
-            }
-        }
+            contentPadding = inset,
+        )
     }
 }
 
@@ -685,9 +693,6 @@ private class RangeDragState {
 
 /** Touch target of the checkbox / preview overlays on a grid tile. */
 private val TileActionSize = TILE_ACTION_DP.dp
-
-/** Shape of the preview badge: the same rounded square as [GlassCheckbox] (radius 7). */
-private val TileBadgeShape = RoundedCornerShape(7.dp)
 
 /**
  * Grid thumbnail: the whole picture fitted into the square frame and centred (never cropped). The

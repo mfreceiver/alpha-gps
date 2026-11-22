@@ -82,6 +82,11 @@ private fun viewerFormatRank(name: String): Int =
  */
 internal fun viewerFormatText(capture: WifiCameraCapture): String? = viewerFormatText(capture.files)
 
+/** Whether [capture] holds RAW files only (no JPEG or HEIF), so the viewer shows an embedded preview. */
+internal fun isRawOnlyCapture(capture: WifiCameraCapture): Boolean =
+    capture.files.any { it.mimeType == MIME_RAW } &&
+            capture.files.none { it.mimeType == MIME_JPEG || it.mimeType == MIME_HEIF }
+
 /** Metadata of [handle] in [state], or null when the state belongs to another photo (stale swipe). */
 internal fun PhotoMetadataState.metadataFor(handle: Long): PhotoMetadata? = when (this) {
     PhotoMetadataState.Idle -> null
@@ -354,6 +359,11 @@ internal data class ViewerDownloadState(
     val manualFormat: String? = null,
     /** "Ask each time" with more than one format to pick from ([singleFormatChoices]); empty otherwise. */
     val choices: List<WifiFormatChoice> = emptyList(),
+    /**
+     * Secondary action in [ViewerDownloadPhase.Saved] for a JPG+RAW capture whose JPG is saved
+     * under JPG-only mode while its downloadable RAW is not saved yet.
+     */
+    val alsoDownloadRaw: List<WifiPhotoDownload> = emptyList(),
 ) {
     val enabled: Boolean
         get() = downloads.isNotEmpty() && (phase == ViewerDownloadPhase.Ready ||
@@ -394,7 +404,12 @@ internal fun viewerDownloadState(
             else ViewerDownloadPhase.NoRaw
             missingFormatState(capture, originals, phase)
         }
-        WifiSkipReason.AlreadySaved -> ViewerDownloadState(ViewerDownloadPhase.Saved)
+        WifiSkipReason.AlreadySaved -> {
+            val remainingRaw = capture.files
+                .filter { it.mimeType == MIME_RAW && it.downloadable && WifiPhotoDownload(it.handle) !in saved }
+                .map { WifiPhotoDownload(it.handle) }
+            ViewerDownloadState(ViewerDownloadPhase.Saved, alsoDownloadRaw = remainingRaw)
+        }
         WifiSkipReason.TooLarge -> ViewerDownloadState(ViewerDownloadPhase.TooLarge)
         null -> ViewerDownloadState(ViewerDownloadPhase.Waiting)
     }
@@ -426,13 +441,6 @@ private fun missingFormatState(
 /** Fraction of the current file received, or null while it is unknown (converting / no size yet). */
 internal fun viewerTransferFraction(transfer: WifiImageTransferState): Float? =
     if (transfer.totalBytes > 0) (transfer.bytesReceived.toFloat() / transfer.totalBytes).coerceIn(0f, 1f) else null
-
-/**
- * "k / N" of the top bar. A day of the grouped browser is complete, so N is its capture count; the
- * legacy flat browser keeps its catalog total.
- */
-internal fun viewerPositionTotal(grouped: Boolean, captureCount: Int, totalObjects: Int): Int =
-    if (grouped) captureCount else maxOf(totalObjects, captureCount)
 
 /**
  * Captures the filmstrip asks thumbnails for: the shown one first, then the visible strip, and a

@@ -9,15 +9,23 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.focusable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionRegistry
+import com.sasch.cameragps.sharednew.remote.wifi.CatalogSnapshot
 import com.sasch.cameragps.sharednew.remote.wifi.ExifTestData
 import com.sasch.cameragps.sharednew.remote.wifi.PhotoMetadataState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
@@ -30,7 +38,6 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemotePhase
 import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
 import com.sasch.cameragps.sharednew.remote.wifi.WifiDownloadFormatSetting
-import com.sasch.cameragps.sharednew.remote.wifi.cameraPhotoPage
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassBackground
 import com.sasch.cameragps.sharednew.ui.theme.CameraGpsTheme
@@ -145,8 +152,9 @@ class ViewerDetailsDrawerComposeTest : WifiLoggingTest() {
         override val canTransferImages = true
         override val hasLiveViewStream = false
         val heads: MutableList<Long> = Collections.synchronizedList(mutableListOf())
-        override suspend fun openPhotoBrowser() = cameraPhotoPage(groupCameraPhotos(photos), 0)
-        override suspend fun photoPage(offset: Int) = cameraPhotoPage(groupCameraPhotos(photos), offset)
+        private val snapshot by lazy { CatalogSnapshot.of(groupCameraPhotos(photos)) }
+        override suspend fun openCatalog() = snapshot.dates
+        override suspend fun dayPhotos(dateKey: String) = snapshot.day(dateKey)
         override suspend fun photoPreview(handle: Long): ImageBitmap? = null
         override suspend fun photoMetadataHead(handle: Long, length: Int): ByteArray {
             heads += handle
@@ -173,7 +181,11 @@ class ViewerDetailsDrawerComposeTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         compose.waitUntil(5_000) { controller.sessions.value["CAMERA"]?.wifiRemote?.phase == WifiRemotePhase.Ready }
-        controller.browsePhotos("camera")
+        controller.browseDates("camera")
+        compose.waitUntil(5_000) {
+            controller.sessions.value["CAMERA"]?.wifiRemote?.photoBrowser?.dates?.isNotEmpty() == true
+        }
+        controller.browseDate("camera", "2026-01-01")
         compose.waitUntil(5_000) {
             controller.sessions.value["CAMERA"]?.wifiRemote?.photoBrowser?.photos?.isNotEmpty() == true
         }
@@ -220,5 +232,120 @@ class ViewerDetailsDrawerComposeTest : WifiLoggingTest() {
         compose.onAllNodes(pane()).assertCountEquals(0)
         assertEquals("closing reads nothing more", listOf(42L), connection.heads.toList())
         assertEquals("closing recomposes neither the page scope, the layout, the pager nor the filmstrip", settled, compose.runOnIdle { compositions.toMap() })
+    }
+
+    @Test
+    fun exitAnimationKeepsModalGateAndDefersStripFocusUntilFinished() {
+        val drawer = ViewerDrawerState(initiallyOpen = false)
+        val capture = WifiCameraCapture("a", photos.take(2))
+        val parts = ViewerParts(
+            title = "A.JPG", capturedAt = null, position = "1 / 2", selectedCount = 0,
+            info = viewerInfoStrip(capture, WifiFormatPolicy.Original),
+            capture = capture, image = null as ImageBitmap?,
+            metadata = MutableStateFlow<PhotoMetadataState>(PhotoMetadataState.Idle),
+            download = null, transfer = WifiImageTransferState(), selected = false, selectEnabled = true,
+            onBack = {}, onToggleSelected = {}, onDownload = {}, onCancel = {},
+            onOpenDetails = { drawer.show() },
+        )
+        val stripFocus = FocusRequester()
+        var stripFocused = false
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            CameraGpsTheme(darkTheme = true) {
+                GlassBackground {
+                    ViewerBody(
+                        windowClass = WindowClass.Portrait,
+                        parts = parts,
+                        drawer = drawer,
+                        stripFocus = stripFocus,
+                        photo = { modifier -> Box(modifier.fillMaxSize()) },
+                        strip = { modifier ->
+                            Box(
+                                modifier
+                                    .focusRequester(stripFocus)
+                                    .onFocusChanged { stripFocused = it.isFocused }
+                                    .focusable(),
+                            )
+                        },
+                        film = { modifier -> Box(modifier) },
+                    )
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(100)
+        compose.runOnIdle { stripFocus.requestFocus() }
+        compose.mainClock.advanceTimeBy(50)
+        assertTrue("strip starts focused", stripFocused)
+
+        compose.runOnIdle { drawer.show() }
+        compose.mainClock.advanceTimeBy(VIEWER_DETAILS_ENTER_MILLIS + 50L)
+        compose.onNode(pane()).assertExists()
+
+        // Start closing: mid-exit (< VIEWER_DETAILS_EXIT_MILLIS), the modal gate stays active
+        // and strip focus is NOT restored yet.
+        compose.runOnIdle { drawer.hide() }
+        compose.mainClock.advanceTimeBy(VIEWER_DETAILS_EXIT_MILLIS / 2L)
+        compose.onNode(pane()).assertExists()
+        compose.runOnIdle { assertTrue("focus cannot enter background mid-exit", !stripFocus.requestFocus() || !stripFocused) }
+
+        // Finish exit animation: drawer leaves and strip regains focus.
+        compose.mainClock.advanceTimeBy(VIEWER_DETAILS_EXIT_MILLIS + 64L)
+        compose.waitForIdle()
+        compose.onAllNodes(pane()).assertCountEquals(0)
+        assertTrue("strip regains focus after drawer completely exits", stripFocused)
+    }
+
+    @Test
+    fun reopeningMidExitReRequestsSheetFocus() {
+        val drawer = ViewerDrawerState(initiallyOpen = false)
+        val capture = WifiCameraCapture("a", photos.take(2))
+        val parts = ViewerParts(
+            title = "A.JPG", capturedAt = null, position = "1 / 2", selectedCount = 0,
+            info = viewerInfoStrip(capture, WifiFormatPolicy.Original),
+            capture = capture, image = null as ImageBitmap?,
+            metadata = MutableStateFlow<PhotoMetadataState>(PhotoMetadataState.Idle),
+            download = null, transfer = WifiImageTransferState(), selected = false, selectEnabled = true,
+            onBack = {}, onToggleSelected = {}, onDownload = {}, onCancel = {},
+            onOpenDetails = { drawer.show() },
+        )
+        val stripFocus = FocusRequester()
+        var stripFocused = false
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            CameraGpsTheme(darkTheme = true) {
+                GlassBackground {
+                    ViewerBody(
+                        windowClass = WindowClass.Portrait,
+                        parts = parts,
+                        drawer = drawer,
+                        stripFocus = stripFocus,
+                        photo = { modifier -> Box(modifier.fillMaxSize()) },
+                        strip = { modifier ->
+                            Box(
+                                modifier
+                                    .focusRequester(stripFocus)
+                                    .onFocusChanged { stripFocused = it.isFocused }
+                                    .focusable(),
+                            )
+                        },
+                        film = { modifier -> Box(modifier) },
+                    )
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(100)
+        compose.runOnIdle { stripFocus.requestFocus() }
+        compose.runOnIdle { drawer.show() }
+        compose.mainClock.advanceTimeBy(VIEWER_DETAILS_ENTER_MILLIS + 50L)
+        compose.onNode(pane()).assertExists()
+        assertTrue("sheet took focus on open", !stripFocused)
+
+        // Close and then reopen mid-exit before VIEWER_DETAILS_EXIT_MILLIS elapses.
+        compose.runOnIdle { drawer.hide() }
+        compose.mainClock.advanceTimeBy(VIEWER_DETAILS_EXIT_MILLIS / 2L)
+        compose.runOnIdle { drawer.show() }
+        compose.mainClock.advanceTimeBy(VIEWER_DETAILS_ENTER_MILLIS + 50L)
+        compose.onNode(pane()).assertExists()
+        assertTrue("reopening mid-exit keeps drawer modal and focused, never returning focus to strip", !stripFocused)
     }
 }

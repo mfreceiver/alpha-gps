@@ -125,6 +125,19 @@ internal data class WifiDownloadPlan(
 }
 
 /**
+ * Whether every file of [capture] has already been saved in the current catalog generation,
+ * matching [planDownloads] under [WifiFormatPolicy.Original]. Captures with no files or with any
+ * non-downloadable (e.g. over-limit) file are not considered fully saved.
+ */
+internal fun isCaptureFullySaved(
+    capture: WifiCameraCapture,
+    saved: Set<WifiPhotoDownload>,
+): Boolean {
+    val plan = planDownloads(listOf(capture), Original, saved)
+    return plan.files.isEmpty() && plan.mainSkipReason == WifiSkipReason.AlreadySaved
+}
+
+/**
  * The single download planner. Every policy downloads original bytes only — nothing is converted.
  *
  * - [Original]: every file of each capture (JPG+RAW downloads both). Files saved earlier in this

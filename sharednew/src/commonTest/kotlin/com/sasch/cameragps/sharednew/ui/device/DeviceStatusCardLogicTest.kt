@@ -1,9 +1,13 @@
 package com.sasch.cameragps.sharednew.ui.device
 
+import com.sasch.cameragps.sharednew.bluetooth.BleFailure
+import com.sasch.cameragps.sharednew.bluetooth.BleFailureReason
 import com.sasch.cameragps.sharednew.bluetooth.status.GpsWriteStats
 import com.sasch.cameragps.sharednew.bluetooth.status.TimeSyncOutcome
+import com.sasch.cameragps.sharednew.ui.help.GuideTopic
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 /** Batch Q: the phone location signal cell and the status card's warning-only subtitle. */
 class DeviceStatusCardLogicTest {
@@ -92,6 +96,100 @@ class DeviceStatusCardLogicTest {
         assertEquals(
             StatusCardAlert.LocationWriteFailing,
             statusCardAlert(ConnectionHeadline.Connected, false, failing, TimeSyncOutcome.Failed),
+        )
+    }
+
+    @Test
+    fun rssiIsStaleOnlyAfterThirtySeconds() {
+        assertEquals(false, isRssiStale(now - RSSI_STALE_AFTER_MILLIS, now))
+        assertEquals(true, isRssiStale(now - RSSI_STALE_AFTER_MILLIS - 1, now))
+        assertEquals(true, isRssiStale(null, now))
+    }
+
+    @Test
+    fun rssiStaleWaitIsTheExactTimeToExpiry() {
+        val now = 1_000_000L
+        assertEquals(null, rssiStaleInMillis(null, now))
+        assertEquals(null, rssiStaleInMillis(now - RSSI_STALE_AFTER_MILLIS - 1, now))
+        val wait = rssiStaleInMillis(now - 10_000, now)!!
+        assertEquals(false, isRssiStale(now - 10_000, now + wait - 1))
+        assertEquals(true, isRssiStale(now - 10_000, now + wait))
+        // A reading stamped slightly ahead of the phone clock is fresh.
+        assertEquals(false, isRssiStale(now + 1_000, now))
+    }
+
+    @Test
+    fun weakSignalIsStrictlyBelowMinus85AndFresh() {
+        assertEquals(false, isSignalWeak(-85, now, now))
+        assertEquals(true, isSignalWeak(-86, now, now))
+        assertEquals(true, isSignalWeak(-120, now, now))
+        // Stale or missing readings never claim a weak signal; neither do "not available" values.
+        assertEquals(false, isSignalWeak(-90, now - RSSI_STALE_AFTER_MILLIS - 1, now))
+        assertEquals(false, isSignalWeak(-90, null, now))
+        assertEquals(false, isSignalWeak(null, now, now))
+        assertEquals(false, isSignalWeak(-127, now, now))
+        assertEquals(false, isSignalWeak(127, now, now))
+    }
+
+    @Test
+    fun weakSignalAlertYieldsToEveryOtherAlertAndNeedsAConnectedLink() {
+        assertEquals(
+            StatusCardAlert.WeakSignal,
+            statusCardAlert(ConnectionHeadline.Connected, false, null, null, weakSignal = true),
+        )
+        assertEquals(
+            StatusCardAlert.TimeSyncFailed,
+            statusCardAlert(ConnectionHeadline.Connected, false, null, TimeSyncOutcome.Failed, weakSignal = true),
+        )
+        assertEquals(
+            StatusCardAlert.LocationDisabledByCamera,
+            statusCardAlert(ConnectionHeadline.Connected, true, null, null, weakSignal = true),
+        )
+        assertEquals(
+            StatusCardAlert.None,
+            statusCardAlert(ConnectionHeadline.Disconnected, false, null, null, weakSignal = true),
+        )
+    }
+
+    @Test
+    fun bleFailureReasonsMapToDifferentiatedAlertsAndRepairGuideTopic() {
+        val expected = mapOf(
+            BleFailureReason.BondLost to StatusCardAlert.BleBondLost,
+            BleFailureReason.AuthenticationFailed to StatusCardAlert.BleAuthenticationFailed,
+            BleFailureReason.Timeout to StatusCardAlert.BleTimeout,
+            BleFailureReason.OutOfRange to StatusCardAlert.BleOutOfRange,
+            BleFailureReason.BluetoothOff to StatusCardAlert.BleBluetoothOff,
+            BleFailureReason.PermissionMissing to StatusCardAlert.BlePermissionMissing,
+            BleFailureReason.GattFailure to StatusCardAlert.BleGattFailed,
+            BleFailureReason.Unknown to StatusCardAlert.BleUnknown,
+        )
+        expected.forEach { (reason, alert) ->
+            assertEquals(
+                alert,
+                statusCardAlert(
+                    ConnectionHeadline.Disconnected,
+                    false,
+                    null,
+                    null,
+                    bleFailure = BleFailure(reason),
+                ),
+            )
+        }
+        assertEquals(GuideTopic.Repair, statusCardAlertTopic(StatusCardAlert.BleBondLost))
+        assertEquals(GuideTopic.Repair, statusCardAlertTopic(StatusCardAlert.BleAuthenticationFailed))
+        assertNull(statusCardAlertTopic(StatusCardAlert.BleTimeout))
+        assertNull(statusCardAlertTopic(StatusCardAlert.BleOutOfRange))
+        assertNull(statusCardAlertTopic(StatusCardAlert.BleGattFailed))
+        // Connecting or connected headlines do not surface a stale disconnect failure.
+        assertEquals(
+            StatusCardAlert.None,
+            statusCardAlert(
+                ConnectionHeadline.Connecting,
+                false,
+                null,
+                null,
+                bleFailure = BleFailure(BleFailureReason.Timeout),
+            ),
         )
     }
 }

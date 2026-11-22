@@ -16,9 +16,10 @@ class WifiGridPreferencesTest {
             PreferencesManager.KEY_MW_WIFI_GRID_SIZE to "Medium",
             PreferencesManager.KEY_MW_WIFI_GRID_SHOW_FORMAT to true,
             PreferencesManager.KEY_MW_WIFI_GRID_SHOW_SIZE to true,
+            PreferencesManager.KEY_MW_WIFI_GRID_ONLY_UNSAVED to true,
         )
         assertEquals(
-            WifiGridOptions(size = "Medium", showFormat = true, showSize = true),
+            WifiGridOptions(size = "Medium", showFormat = true, showSize = true, onlyUnsaved = true),
             PreferencesManager.wifiGridOptionsFrom(stored),
         )
     }

@@ -25,14 +25,15 @@ class WifiRemoteControllerMetadataTest : WifiLoggingTest() {
         override val hasLiveViewStream = false
         var photos = listOf(
             WifiCameraPhoto(42, "ONE.JPG", 5_000_000, "image/jpeg", "20260101T120000", width = 6000, height = 4000),
-            WifiCameraPhoto(43, "TWO.ARW", 25_000_000, "image/x-sony-arw", ""),
+            WifiCameraPhoto(43, "TWO.ARW", 25_000_000, "image/x-sony-arw", "20260101T120000"),
         )
         val heads = mutableListOf<Pair<Long, Int>>()
         var headGate: CompletableDeferred<Unit>? = null
         var battery: Int? = null
         var previewGate: CompletableDeferred<Unit>? = null
-        override suspend fun openPhotoBrowser() = cameraPhotoPage(groupCameraPhotos(photos), 0)
-        override suspend fun photoPage(offset: Int) = cameraPhotoPage(groupCameraPhotos(photos), offset)
+        private val snapshot get() = CatalogSnapshot.of(groupCameraPhotos(photos))
+        override suspend fun openCatalog() = snapshot.dates
+        override suspend fun dayPhotos(dateKey: String) = snapshot.day(dateKey)
         override suspend fun photoPreview(handle: Long): ImageBitmap? {
             previewGate?.await()
             return null
@@ -60,7 +61,9 @@ class WifiRemoteControllerMetadataTest : WifiLoggingTest() {
         )
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
+        controller.browseDates("camera")
+        runCurrent()
+        controller.browseDate("camera", "2026-01-01")
         runCurrent()
         return controller to registry
     }
@@ -137,7 +140,9 @@ class WifiRemoteControllerMetadataTest : WifiLoggingTest() {
         controller.loadMetadata("camera", 42, extended = true)
         advanceTimeBy(300); runCurrent()
         assertEquals(1, connection.heads.size)
-        controller.browsePhotos("camera")
+        controller.browseDates("camera")
+        runCurrent()
+        controller.browseDate("camera", "2026-01-01")
         runCurrent()
         val state = controller.metadata.value
         assertTrue(state is PhotoMetadataState.Ready && !state.metadata.extendedRead, "$state")

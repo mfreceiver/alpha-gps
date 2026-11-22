@@ -1,10 +1,13 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
 import com.sasch.cameragps.sharednew.remote.wifi.UNKNOWN_DATE_KEY
+import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
+import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteFailure
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemotePhase
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
 import com.sasch.cameragps.sharednew.remote.wifi.formatSizeNumber
+import com.sasch.cameragps.sharednew.remote.wifi.isCaptureFullySaved
 import kotlinx.datetime.LocalDate
 
 // ---- Connection overlay ----------------------------------------------------------------------
@@ -66,7 +69,7 @@ internal fun wifiConnectionFrame(
             // Ready but the day list is not opened yet (auto-enter is one frame away) or the
             // first catalog read is still running: that is the overlay's last step.
             !browser.open -> WifiConnectionFrame.Progress(WifiConnectStep.ReadCatalog)
-            browser.grouped && browser.dateKey == null && browser.loading && !browser.failed ->
+            browser.dateKey == null && browser.loading && !browser.failed ->
                 WifiConnectionFrame.Progress(WifiConnectStep.ReadCatalog)
             else -> null
         }
@@ -78,8 +81,22 @@ internal fun shownWifiConnectionFrame(
     frame: WifiConnectionFrame?, readingCatalog: Boolean, holdReady: Boolean, ready: Boolean,
 ): WifiConnectionFrame? = frame ?: if (ready && (readingCatalog || holdReady)) WifiConnectionFrame.Ready else null
 
-/** A failure frame closes itself after this long — except the permission one, which waits. */
+/** A failure frame closes itself after this base delay — extended for long messages, disabled when TalkBack is on. */
 internal const val CONNECTION_FAILURE_AUTO_DISMISS_MS = 5_000L
+internal const val CONNECTION_FAILURE_MAX_DISMISS_MS = 12_000L
+
+/**
+ * Auto-dismiss delay for the Wi-Fi connection failure overlay:
+ * - Returns `null` when an accessibility service (TalkBack) is active so the user is never rushed.
+ * - Otherwise scales from [CONNECTION_FAILURE_AUTO_DISMISS_MS] up to [CONNECTION_FAILURE_MAX_DISMISS_MS]
+ *   based on [messageLength].
+ */
+internal fun connectionFailureAutoDismissMs(messageLength: Int, accessibilityEnabled: Boolean): Long? {
+    if (accessibilityEnabled) return null
+    val extraChars = (messageLength - 40).coerceAtLeast(0)
+    return (CONNECTION_FAILURE_AUTO_DISMISS_MS + extraChars * 80L)
+        .coerceAtMost(CONNECTION_FAILURE_MAX_DISMISS_MS)
+}
 
 /** How long the green "ready" frame stays before the day list fades in. */
 internal const val CONNECTION_READY_HOLD_MS = 400L
@@ -105,12 +122,21 @@ data class WifiGridOptions(
     val size: String = WifiGridSize.Small.name,
     val showFormat: Boolean = false,
     val showSize: Boolean = false,
+    val onlyUnsaved: Boolean = false,
 ) {
     internal val gridSize: WifiGridSize
         get() = WifiGridSize.entries.firstOrNull { it.name == size } ?: WifiGridSize.Small
 
     internal fun withSize(size: WifiGridSize) = copy(size = size.name)
 }
+
+/** Filters grid captures when [onlyUnsaved] is active, hiding captures whose downloadable files are all saved. */
+internal fun filterGridCaptures(
+    captures: List<WifiCameraCapture>,
+    onlyUnsaved: Boolean,
+    saved: Set<WifiPhotoDownload>,
+): List<WifiCameraCapture> =
+    if (!onlyUnsaved) captures else captures.filterNot { isCaptureFullySaved(it, saved) }
 
 // ---- Capture tags ----------------------------------------------------------------------------
 

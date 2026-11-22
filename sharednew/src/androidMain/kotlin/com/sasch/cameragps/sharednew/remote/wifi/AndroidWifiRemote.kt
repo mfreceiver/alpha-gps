@@ -17,14 +17,18 @@ import java.net.InetAddress
 fun createAndroidWifiRemoteController(
     context: Context, scope: CoroutineScope,
     orchestrator: CameraSessionOrchestrator,
-    browseOnly: () -> Boolean = { true },
 ): WifiRemoteController {
-    val connector = AndroidWifiRemoteConnector(context.applicationContext, browseOnly)
+    val connector = AndroidWifiRemoteConnector(context.applicationContext)
     val automatic = AutomaticWifiRemoteConnector(
-        orchestrator::prepareCameraWifi,
-        { credentials -> AndroidCameraNetworkRequest(context.applicationContext, credentials) },
-        connector::openOnNetwork,
+        prepare = orchestrator::prepareCameraWifi,
+        request = { credentials -> AndroidCameraNetworkRequest(context.applicationContext, credentials) },
+        openCamera = { network, host, sessionScope ->
+            connector.openOnNetwork(network, host, sessionScope, WifiSessionPurpose.Browse)
+        },
         preconditions = AndroidWifiPreconditions(context),
+        openCameraWithPurpose = { network, host, sessionScope, purpose ->
+            connector.openOnNetwork(network, host, sessionScope, purpose)
+        },
     )
     return WifiRemoteController(scope, orchestrator.registry, connector,
         orchestrator::claimWifiControls, orchestrator::releaseWifiControls,
@@ -48,8 +52,15 @@ internal class AndroidWifiAutomaticConnector(
 
     override suspend fun open(
         identifier: String, scope: CoroutineScope, onPhase: (WifiRemotePhase) -> Unit,
+    ): WifiRemoteConnection = open(identifier, scope, WifiSessionPurpose.Browse, onPhase)
+
+    override suspend fun open(
+        identifier: String,
+        scope: CoroutineScope,
+        purpose: WifiSessionPurpose,
+        onPhase: (WifiRemotePhase) -> Unit,
     ): WifiRemoteConnection =
-        try { delegate.open(identifier, scope, onPhase) }
+        try { delegate.open(identifier, scope, purpose, onPhase) }
         catch (_: SecurityException) { throw WifiRemoteConnectException(WifiRemoteFailure.NetworkPermissionDenied) }
 }
 
@@ -81,18 +92,28 @@ private class AndroidWifiPreconditions(context: Context) : WifiPreconditions {
 
 private class AndroidWifiRemoteConnector(
     context: Context,
-    private val browseOnly: () -> Boolean,
 ) : WifiRemoteConnector {
     override val supportsAddressDiscovery = true
     private val imageStore = AndroidCameraImageStore(context)
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
 
-    override suspend fun open(host: String, scope: CoroutineScope): WifiRemoteConnection {
-        return try { openCamera(host, scope) }
+    override suspend fun open(host: String, scope: CoroutineScope): WifiRemoteConnection =
+        open(host, scope, WifiSessionPurpose.Browse)
+
+    override suspend fun open(
+        host: String,
+        scope: CoroutineScope,
+        purpose: WifiSessionPurpose,
+    ): WifiRemoteConnection {
+        return try { openCamera(host, scope, purpose) }
         catch (_: SecurityException) { throw WifiRemoteConnectException(WifiRemoteFailure.NetworkPermissionDenied) }
     }
 
-    private suspend fun openCamera(host: String, scope: CoroutineScope): WifiRemoteConnection {
+    private suspend fun openCamera(
+        host: String,
+        scope: CoroutineScope,
+        purpose: WifiSessionPurpose,
+    ): WifiRemoteConnection {
         val candidates = connectivity.allNetworks.filter { network ->
             val caps = connectivity.getNetworkCapabilities(network)
             caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true &&
@@ -105,10 +126,15 @@ private class AndroidWifiRemoteConnector(
                 ?: throw WifiRemoteConnectException(WifiRemoteFailure.NetworkLost)
             cameraGateway(links)
         }
-        return openOnNetwork(network, cameraHost, scope)
+        return openOnNetwork(network, cameraHost, scope, purpose)
     }
 
-    suspend fun openOnNetwork(network: Network, host: String, scope: CoroutineScope): WifiRemoteConnection {
+    suspend fun openOnNetwork(
+        network: Network,
+        host: String,
+        scope: CoroutineScope,
+        purpose: WifiSessionPurpose = WifiSessionPurpose.Browse,
+    ): WifiRemoteConnection {
         val address = InetAddress.getByName(host) // Validated literal; never performs a hostname lookup.
         val links = connectivity.getLinkProperties(network)
             ?: throw WifiRemoteConnectException(WifiRemoteFailure.NetworkLost)
@@ -133,7 +159,7 @@ private class AndroidWifiRemoteConnector(
             AndroidCameraHttpTransport(network.socketFactory), imageStore,
             ::decodeAndroidCameraThumbnail, ::decodeAndroidCameraPreview, losses.receiveAsFlow(),
             releaseNetwork = { connectivity.unregisterNetworkCallback(callback); losses.close() },
-            browseOnly = browseOnly(),
+            browseOnly = (purpose == WifiSessionPurpose.Browse),
         )
     }
 }

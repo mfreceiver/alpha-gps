@@ -3,7 +3,9 @@ package com.sasch.cameragps.sharednew.remote.wifi
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class WifiCatalogSnapshotTest {
     private var next = 1L
@@ -55,18 +57,23 @@ class WifiCatalogSnapshotTest {
 
     @Test
     fun groupsByDayNewestFirstWithUnknownLastAndCountsCaptures() {
-        val snapshot = CatalogSnapshot.of(
-            listOf(
-                single("20240502T090000"), single("2024-05-01T10:00:00"), single("20240502T080000"),
-                single(""), single("20240230T000000"), single("20240615T000000")
-            )
-        )
+        val c1 = single("20240502T090000")
+        val c2 = single("2024-05-01T10:00:00")
+        val c3 = single("20240502T080000")
+        val c4 = single("")
+        val c5 = single("20240230T000000")
+        val c6 = single("20240615T000000")
+        val snapshot = CatalogSnapshot.of(listOf(c1, c2, c3, c4, c5, c6))
         assertEquals(
             listOf(
-                DateGroup("2024-06-15", 1), DateGroup("2024-05-02", 2), DateGroup("2024-05-01", 1),
-                DateGroup(UNKNOWN_DATE_KEY, 2)
+                DateGroup("2024-06-15", 1, c6.thumbnail.handle),
+                DateGroup("2024-05-02", 2, c1.thumbnail.handle),
+                DateGroup("2024-05-01", 1, c2.thumbnail.handle),
+                DateGroup(UNKNOWN_DATE_KEY, 2, c4.thumbnail.handle),
             ), snapshot.dates
         )
+        assertTrue(snapshot.isCoverHandle(c1.thumbnail.handle))
+        assertFalse(snapshot.isCoverHandle(c3.thumbnail.handle))
         assertEquals(6, snapshot.captures.size)
     }
 
@@ -80,7 +87,7 @@ class WifiCatalogSnapshotTest {
         )
         val snapshot = CatalogSnapshot.of(listOf(pair))
         // The preview (JPEG) record decides; the RAW stamp is ignored.
-        assertEquals(listOf(DateGroup("2024-05-02", 1)), snapshot.dates)
+        assertEquals(listOf(DateGroup("2024-05-02", 1, pair.thumbnail.handle)), snapshot.dates)
         assertEquals(pair, snapshot.capturesOn("2024-05-02")?.single())
         assertNull(snapshot.capturesOn("2024-05-01"))
     }
@@ -101,12 +108,13 @@ class WifiCatalogSnapshotTest {
     @Test
     fun aDayIsTheWholeDayInOneListWithoutPages() {
         // More than the old 60-capture page: a day is never sliced any more.
-        val day = (1..SonyImageTransfer.PAGE_SIZE + 3).map { single("20240501T0000" + (it % 60).toString().padStart(2, '0')) }
+        val count = 63
+        val day = (1..count).map { single("20240501T0000" + (it % 60).toString().padStart(2, '0')) }
         val other = (1..5).map { single("20240430T120000") }
         val snapshot = CatalogSnapshot.of(day + other)
         val first = snapshot.day("2024-05-01")
-        assertEquals(SonyImageTransfer.PAGE_SIZE + 3, first.photos.size)
-        assertEquals(SonyImageTransfer.PAGE_SIZE + 3, first.totalObjects)
+        assertEquals(count, first.photos.size)
+        assertEquals(count, first.totalObjects)
         assertEquals(0, first.offset)
         assertEquals(false, first.hasMore)
         assertEquals(day.flatMap { it.files }, first.photos)

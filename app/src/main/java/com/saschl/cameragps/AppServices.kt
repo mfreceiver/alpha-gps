@@ -70,8 +70,6 @@ class AppServices(context: Context) {
     private val _pairingFailedDevice = MutableStateFlow<String?>(null)
     val wifiRemote = createAndroidWifiRemoteController(
         appContext, scope, orchestrator,
-        // Read at every connect: the setting can change while the app lives.
-        browseOnly = { true },
     )
     val pairingFailedDevice: StateFlow<String?> = _pairingFailedDevice
 

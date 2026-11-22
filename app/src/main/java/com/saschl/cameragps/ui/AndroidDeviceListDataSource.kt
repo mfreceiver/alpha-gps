@@ -1,6 +1,7 @@
 package com.saschl.cameragps.ui
 
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSession
+import com.sasch.cameragps.sharednew.bluetooth.status.CameraLiveStatus
 import com.sasch.cameragps.sharednew.database.devices.CameraDevice
 import com.sasch.cameragps.sharednew.ui.devicelist.DeviceListDataSource
 import com.saschl.cameragps.AppServices
@@ -14,4 +15,6 @@ class AndroidDeviceListDataSource(services: AppServices) : DeviceListDataSource 
         services.orchestrator.locationManager.isActive
     override val deviceSettings: Flow<List<CameraDevice>> =
         services.deviceDao.observeAllDevices()
+    override val liveStatuses: Flow<Map<String, CameraLiveStatus>> =
+        services.orchestrator.liveStatus.statuses
 }

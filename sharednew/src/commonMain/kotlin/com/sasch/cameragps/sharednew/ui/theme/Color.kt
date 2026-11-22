@@ -106,6 +106,8 @@ data class AlphaColors(
      * no blur pass runs. Every onPhoto* role reads on it (PaletteContrastTest).
      */
     val viewerSheet: Color,
+    /** Page background of the photo viewer (the Viewer is dark in both themes): pure black. */
+    val viewerBackground: Color,
     /** Low-contrast coloured light orbs of the G0 backdrop (D1), drawn in order over [background]. */
     val orbs: List<BackdropOrb>,
     // Thumbnails
@@ -193,6 +195,7 @@ val LightAlphaColors = AlphaColors(
     onPhotoDanger = Color(0xFFFFDAD6),
     scrim = Color.Black.copy(alpha = 0.32f),
     viewerSheet = Color(0xFF1B1F24),
+    viewerBackground = Color.Black,
     orbs = listOf(
         BackdropOrb(0.10f, 0.08f, 0.80f, Color(0xFFA8C7FA), 0.55f), // blue, top-left (main light)
         BackdropOrb(1.00f, 0.42f, 0.66f, Color(0xFFCDBDF7), 0.40f), // violet, right
@@ -257,6 +260,7 @@ val DarkAlphaColors = AlphaColors(
     onPhotoDanger = Color(0xFFFFDAD6),
     scrim = Color.Black.copy(alpha = 0.52f),
     viewerSheet = Color(0xFF1B1F24),
+    viewerBackground = Color.Black,
     orbs = listOf(
         BackdropOrb(0.10f, 0.08f, 0.80f, Color(0xFF0B57D0), 0.40f), // blue, top-left (main light)
         BackdropOrb(1.00f, 0.42f, 0.66f, Color(0xFF5B3FA8), 0.30f), // violet, right

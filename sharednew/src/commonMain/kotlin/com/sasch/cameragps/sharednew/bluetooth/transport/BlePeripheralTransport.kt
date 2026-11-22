@@ -38,6 +38,7 @@ sealed interface BleTransportEvent {
     data class Disconnected(
         override val identifier: String,
         val statusCode: Int?,
+        val isManual: Boolean = false,
     ) : BleTransportEvent
 
     /**

@@ -1,11 +1,14 @@
 package com.sasch.cameragps.sharednew.bluetooth.session
 
+import com.sasch.cameragps.sharednew.bluetooth.BleFailure
 import com.sasch.cameragps.sharednew.bluetooth.BleSessionPhase
+import com.sasch.cameragps.sharednew.bluetooth.coordinator.BleShutterState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemotePhase
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiShutdownStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * State of one camera session. Replaces the Android `CameraConnectionConfig`
@@ -30,6 +33,12 @@ data class CameraSession(
     val wifiRemote: WifiRemoteState = WifiRemoteState(),
     /** Negotiated ATT MTU as the transport last reported it; display only, never requested from here. */
     val mtu: Int? = null,
+    /** Failure detail for [BleSessionPhase.Error]; cleared on a new attempt or disconnect. */
+    val failure: BleFailure? = null,
+    /** Monotonic BLE connection generation for this device; invalidates stale callbacks across reconnects. */
+    val connectionGeneration: Long = 0L,
+    /** Read-only R1 single-shot BLE shutter state. */
+    val bleShutter: BleShutterState = BleShutterState(),
 ) {
     fun autoCorrectionSetting(setting: CameraAutoCorrectionSetting): CameraSettingState =
         when (setting) {
@@ -49,6 +58,35 @@ class CameraSessionRegistry {
 
     private val _sessions = MutableStateFlow<Map<String, CameraSession>>(emptyMap())
     val sessions: StateFlow<Map<String, CameraSession>> = _sessions
+
+    private val _failures = MutableStateFlow<Map<String, BleFailure>>(emptyMap())
+
+    /** Most recent terminal BLE failure per device, retained across disconnect until a new attempt or manual disconnect. */
+    val failures: StateFlow<Map<String, BleFailure>> = _failures.asStateFlow()
+
+    private val generations = mutableMapOf<String, Long>()
+
+    fun nextGeneration(identifier: String): Long {
+        val id = identifier.uppercase()
+        val next = (generations[id] ?: 0L) + 1L
+        generations[id] = next
+        return next
+    }
+
+    fun currentGeneration(identifier: String): Long = generations[identifier.uppercase()] ?: 0L
+
+    fun updateBleShutter(identifier: String, state: BleShutterState) {
+        updateIfPresent(identifier) { it.copy(bleShutter = state) }
+    }
+
+    fun recordFailure(identifier: String, failure: BleFailure) {
+        _failures.value = _failures.value + (identifier.uppercase() to failure)
+    }
+
+    fun clearFailure(identifier: String) {
+        val id = identifier.uppercase()
+        if (id in _failures.value) _failures.value = _failures.value - id
+    }
 
     /** Create-or-update. Only connection setup should create sessions. */
     fun upsert(identifier: String, transform: (CameraSession) -> CameraSession = { it }) {
@@ -82,6 +120,8 @@ class CameraSessionRegistry {
                 locationDisabledByCamera = false,
                 autoTimeCorrection = CameraSettingState(),
                 autoAreaAdjustment = CameraSettingState(),
+                failure = null,
+                bleShutter = BleShutterState(connectionGeneration = current.connectionGeneration),
             ))
         }
     }
@@ -100,6 +140,13 @@ class CameraSessionRegistry {
     }
 
     fun clear() {
+        _sessions.value = emptyMap()
+        _failures.value = emptyMap()
+        generations.clear()
+    }
+
+    /** Clears active sessions on service teardown while preserving failure reasons for the UI. */
+    fun clearSessions() {
         _sessions.value = emptyMap()
     }
 

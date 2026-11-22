@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,6 +46,8 @@ import cameragps.sharednew.generated.resources.m2_bluetooth_24px
 import cameragps.sharednew.generated.resources.m2_list_connected_syncing
 import cameragps.sharednew.generated.resources.m2_list_not_connected
 import cameragps.sharednew.generated.resources.m2_list_section_paired
+import cameragps.sharednew.generated.resources.m2_list_syncing_ago
+import cameragps.sharednew.generated.resources.q_battery_a11y
 import cameragps.sharednew.generated.resources.nearby_cameras
 import cameragps.sharednew.generated.resources.not_paired_tap_to_pair_again
 import cameragps.sharednew.generated.resources.q_list_info_a11y
@@ -62,12 +66,17 @@ import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconTile
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassSurface
+import com.sasch.cameragps.sharednew.ui.components.glass.InfoTag
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusDot
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusTone
+import com.sasch.cameragps.sharednew.ui.device.ageText
+import com.sasch.cameragps.sharednew.ui.device.relativeAge
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.sasch.cameragps.sharednew.ui.theme.AlphaType
+import kotlinx.coroutines.delay
+import kotlin.time.Clock
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -264,10 +273,20 @@ private fun DeviceCard(
                     isTransmissionActive -> stringResource(Res.string.transmission_active)
                     else -> stringResource(Res.string.transmission_inactive)
                 }
+                val now = rememberMinuteClock(
+                    enabled = (device.isConnected && item?.lastWriteAtMillis != null) || item?.freshBatteryPercent != null,
+                )
+                val writeAge = ageText(relativeAge(item?.lastWriteAtMillis, now))
                 val statusText = when {
+                    device.isConnected && writeAge != null ->
+                        stringResource(Res.string.m2_list_syncing_ago, writeAge)
+
                     device.isConnected -> stringResource(Res.string.m2_list_connected_syncing)
                     !device.isSaved -> stringResource(Res.string.tap_to_connect)
                     else -> stringResource(Res.string.m2_list_not_connected)
+                }
+                val batteryPercent = item?.freshBatteryPercent?.takeIf {
+                    item.batteryObtainedAtMillis == null || (now - item.batteryObtainedAtMillis) <= 30 * 60_000L
                 }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -281,7 +300,17 @@ private fun DeviceCard(
                         text = statusText,
                         style = AlphaType.Caption,
                         color = if (device.isConnected) colors.success else colors.textSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
                     )
+                    if (batteryPercent != null) {
+                        val batteryA11y = stringResource(Res.string.q_battery_a11y, "$batteryPercent%")
+                        InfoTag(
+                            text = "$batteryPercent%",
+                            modifier = Modifier.padding(start = 4.dp).semantics { contentDescription = batteryA11y },
+                        )
+                    }
                 }
                 if (!device.isPaired) {
                     Text(
@@ -315,6 +344,22 @@ private fun DeviceCard(
             }
         }
     }
+}
+
+/** Wall clock refreshed every 30 s while [enabled] (relative write age); static otherwise. */
+@Composable
+private fun rememberMinuteClock(enabled: Boolean): Long {
+    var now by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
+    LaunchedEffect(enabled) {
+        if (enabled) {
+            now = Clock.System.now().toEpochMilliseconds()
+            while (true) {
+                delay(30_000L)
+                now = Clock.System.now().toEpochMilliseconds()
+            }
+        }
+    }
+    return now
 }
 
 /** Tone of a device row's icon tile: a problem (unpaired / location off) wins over "connected". */

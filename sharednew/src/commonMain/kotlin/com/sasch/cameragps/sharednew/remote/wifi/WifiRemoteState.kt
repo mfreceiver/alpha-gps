@@ -1,5 +1,36 @@
 package com.sasch.cameragps.sharednew.remote.wifi
 
+import androidx.compose.ui.graphics.ImageBitmap
+
+/** Explicit purpose for a Wi-Fi session; prevents browse-only mode from locking out live view. */
+enum class WifiSessionPurpose {
+    Browse,
+    RemoteControl,
+}
+
+/** Latest decoded live-view frame paired with its raw JPEG bytes when available. */
+class WifiLiveViewFrame(
+    val image: ImageBitmap,
+    val jpegBytes: ByteArray? = null,
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is WifiLiveViewFrame) return false
+        if (image != other.image) return false
+        return when {
+            jpegBytes == null && other.jpegBytes == null -> true
+            jpegBytes != null && other.jpegBytes != null -> jpegBytes.contentEquals(other.jpegBytes)
+            else -> false
+        }
+    }
+
+    override fun hashCode(): Int {
+        var result = image.hashCode()
+        result = 31 * result + (jpegBytes?.contentHashCode() ?: 0)
+        return result
+    }
+}
+
 /** Connection and shooting state, independent of BLE location and BLE shutter availability. */
 enum class WifiRemotePhase {
     Idle,
@@ -78,18 +109,14 @@ data class WifiPhotoBrowserState(
     val loading: Boolean = false,
     val failed: Boolean = false,
     val photos: List<WifiCameraPhoto> = emptyList(),
-    val offset: Int = 0,
     val totalObjects: Int = 0,
-    val hasMore: Boolean = false,
     val savedDownloads: Set<WifiPhotoDownload> = emptySet(),
-    /** True once the card was enumerated by day (see [dates]); the flat paged browser leaves it false. */
-    val grouped: Boolean = false,
     /** Days of the enumerated card, newest first with the unknown-date group last. */
     val dates: List<DateGroup> = emptyList(),
-    /** Day whose captures [photos] pages through; null while the day list is what is shown. */
+    /** Day whose captures [photos] holds; null while the day list is what is shown. */
     val dateKey: String? = null,
     /**
-     * Bumps with every published page or day list. With [browserGeneration], [dateKey] and [offset] it
+     * Bumps with every published day or day list. With [browserGeneration] and [dateKey] it
      * identifies a view, so a late result of an earlier navigation cannot be mistaken for the current one.
      */
     val pageRevision: Long = 0,
@@ -98,8 +125,11 @@ data class WifiPhotoBrowserState(
 data class WifiRemoteState(
     val phase: WifiRemotePhase = WifiRemotePhase.Idle,
     val failure: WifiRemoteFailure? = null,
+    val purpose: WifiSessionPurpose = WifiSessionPurpose.Browse,
     val canCaptureStill: Boolean = false,
     val hasLiveView: Boolean = false,
+    val supportsLiveView: Boolean = false,
+    val liveViewPaused: Boolean = false,
     val cameraName: String = "",
     val capture: WifiCaptureStatus = WifiCaptureStatus.Idle,
     val preview: WifiPreviewStatus = WifiPreviewStatus.Waiting,
@@ -110,8 +140,19 @@ data class WifiRemoteState(
     val wifiShutdown: WifiShutdownStatus = WifiShutdownStatus.NotRequested,
     val manualNetwork: CameraWifiCredentials? = null,
 ) {
+    /** R2 control channel readiness, independent of live-view stream state. */
+    val isControlReady: Boolean get() = phase == WifiRemotePhase.Ready
+
+    /** R2 live-view stream readiness, independent of control channel & R3 parameter panel. */
+    val isLiveViewReady: Boolean
+        get() = phase == WifiRemotePhase.Ready &&
+            supportsLiveView &&
+            preview == WifiPreviewStatus.Streaming &&
+            !liveViewPaused
+
     init {
         require((phase == WifiRemotePhase.Failed) == (failure != null))
-        require(phase == WifiRemotePhase.Ready || (!canCaptureStill && !hasLiveView))
+        require(phase == WifiRemotePhase.Ready || (!canCaptureStill && !hasLiveView && !supportsLiveView))
+        require(phase == WifiRemotePhase.Ready || !liveViewPaused)
     }
 }

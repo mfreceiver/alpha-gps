@@ -57,6 +57,7 @@ import com.saschl.cameragps.service.coordinator.DeviceRemovalCoordinator
 import com.saschl.cameragps.service.getAssociatedDevices
 import com.saschl.cameragps.ui.EnhancedLocationPermissionBox
 import com.saschl.cameragps.ui.pairing.startDevicePresenceObservation
+import com.sasch.cameragps.sharednew.ui.help.GuideTopic
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
@@ -69,7 +70,7 @@ fun CameraDeviceManager(
     whatsNew: WhatsNewState? = null,
     startupPromptActive: Boolean = false,
     onSettingsClick: () -> Unit = {},
-    onTroubleshootingClick: () -> Unit = {}
+    onTroubleshootingClick: (GuideTopic?) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -291,6 +292,7 @@ fun CameraDeviceManager(
                                 deviceManager = deviceManager,
                                 associationId = it,
                         onDisassociate = disassociateDevice,
+                        onOpenTroubleshooting = onTroubleshootingClick,
                         onClose = {
                             selectedDeviceAddress = null
                             autoOpenDismissed = true
@@ -317,7 +319,7 @@ fun CameraDeviceManager(
                         label = stringResource(Res.string.guide_open_button),
                         onClick = {
                             dismissedPairingFailedAddress = failedAddress
-                            onTroubleshootingClick()
+                            onTroubleshootingClick(null)
                         },
                     ),
                     dismiss = DialogAction(

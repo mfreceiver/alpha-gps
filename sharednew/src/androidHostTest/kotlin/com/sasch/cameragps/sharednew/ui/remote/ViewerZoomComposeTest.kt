@@ -70,7 +70,7 @@ class ViewerZoomComposeTest {
                     ViewerBody(
                         WindowClass.Portrait, parts, drawer, FocusRequester(),
                         photo = { modifier ->
-                            ViewerPager(pager, listOf(capture), 0, WifiRemoteState(), { bitmap }, { false }, true, zoom, {}, modifier.testTag("photo"))
+                            ViewerPager(pager, listOf(capture), WifiRemoteState(), { bitmap }, { false }, true, zoom, modifier.testTag("photo"))
                         },
                         strip = { modifier -> ViewerInfoStripBar(info, parts.onOpenDetails, modifier.testTag("strip")) },
                         film = { modifier -> Box(modifier) },
@@ -99,7 +99,7 @@ class ViewerZoomComposeTest {
             val pager = rememberPagerState { 1 }
             CameraGpsTheme {
                 ViewerPager(
-                    pager, listOf(capture), 0, WifiRemoteState(), { bitmap }, { false }, true, zoom, {},
+                    pager, listOf(capture), WifiRemoteState(), { bitmap }, { false }, true, zoom,
                     Modifier.size(300.dp, height).onSizeChanged { viewport = Size(it.width.toFloat(), it.height.toFloat()) },
                 )
             }

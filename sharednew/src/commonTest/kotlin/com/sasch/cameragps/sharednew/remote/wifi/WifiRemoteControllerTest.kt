@@ -16,6 +16,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
@@ -71,28 +72,14 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         var failScreenPreview = false
         val unavailablePreviews = mutableSetOf<Long>()
         val failingPreviews = mutableSetOf<Long>()
-        val pageRequests = mutableListOf<Int>()
-        var pageGate: CompletableDeferred<Unit>? = null
-        var failPage = false
+        var dayGate: CompletableDeferred<Unit>? = null
+        var failDay = false
         val downloadedHandles = mutableListOf<Long>()
         val downloadedFormats = mutableListOf<WifiPhotoDownloadFormat>()
         var failBrowserExit = false
         val downloadResult = CompletableDeferred<WifiImageTransferState>()
         var downloadResults: Channel<WifiImageTransferState>? = null
         var afterDownload: (() -> Unit)? = null
-        override suspend fun openPhotoBrowser(): CameraPhotoPage {
-            browsing = true
-            cleanup += "browse"
-            return cameraPhotoPage(groupCameraPhotos(photos), 0)
-        }
-
-        override suspend fun photoPage(offset: Int): CameraPhotoPage {
-            pageRequests += offset
-            pageGate?.await()
-            check(!failPage)
-            return cameraPhotoPage(groupCameraPhotos(photos), offset)
-        }
-
         var catalogOpens = 0
         val dayRequests = mutableListOf<String>()
         var failCatalog = false
@@ -106,6 +93,8 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
 
         override suspend fun dayPhotos(dateKey: String): CameraPhotoPage {
             dayRequests += dateKey
+            dayGate?.await()
+            check(!failDay)
             return CatalogSnapshot.of(groupCameraPhotos(photos)).day(dateKey)
         }
 
@@ -201,8 +190,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         )
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         assertTrue(registry.get("camera")!!.wifiRemote.photoBrowser.open)
         return BackgroundFixture(controller, registry, connection)
     }
@@ -585,6 +573,9 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val (controller, _, connection) = backgroundFixture(Connection().apply {
             thumbnailHook = { awaitCancellation() }
         })
+        val rev = controller.sessions.value["CAMERA"]!!.wifiRemote.photoBrowser.pageRevision
+        controller.requestThumbnails("camera", rev, listOf("file:42"), emptyList())
+        runCurrent()
         assertEquals(listOf(42L), connection.thumbnailRequests)
         controller.onAppVisibilityChanged(false)
         runCurrent()
@@ -634,8 +625,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         controller.onAppVisibilityChanged(true)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         controller.downloadPhoto("camera", 43)
         runCurrent()
         controller.onAppVisibilityChanged(false)
@@ -683,8 +673,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         )
         controller.connectAutomatically("camera")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         controller.downloadPhoto("camera", 42)
         runCurrent()
         controller.onAppVisibilityChanged(false)
@@ -697,10 +686,23 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         assertEquals(1, releases)
     }
 
-    private val pageSize = SonyImageTransfer.PAGE_SIZE
+    private val pageSize = 60
+
+    private fun kotlinx.coroutines.test.TestScope.openFirstDay(
+        controller: WifiRemoteController,
+        id: String = "camera",
+    ) {
+        controller.browseDates(id)
+        runCurrent()
+        val dateKey = controller.sessions.value[id.uppercase()]?.wifiRemote?.photoBrowser?.dates?.firstOrNull()?.key
+        if (dateKey != null) {
+            controller.browseDate(id, dateKey)
+            runCurrent()
+        }
+    }
 
     private fun pagedConnection() = Connection().apply {
-        photos = (0 until SonyImageTransfer.PAGE_SIZE + 2).flatMap { index ->
+        photos = (0 until pageSize + 2).flatMap { index ->
             listOf(
                 WifiCameraPhoto(
                     index * 2L,
@@ -741,9 +743,9 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         controller.browseDates("camera")
         runCurrent()
         var browser = registry.get("camera")!!.wifiRemote.photoBrowser
-        assertTrue(browser.open && browser.grouped)
+        assertTrue(browser.open)
         assertFalse(browser.loading)
-        assertEquals(listOf(DateGroup("2024-05-02", 1), DateGroup("2024-05-01", 1)), browser.dates)
+        assertEquals(listOf(DateGroup("2024-05-02", 1, 3L), DateGroup("2024-05-01", 1, 2L)), browser.dates)
         assertEquals(2, browser.totalObjects)
         assertNull(browser.dateKey)
         assertTrue(browser.photos.isEmpty())
@@ -812,13 +814,11 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         browser = registry.get("camera")!!.wifiRemote.photoBrowser
         assertFalse(browser.failed)
         assertEquals(2, browser.dates.size)
-        controller.browsePhotos("camera")
+        controller.browseDate("camera", "2024-05-02")
         runCurrent()
         browser = registry.get("camera")!!.wifiRemote.photoBrowser
-        assertFalse(browser.grouped)
-        assertTrue(browser.dates.isEmpty())
-        assertNull(browser.dateKey)
-        assertEquals(3, browser.photos.size)
+        assertEquals("2024-05-02", browser.dateKey)
+        assertEquals(1, browser.photos.size)
         controller.closeAndJoin()
     }
 
@@ -859,7 +859,9 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
+        openFirstDay(controller)
+        val rev = controller.sessions.value["CAMERA"]!!.wifiRemote.photoBrowser.pageRevision
+        controller.requestThumbnails("camera", rev, listOf("photo:${pageSize - 2}"), emptyList())
         runCurrent()
         assertTrue(connection.screenPreviewRequests.isEmpty())
         val thumbnails = controller.thumbnails.value
@@ -892,8 +894,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         connection.unavailablePreviews += 0L
         val delayed = CompletableDeferred<Unit>()
         connection.screenPreviewGate = delayed
@@ -921,8 +922,8 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     }
 
     @Test
-    fun downloadCancelsPendingPreviewAndPageChangeClearsIt() = runTest {
-        val connection = pagedConnection()
+    fun downloadCancelsPendingPreviewAndDayChangeClearsIt() = runTest {
+        val connection = twoDayConnection()
         val controller = WifiRemoteController(
             backgroundScope,
             CameraSessionRegistry(),
@@ -932,7 +933,9 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
+        controller.browseDates("camera")
+        runCurrent()
+        controller.browseDate("camera", "2024-05-02")
         runCurrent()
         connection.screenPreviewGate = CompletableDeferred()
         model.openPhoto("photo:0")
@@ -949,12 +952,15 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         model.viewPhotoAt(1)
         runCurrent()
         assertEquals(2L, controller.photoPreview.value!!.handle)
-        model.viewPhotoAt(pageSize)
+        model.closePhoto()
+        controller.showDates("camera")
+        runCurrent()
+        controller.browseDate("camera", "2024-05-01")
         runCurrent()
         assertNull(controller.photoPreview.value)
-        model.viewPhotoAt(pageSize)
+        model.openPhoto("photo:2")
         runCurrent()
-        assertEquals(pageSize * 2L, controller.photoPreview.value!!.handle)
+        assertEquals(4L, controller.photoPreview.value!!.handle)
         controller.closeAndJoin()
     }
 
@@ -967,54 +973,31 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         model.openPhoto("photo:${pageSize - 2}")
         assertEquals(pageSize - 2, model.viewedPhotoIndex)
         model.viewPhotoAt(pageSize - 1)
         assertEquals(pageSize - 1, model.viewedPhotoIndex)
-        assertTrue(connection.pageRequests.isEmpty())
-        connection.pageGate = CompletableDeferred()
         model.viewPhotoAt(pageSize)
         runCurrent()
         assertEquals(pageSize, model.viewedPhotoIndex)
-        assertEquals(listOf(pageSize), connection.pageRequests)
-        assertEquals(0, registry.get("camera")!!.wifiRemote.photoBrowser.offset)
-        assertEquals(
-            pageSize, groupCameraPhotos(registry.get("camera")!!.wifiRemote.photoBrowser.photos).size,
-            "Keep the current page until its replacement arrives"
-        )
-        model.viewPhotoAt(pageSize)
-        assertEquals(listOf(pageSize), connection.pageRequests)
-        connection.pageGate!!.complete(Unit)
-        runCurrent()
-        assertEquals(pageSize, registry.get("camera")!!.wifiRemote.photoBrowser.offset)
-        assertEquals(
-            listOf("photo:$pageSize", "photo:${pageSize + 1}"),
-            groupCameraPhotos(registry.get("camera")!!.wifiRemote.photoBrowser.photos).map { it.id })
-        model.viewPhotoAt(pageSize + 1)
-        model.viewPhotoAt(pageSize + 2)
-        assertEquals(pageSize + 1, model.viewedPhotoIndex, "Stop at the end of the catalog")
-        assertEquals(listOf(pageSize), connection.pageRequests)
-        model.viewPhotoAt(pageSize)
-        model.viewPhotoAt(pageSize - 1)
-        runCurrent()
-        assertEquals(listOf(pageSize, 0), connection.pageRequests)
-        assertEquals(
-            (pageSize - 1) * 2L + 1, connection.thumbnailRequests.takeLast(pageSize).first(),
-            "Load the displayed photo first when entering the previous page at its end"
-        )
-        assertEquals(
-            pageSize - 1,
-            model.viewedPhotoIndex,
-            "Returning to the previous page selects its last capture"
-        )
-        assertEquals(0, registry.get("camera")!!.wifiRemote.photoBrowser.offset)
+        assertEquals(listOf(UNKNOWN_DATE_KEY), connection.dayRequests, "Viewing within a day makes no extra catalog request")
+        val lastIndex = groupCameraPhotos(registry.get("camera")!!.wifiRemote.photoBrowser.photos).lastIndex
+        model.viewPhotoAt(lastIndex)
+        model.viewPhotoAt(lastIndex + 1)
+        assertEquals(lastIndex, model.viewedPhotoIndex, "Stop at the end of the day")
+        model.viewPhotoAt(0)
+        model.viewPhotoAt(-1)
+        assertEquals(0, model.viewedPhotoIndex, "Stop at the start of the day")
         model.navigateBack { error("Viewer must return to grid") }
         assertNull(model.viewedPhotoIndex)
         assertTrue(registry.get("camera")!!.wifiRemote.photoBrowser.open)
+        assertEquals(UNKNOWN_DATE_KEY, registry.get("camera")!!.wifiRemote.photoBrowser.dateKey)
         assertEquals(1, connection.previewStarts)
-        model.navigateBack { error("Grid must return to live view") }
+        model.navigateBack { error("Grid must return to day list") }
+        runCurrent()
+        assertNull(registry.get("camera")!!.wifiRemote.photoBrowser.dateKey)
+        model.navigateBack { error("Day list must return to live view") }
         runCurrent()
         assertFalse(registry.get("camera")!!.wifiRemote.photoBrowser.open)
         assertEquals(2, connection.previewStarts)
@@ -1022,119 +1005,130 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     }
 
     @Test
-    fun failedViewerPageRetainsCurrentPhotosAndCanBeRetried() = runTest {
+    fun failedDayLoadCanBeRetriedAndKeepsDayList() = runTest {
         val registry = CameraSessionRegistry()
-        val connection = pagedConnection()
+        val connection = datedConnection()
         val controller =
             WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
-        val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
+        controller.browseDates("camera")
         runCurrent()
-        val originalPage = registry.get("camera")!!.wifiRemote.photoBrowser.photos
-        model.openPhoto("photo:${pageSize - 1}")
-        connection.failPage = true
-        model.viewPhotoAt(pageSize)
+        connection.failDay = true
+        controller.browseDate("camera", "2024-05-02")
         runCurrent()
         val failed = registry.get("camera")!!.wifiRemote.photoBrowser
         assertTrue(failed.failed)
         assertFalse(failed.loading)
-        assertEquals(originalPage, failed.photos)
-        assertEquals(0, failed.offset)
-        assertEquals(pageSize, model.viewedPhotoIndex)
-        connection.failPage = false
-        model.viewPhotoAt(pageSize)
+        assertNull(failed.dateKey)
+        connection.failDay = false
+        controller.browseDate("camera", "2024-05-02")
         runCurrent()
-        assertEquals(listOf(pageSize, pageSize), connection.pageRequests)
-        assertEquals(pageSize, registry.get("camera")!!.wifiRemote.photoBrowser.offset)
-        assertFalse(registry.get("camera")!!.wifiRemote.photoBrowser.failed)
+        val recovered = registry.get("camera")!!.wifiRemote.photoBrowser
+        assertEquals("2024-05-02", recovered.dateKey)
+        assertFalse(recovered.failed)
+        assertEquals(listOf("2024-05-02", "2024-05-02"), connection.dayRequests)
         controller.closeAndJoin()
-        model.reconcilePhotoSelection()
-        assertNull(model.viewedPhotoIndex)
     }
 
     @Test
-    fun viewerDoesNotTurnPagesDuringDownloadAndSelectionTapsDoNotOpenIt() = runTest {
+    fun viewerNavigatesDuringDownloadAndSelectionTapsDoNotOpenIt() = runTest {
         val registry = CameraSessionRegistry()
-        val connection = pagedConnection()
+        val connection = datedConnection()
         val controller =
             WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
+        controller.browseDates("camera")
         runCurrent()
-        model.togglePhotoSelection("photo:0")
-        model.openPhoto("photo:0")
+        controller.browseDate("camera", "2024-05-02")
+        runCurrent()
+        model.togglePhotoSelection("b")
+        model.openPhoto("b")
         assertNull(model.viewedPhotoIndex)
         model.clearPhotoSelection()
-        model.openPhoto("photo:0")
+        model.openPhoto("b")
         model.viewPhotoAt(-1)
         assertEquals(0, model.viewedPhotoIndex)
-        controller.downloadPhoto("camera", 0)
+        controller.downloadPhoto("camera", 3)
         runCurrent()
-        model.viewPhotoAt(pageSize - 1)
-        assertEquals(
-            pageSize - 1,
-            model.viewedPhotoIndex,
-            "Viewing loaded photos remains available during download"
-        )
-        model.viewPhotoAt(pageSize)
-        assertEquals(pageSize - 1, model.viewedPhotoIndex)
-        assertTrue(connection.pageRequests.isEmpty())
+        model.viewPhotoAt(0)
+        assertEquals(0, model.viewedPhotoIndex, "Viewing loaded photos remains available during download")
+        model.viewPhotoAt(1)
+        assertEquals(0, model.viewedPhotoIndex, "Stops at the end of the day")
         controller.cancelPhotoOperation("camera")
         runCurrent()
-        connection.pageGate = CompletableDeferred()
-        model.viewPhotoAt(pageSize)
+        model.closePhoto()
+        controller.showDates("camera")
         runCurrent()
-        model.navigateBack { error("Viewer must return to grid while a page loads") }
-        assertNull(model.viewedPhotoIndex)
-        connection.pageGate!!.complete(Unit)
+        connection.dayGate = CompletableDeferred()
+        controller.browseDate("camera", "2024-05-01")
         runCurrent()
-        model.reconcilePhotoSelection()
-        assertNull(model.viewedPhotoIndex, "Completing a page load must not reopen the viewer")
-        assertEquals(pageSize, registry.get("camera")!!.wifiRemote.photoBrowser.offset)
+        assertTrue(registry.get("camera")!!.wifiRemote.photoBrowser.loading)
+        model.previewPhoto("a")
+        assertNull(model.viewedPhotoIndex, "previewPhoto must be refused while a day loads")
+        connection.dayGate!!.complete(Unit)
+        runCurrent()
+        assertNull(model.viewedPhotoIndex, "Completing a day load must not reopen the viewer")
+        assertEquals("2024-05-01", registry.get("camera")!!.wifiRemote.photoBrowser.dateKey)
         controller.closeAndJoin()
     }
 
+    private fun twoDayConnection() = Connection().apply {
+        photos = listOf(
+            WifiCameraPhoto(0L, "0.JPG", 100, "image/jpeg", "20240502T100000", captureId = "photo:0"),
+            WifiCameraPhoto(1L, "0.ARW", 100, "image/x-sony-arw", "20240502T100000", captureId = "photo:0"),
+            WifiCameraPhoto(2L, "1.JPG", 100, "image/jpeg", "20240502T090000", captureId = "photo:1"),
+            WifiCameraPhoto(3L, "1.ARW", 100, "image/x-sony-arw", "20240502T090000", captureId = "photo:1"),
+            WifiCameraPhoto(4L, "2.JPG", 100, "image/jpeg", "20240501T100000", captureId = "photo:2"),
+            WifiCameraPhoto(5L, "2.ARW", 100, "image/x-sony-arw", "20240501T100000", captureId = "photo:2"),
+            WifiCameraPhoto(6L, "3.JPG", 100, "image/jpeg", "20240501T090000", captureId = "photo:3"),
+            WifiCameraPhoto(7L, "3.ARW", 100, "image/x-sony-arw", "20240501T090000", captureId = "photo:3"),
+        )
+    }
+
     @Test
-    fun previewKeepsSelectionAndModeAcrossPagesAndViewerCanToggleThePhoto() = runTest {
+    fun previewKeepsSelectionAndModeAcrossDaysAndViewerCanToggleThePhoto() = runTest {
         val registry = CameraSessionRegistry()
-        val connection = pagedConnection()
+        val connection = twoDayConnection()
         val controller =
             WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
+        controller.browseDates("camera")
         runCurrent()
-        // Cross-page selection: one capture on page 1, one on page 2.
+        controller.browseDate("camera", "2024-05-02")
+        runCurrent()
+        // Cross-day selection: one capture on 2024-05-02, one on 2024-05-01.
         model.togglePhotoSelection("photo:0")
-        controller.browsePhotos("camera", pageSize)
+        controller.showDates("camera")
+        runCurrent()
+        controller.browseDate("camera", "2024-05-01")
         runCurrent()
         model.reconcilePhotoSelection()
-        model.togglePhotoSelection("photo:$pageSize")
+        model.togglePhotoSelection("photo:2")
         val selection = model.selectedPhotoIds.toList()
-        assertEquals(listOf("photo:0", "photo:$pageSize"), selection)
+        assertEquals(listOf("photo:0", "photo:2"), selection)
 
         // Tap-to-open stays guarded by selection mode; the magnifier entry is not.
-        model.openPhoto("photo:${pageSize + 1}")
+        model.openPhoto("photo:3")
         assertNull(model.viewedPhotoIndex)
-        model.previewPhoto("photo:${pageSize + 1}")
-        assertEquals(pageSize + 1, model.viewedPhotoIndex)
+        model.previewPhoto("photo:3")
+        assertEquals(1, model.viewedPhotoIndex)
         assertEquals(selection, model.selectedPhotoIds.toList(), "Opening a preview must not touch the selection")
 
         // The viewer toggles the photo it shows; the selection mode survives either way.
-        model.togglePhotoSelection("photo:${pageSize + 1}")
-        assertEquals(selection + "photo:${pageSize + 1}", model.selectedPhotoIds.toList())
-        model.togglePhotoSelection("photo:${pageSize + 1}")
+        model.togglePhotoSelection("photo:3")
+        assertEquals(selection + "photo:3", model.selectedPhotoIds.toList())
+        model.togglePhotoSelection("photo:3")
         assertEquals(selection, model.selectedPhotoIds.toList())
-        model.togglePhotoSelection("photo:$pageSize") // deselect the first page-2 capture
+        model.togglePhotoSelection("photo:2") // deselect the first 2024-05-01 capture
         assertEquals(listOf("photo:0"), model.selectedPhotoIds.toList())
-        // Swiping to a neighbour on the same page is unchanged and keeps the selection.
-        model.viewPhotoAt(pageSize)
-        assertEquals(pageSize, model.viewedPhotoIndex)
+        // Swiping to a neighbour on the same day is unchanged and keeps the selection.
+        model.viewPhotoAt(0)
+        assertEquals(0, model.viewedPhotoIndex)
         assertEquals(listOf("photo:0"), model.selectedPhotoIds.toList())
 
         // Closing returns to the grid with selection (and thereby selection mode) intact.
@@ -1153,8 +1147,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         // A refresh still invalidates the selection even if a preview happened in between.
         model.previewPhoto("photo:$pageSize")
         model.closePhoto()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         model.reconcilePhotoSelection()
         assertTrue(model.selectedPhotoIds.isEmpty())
         controller.closeAndJoin()
@@ -1168,8 +1161,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         val summary = WifiBatchSummary(3, mapOf(WifiSkipReason.NoJpeg to 1))
         model.togglePhotoSelection("photo:0")
         model.recordBatchSummary(summary)
@@ -1192,8 +1184,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         model.togglePhotoSelection("photo:0")
         model.togglePhotoSelection("photo:1")
         // Real batch flow: record the plan's summary, then actually download it.
@@ -1234,8 +1225,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         // Batch A (one file) runs to completion and latches.
         model.togglePhotoSelection("photo:0")
         model.recordBatchSummary(WifiBatchSummary(1, emptyMap()))
@@ -1305,8 +1295,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         // A one-file batch for photo:0 fails.
         model.togglePhotoSelection("photo:0")
         model.recordBatchSummary(WifiBatchSummary(1, emptyMap()))
@@ -1345,8 +1334,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         // Batch A completes and latches.
         model.togglePhotoSelection("photo:0")
         model.recordBatchSummary(WifiBatchSummary(1, emptyMap()))
@@ -1378,8 +1366,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         fun state() = registry.get("camera")!!.wifiRemote
         val download: (List<WifiPhotoDownload>) -> Unit = { controller.downloadPhotos("camera", it) }
         // JpegOnly batch A (two JPGs) runs to completion and latches.
@@ -1433,8 +1420,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         fun state() = registry.get("camera")!!.wifiRemote
         val download: (List<WifiPhotoDownload>) -> Unit = { controller.downloadPhotos("camera", it) }
         // A one-file JpegOnly batch A fails.
@@ -1471,8 +1457,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         model.togglePhotoSelection("photo:0")
         val summary = WifiBatchSummary(3, mapOf(WifiSkipReason.NoJpeg to 1))
         model.recordBatchSummary(summary)
@@ -1499,26 +1484,26 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     }
 
     @Test
-    fun previewIsRefusedWhileAPageLoadIsInFlight() = runTest {
+    fun previewIsRefusedWhileADayLoadIsInFlight() = runTest {
         val registry = CameraSessionRegistry()
-        val connection = pagedConnection()
-        connection.pageGate = CompletableDeferred()
+        val connection = twoDayConnection()
         val controller =
             WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
+        controller.browseDates("camera")
         runCurrent()
-        controller.browsePhotos("camera", pageSize)
+        connection.dayGate = CompletableDeferred()
+        controller.browseDate("camera", "2024-05-01")
         runCurrent()
         assertTrue(registry.get("camera")!!.wifiRemote.photoBrowser.loading)
-        model.previewPhoto("photo:0")
-        assertNull(model.viewedPhotoIndex, "previewPhoto must be refused while the page loads")
-        connection.pageGate!!.complete(Unit)
+        model.previewPhoto("photo:2")
+        assertNull(model.viewedPhotoIndex, "previewPhoto must be refused while the day loads")
+        connection.dayGate!!.complete(Unit)
         runCurrent()
-        model.previewPhoto("photo:$pageSize")
-        assertEquals(pageSize, model.viewedPhotoIndex)
+        model.previewPhoto("photo:2")
+        assertEquals(0, model.viewedPhotoIndex)
         controller.closeAndJoin()
     }
 
@@ -1737,8 +1722,13 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val close = { exits++; controller.disconnect("camera") }
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
+        openFirstDay(controller)
+
+        // Day grid -> day list -> leave browser (resume live view) -> close screen.
+        model.navigateBack(close)
         runCurrent()
+        assertNull(registry.get("camera")!!.wifiRemote.photoBrowser.dateKey)
+        assertTrue(registry.get("camera")!!.wifiRemote.photoBrowser.open)
 
         model.navigateBack(close)
         runCurrent()
@@ -1763,8 +1753,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         controller.downloadPhoto("camera", 42L)
         runCurrent()
 
@@ -1772,11 +1761,15 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         runCurrent()
 
         assertTrue(registry.get("camera")!!.wifiRemote.photoBrowser.open)
+        assertEquals(UNKNOWN_DATE_KEY, registry.get("camera")!!.wifiRemote.photoBrowser.dateKey)
         assertTrue(registry.get("camera")!!.wifiRemote.imageTransfer.busy)
         assertFalse("connection" in connection.cleanup)
         controller.cancelPhotoOperation("camera")
         runCurrent()
-        model.navigateBack { error("Gallery must return to live view") }
+        model.navigateBack { error("Grid must return to day list") }
+        runCurrent()
+        assertNull(registry.get("camera")!!.wifiRemote.photoBrowser.dateKey)
+        model.navigateBack { error("Day list must return to live view") }
         runCurrent()
         assertFalse(registry.get("camera")!!.wifiRemote.photoBrowser.open)
         assertEquals(2, connection.previewStarts)
@@ -2009,7 +2002,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
+        openFirstDay(controller)
         controller.capture("camera")
         runCurrent()
         assertEquals(listOf("preview", "browse"), connection.cleanup)
@@ -2050,8 +2043,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         model.openPhoto("photo:0")
         controller.downloadPhoto("camera", 0L)
         runCurrent()
@@ -2107,8 +2099,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             val model = WifiRemoteViewModel("camera", controller)
             controller.connect("camera", "127.0.0.1")
             runCurrent()
-            controller.browsePhotos("camera")
-            runCurrent()
+            openFirstDay(controller)
             controller.downloadPhoto("camera", 42L, format)
             runCurrent()
             val progress = registry.get("camera")!!.wifiRemote.imageTransfer
@@ -2148,7 +2139,9 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
+        openFirstDay(controller)
+        val rev = registry.get("camera")!!.wifiRemote.photoBrowser.pageRevision
+        controller.requestThumbnails("camera", rev, listOf("one", "two", "three"), emptyList())
         runCurrent()
         assertEquals(listOf(43L, 45L, 46L), connection.thumbnailRequests)
             controller.showPhotoPreview("camera", 42L)
@@ -2187,7 +2180,9 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             val model = WifiRemoteViewModel("camera", controller)
             controller.connect("camera", "127.0.0.1")
             runCurrent()
-            controller.browsePhotos("camera")
+            openFirstDay(controller)
+            val rev = controller.sessions.value["CAMERA"]!!.wifiRemote.photoBrowser.pageRevision
+            controller.requestThumbnails("camera", rev, listOf("one"), emptyList())
             runCurrent()
             assertEquals(listOf(43L), connection.thumbnailRequests)
             val thumbnails = controller.thumbnails.value
@@ -2218,7 +2213,9 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
+        openFirstDay(controller)
+        val rev = registry.get("camera")!!.wifiRemote.photoBrowser.pageRevision
+        controller.requestThumbnails("camera", rev, listOf("one"), emptyList())
         runCurrent()
         controller.showPhotoPreview("camera", 42L)
         runCurrent()
@@ -2248,8 +2245,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         controller.downloadPhoto("camera", 43, WifiPhotoDownloadFormat.Jpeg)
         assertEquals(0, connection.downloads)
         controller.downloadPhoto("camera", 42, WifiPhotoDownloadFormat.Jpeg)
@@ -2267,8 +2263,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         connection.canConvertHeif = false
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         controller.downloadPhoto("camera", 42, WifiPhotoDownloadFormat.Jpeg)
         runCurrent()
         assertEquals(2, connection.downloads)
@@ -2300,8 +2295,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         val batch = listOf(
             WifiPhotoDownload(43),
             WifiPhotoDownload(42, WifiPhotoDownloadFormat.Jpeg),
@@ -2353,8 +2347,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         val batch = listOf(WifiPhotoDownload(42), WifiPhotoDownload(43), WifiPhotoDownload(44))
         controller.downloadPhotos("camera", batch)
         runCurrent()
@@ -2390,8 +2383,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         connection.afterDownload = { controller.cancelPhotoOperation("camera") }
         controller.downloadPhotos("camera", listOf(WifiPhotoDownload(42), WifiPhotoDownload(43)))
         runCurrent()
@@ -2413,8 +2405,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         controller.downloadPhotos(
             "camera", listOf(
                 WifiPhotoDownload(43),
@@ -2447,8 +2438,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         assertTrue(model.selectedPhotoIds.isEmpty())
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         model.togglePhotoSelection("one")
         model.togglePhotoSelection("two")
         model.togglePhotoSelection("missing")
@@ -2473,8 +2463,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         assertEquals(setOf("two"), model.selectedPhotoIds, "Paging away must keep selection")
         registry.updateWifiRemote("camera", current)
         // A catalog refresh bumps the browser generation and invalidates the selection.
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         model.reconcilePhotoSelection()
         assertTrue(model.selectedPhotoIds.isEmpty(), "Refreshed catalog invalidates selection")
         listOf("one", "two", "file:45").forEach(model::togglePhotoSelection)
@@ -2486,11 +2475,12 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         controller.cancelPhotoOperation("camera")
         runCurrent()
         model.navigateBack { error("Selection must not exit remote shooting") }
+        assertTrue(model.confirmClearSelectionBack)
+        model.confirmClearSelectionAndBack()
+        runCurrent()
         assertTrue(model.selectedPhotoIds.isEmpty())
         assertTrue(registry.get("camera")!!.wifiRemote.photoBrowser.open)
-        model.togglePhotoSelection("one")
-        model.togglePhotoSelection("one")
-        assertTrue(model.selectedPhotoIds.isEmpty())
+        assertNull(registry.get("camera")!!.wifiRemote.photoBrowser.dateKey)
         model.navigateBack { error("Gallery must return to live view") }
         runCurrent()
         assertFalse(registry.get("camera")!!.wifiRemote.photoBrowser.open)
@@ -2498,9 +2488,9 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     }
 
     @Test
-    fun crossPageSelectionDownloadsOneUnifiedBatch() = runTest {
+    fun crossDaySelectionDownloadsOneUnifiedBatch() = runTest {
         val registry = CameraSessionRegistry()
-        val connection = pagedConnection().apply {
+        val connection = twoDayConnection().apply {
             downloadResults = Channel(Channel.UNLIMITED)
             // Unified batch (6 Saved), partial-failure retry run (Saved, Failed), and
             // the one remaining retry item.
@@ -2512,65 +2502,72 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val controller =
             WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         val model = WifiRemoteViewModel("camera", controller)
-        val page2 = pageSize * 2L // first JPG handle on the second page
+        val day2First = 4L // first JPG handle on 2024-05-01 (photo:2)
         // The download request must be derived from the selection, never hand-picked.
         fun selectedBatch() = model.selectedPhotos.values
             .flatMap { capture -> capture.files.map { WifiPhotoDownload(it.handle) } }
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
+        controller.browseDates("camera")
         runCurrent()
-        // Select on page 1…
+        controller.browseDate("camera", "2024-05-02")
+        runCurrent()
+        // Select on day 1…
         model.togglePhotoSelection("photo:0")
         assertEquals(setOf("photo:0"), model.selectedPhotoIds)
-        // …page to page 2, the selection survives…
-        controller.browsePhotos("camera", SonyImageTransfer.PAGE_SIZE)
+        // …switch to day 2, the selection survives…
+        controller.showDates("camera")
+        runCurrent()
+        controller.browseDate("camera", "2024-05-01")
         runCurrent()
         model.reconcilePhotoSelection()
-        assertEquals(setOf("photo:0"), model.selectedPhotoIds, "Paging must keep selections")
-        // …select on page 2, union with the other page…
-        model.togglePhotoSelection("photo:$pageSize")
-        model.togglePhotoSelection("photo:${pageSize + 1}")
+        assertEquals(setOf("photo:0"), model.selectedPhotoIds, "Switching days must keep selections")
+        // …select on day 2, union with the other day…
+        model.togglePhotoSelection("photo:2")
+        model.togglePhotoSelection("photo:3")
         assertEquals(
-            setOf("photo:0", "photo:$pageSize", "photo:${pageSize + 1}"),
+            setOf("photo:0", "photo:2", "photo:3"),
             model.selectedPhotoIds,
-            "Selections on the current view union with selections made elsewhere"
+            "Selections on the current day union with selections made on other days"
         )
-        // …deselecting on the current page keeps other pages selected.
-        model.togglePhotoSelection("photo:$pageSize")
-        assertFalse("photo:$pageSize" in model.selectedPhotoIds)
+        // …deselecting on the current day keeps other days selected.
+        model.togglePhotoSelection("photo:2")
+        assertFalse("photo:2" in model.selectedPhotoIds)
         assertTrue("photo:0" in model.selectedPhotoIds)
-        model.togglePhotoSelection("photo:$pageSize")
-        // Return to page 1 and download the mixed JPG+ARW batch from both pages at once.
-        controller.browsePhotos("camera", 0)
+        model.togglePhotoSelection("photo:2")
+        // Return to day 1 and download the mixed JPG+ARW batch from both days at once.
+        controller.showDates("camera")
+        runCurrent()
+        controller.browseDate("camera", "2024-05-02")
         runCurrent()
         model.reconcilePhotoSelection()
-        assertTrue("photo:0" in model.selectedPhotoIds && "photo:$pageSize" in model.selectedPhotoIds)
+        assertTrue("photo:0" in model.selectedPhotoIds && "photo:2" in model.selectedPhotoIds)
         val batch = selectedBatch()
-        // Insertion order: photo:0, then photo:pageSize + 1, then photo:pageSize
-        // (toggled off/on re-appends at the end).
+        // Insertion order: photo:0, then photo:3, then photo:2 (toggled off/on re-appends at the end).
         assertEquals(
-            listOf(0L, 1L, page2 + 2, page2 + 3, page2, page2 + 1),
+            listOf(0L, 1L, day2First + 2, day2First + 3, day2First, day2First + 1),
             batch.map { it.handle },
-            "The download batch mirrors the selection's insertion order across pages"
+            "The download batch mirrors the selection's insertion order across days"
         )
         controller.downloadPhotos("camera", batch)
         runCurrent()
         assertEquals(
-            listOf(0L, 1L, page2 + 2, page2 + 3, page2, page2 + 1),
+            listOf(0L, 1L, day2First + 2, day2First + 3, day2First, day2First + 1),
             connection.downloadedHandles,
-            "Batch downloads files from every selected page, not just the visible one"
+            "Batch downloads files from every selected day, not just the visible one"
         )
         assertEquals(
             setOf(
                 WifiPhotoDownload(0L), WifiPhotoDownload(1L),
-                WifiPhotoDownload(page2), WifiPhotoDownload(page2 + 1),
-                WifiPhotoDownload(page2 + 2), WifiPhotoDownload(page2 + 3)
+                WifiPhotoDownload(day2First), WifiPhotoDownload(day2First + 1),
+                WifiPhotoDownload(day2First + 2), WifiPhotoDownload(day2First + 3)
             ),
             registry.get("camera")!!.wifiRemote.photoBrowser.savedDownloads
         )
         // A refresh starts a new generation: saved markers and selections are invalidated…
-        controller.browsePhotos("camera")
+        controller.browseDates("camera")
+        runCurrent()
+        controller.browseDate("camera", "2024-05-02")
         runCurrent()
         model.reconcilePhotoSelection()
         assertTrue(model.selectedPhotoIds.isEmpty(), "Refreshed catalog invalidates selection")
@@ -2580,12 +2577,11 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             WifiImageTransferStatus.Idle,
             registry.get("camera")!!.wifiRemote.imageTransfer.status
         )
-        // …and stale page-2 handles that fell out of the refreshed catalog cannot be
-        // submitted: the request is dropped instead of downloading.
-        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(page2 + 2), WifiPhotoDownload(page2 + 3)))
+        // …and stale day-2 handles from the older catalog cannot be submitted.
+        controller.downloadPhotos("camera", listOf(WifiPhotoDownload(day2First + 2), WifiPhotoDownload(day2First + 3)))
         runCurrent()
         assertEquals(
-            listOf(0L, 1L, page2 + 2, page2 + 3, page2, page2 + 1),
+            listOf(0L, 1L, day2First + 2, day2First + 3, day2First, day2First + 1),
             connection.downloadedHandles,
             "Stale handles from an older catalog generation must not download"
         )
@@ -2595,17 +2591,19 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             "A dropped stale request must not even start a transfer"
         )
         // A partial failure stops the batch and marks only the finished files as saved…
-        controller.browsePhotos("camera", SonyImageTransfer.PAGE_SIZE)
+        controller.showDates("camera")
+        runCurrent()
+        controller.browseDate("camera", "2024-05-01")
         runCurrent()
         model.reconcilePhotoSelection()
         model.clearPhotoSelection()
-        model.togglePhotoSelection("photo:$pageSize")
+        model.togglePhotoSelection("photo:2")
         val retryBatch = selectedBatch()
-        assertEquals(listOf(page2, page2 + 1), retryBatch.map { it.handle })
+        assertEquals(listOf(day2First, day2First + 1), retryBatch.map { it.handle })
         controller.downloadPhotos("camera", retryBatch)
         runCurrent()
         assertEquals(
-            listOf(0L, 1L, page2 + 2, page2 + 3, page2, page2 + 1, page2, page2 + 1),
+            listOf(0L, 1L, day2First + 2, day2First + 3, day2First, day2First + 1, day2First, day2First + 1),
             connection.downloadedHandles,
             "A failing download is attempted but not recorded as saved"
         )
@@ -2614,7 +2612,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             registry.get("camera")!!.wifiRemote.imageTransfer.status
         )
         assertEquals(
-            setOf(WifiPhotoDownload(page2)),
+            setOf(WifiPhotoDownload(day2First)),
             registry.get("camera")!!.wifiRemote.photoBrowser.savedDownloads,
             "Only the item that finished before the failure is marked saved"
         )
@@ -2622,12 +2620,12 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         controller.downloadPhotos("camera", retryBatch)
         runCurrent()
         assertEquals(
-            listOf(0L, 1L, page2 + 2, page2 + 3, page2, page2 + 1, page2, page2 + 1, page2 + 1),
+            listOf(0L, 1L, day2First + 2, day2First + 3, day2First, day2First + 1, day2First, day2First + 1, day2First + 1),
             connection.downloadedHandles,
             "Retrying the batch re-downloads only the failed item"
         )
         assertEquals(
-            setOf(WifiPhotoDownload(page2), WifiPhotoDownload(page2 + 1)),
+            setOf(WifiPhotoDownload(day2First), WifiPhotoDownload(day2First + 1)),
             registry.get("camera")!!.wifiRemote.photoBrowser.savedDownloads
         )
         controller.closeAndJoin()
@@ -2644,8 +2642,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             {})
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         controller.downloadPhoto("camera", 42L)
         runCurrent()
         controller.closeAndJoin()
@@ -2664,8 +2661,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         controller.downloadPhoto("camera", 42L)
         runCurrent()
         controller.cancelPhotoOperation("camera")
@@ -2713,7 +2709,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         // the caller (device page) instead of stranding the user on a live-view-less
         // Ready screen or an intermediate "connect" page.
         var exits = 0
-        controller.browsePhotos("camera")
+        controller.browseDates("camera")
         runCurrent()
         model.maybeAutoEnterBrowser()
         try {
@@ -2791,7 +2787,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller).apply { browseOnly = false }
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
+        controller.browseDates("camera")
         runCurrent()
         assertTrue(registry.get("camera")!!.wifiRemote.photoBrowser.open)
         // Outside browse-only, Back leaves the photo browser and keeps the
@@ -2830,8 +2826,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         controller.downloadPhotos("camera", listOf(WifiPhotoDownload(0)))
         // A refreshed photo list bumps the generation while the batch is queued.
         registry.updateWifiRemote(
@@ -2859,8 +2854,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         controller.downloadPhotos("camera", listOf(WifiPhotoDownload(0)))
         runCurrent()
         val transfer = registry.get("camera")!!.wifiRemote.imageTransfer
@@ -2878,8 +2872,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         controller.downloadPhotos("camera", listOf(WifiPhotoDownload(0), WifiPhotoDownload(2)))
         runCurrent()
         val state = registry.get("camera")!!.wifiRemote
@@ -2910,8 +2903,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
             WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         controller.downloadPhotos("camera", listOf(WifiPhotoDownload(0), WifiPhotoDownload(2)))
         runCurrent()
         val transfer = registry.get("camera")!!.wifiRemote.imageTransfer
@@ -2939,8 +2931,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         model.togglePhotoSelection("photo:0")
         model.togglePhotoSelection("photo:1")
         val state = registry.get("camera")!!.wifiRemote
@@ -2964,8 +2955,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         model.togglePhotoSelection("photo:0")
         model.togglePhotoSelection("photo:1")
         val state = registry.get("camera")!!.wifiRemote
@@ -2991,8 +2981,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         val state = registry.get("camera")!!.wifiRemote
         var started = 0
 
@@ -3013,8 +3002,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         model.togglePhotoSelection("photo:0")
         var exits = 0
 
@@ -3044,12 +3032,16 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         val browser = registry.get("camera")!!.wifiRemote.photoBrowser
-        assertFalse(browser.loading, "the grid is usable as soon as the catalog page is in")
+        assertFalse(browser.loading, "the grid is usable as soon as the day is in")
         assertFalse(browser.failed)
-        assertEquals(pageSize, groupCameraPhotos(browser.photos).size)
+        assertEquals(pageSize + 2, groupCameraPhotos(browser.photos).size)
+        controller.requestThumbnails(
+            "camera", browser.pageRevision,
+            (0 until pageSize).map { "photo:$it" }, emptyList(),
+        )
+        runCurrent()
         assertEquals(
             THUMBNAIL_BATCH_SIZE, controller.thumbnails.value.size,
             "the first batch is already on screen while the second is still being fetched"
@@ -3063,33 +3055,6 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     }
 
     @Test
-    fun gridPositionDecidesWhichBatchIsFetchedNext() = runTest {
-        val connection = pagedConnection()
-        connection.thumbnailImage = PreviewBitmap(160, 120)
-        val stall = CompletableDeferred<Unit>()
-        connection.thumbnailHook = { handle ->
-            if (handle == thumbHandle(THUMBNAIL_BATCH_SIZE)) stall.await()
-        }
-        val controller = WifiRemoteController(
-            backgroundScope, CameraSessionRegistry(), { _, _ -> connection }, {}, {})
-        controller.connect("camera", "127.0.0.1")
-        runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
-        controller.focusThumbnails("camera", 40) // user scrolled down while batch 2 was in flight
-        stall.complete(Unit)
-        runCurrent()
-        // Batch 2 (12..23) was already chosen and finishes; the batch chosen after the scroll starts at 40.
-        val rest = connection.thumbnailRequests.drop(THUMBNAIL_BATCH_SIZE + 1)
-        assertEquals((THUMBNAIL_BATCH_SIZE + 1 until 2 * THUMBNAIL_BATCH_SIZE).map(::thumbHandle),
-            rest.take(THUMBNAIL_BATCH_SIZE - 1))
-        assertEquals((40 until 40 + THUMBNAIL_BATCH_SIZE).map(::thumbHandle),
-            rest.drop(THUMBNAIL_BATCH_SIZE - 1).take(THUMBNAIL_BATCH_SIZE))
-        assertEquals(pageSize, controller.thumbnails.value.size, "the skipped ones are filled in afterwards")
-        controller.closeAndJoin()
-    }
-
-    @Test
     fun aFailedOrMissingThumbnailOnlyAffectsItself() = runTest {
         val connection = pagedConnection()
         connection.thumbnailImage = PreviewBitmap(160, 120)
@@ -3099,40 +3064,51 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
+        openFirstDay(controller)
+        val rev = registry.get("camera")!!.wifiRemote.photoBrowser.pageRevision
+        controller.requestThumbnails("camera", rev, (0 until pageSize).map { "photo:$it" }, emptyList())
         runCurrent()
         val expected = (0 until pageSize).filter { it != 3 && it != 5 }.map(::thumbHandle).toSet()
         assertEquals(expected, controller.thumbnails.value.keys)
         val browser = registry.get("camera")!!.wifiRemote.photoBrowser
-        assertFalse(browser.failed, "a thumbnail problem must not fail the page")
+        assertFalse(browser.failed, "a thumbnail problem must not fail the day")
         assertFalse(browser.loading)
         assertEquals(pageSize, connection.thumbnailRequests.size, "failed ones are not retried in a loop")
         controller.closeAndJoin()
     }
 
     @Test
-    fun changingPageCancelsTheLoaderAndStopsFetchingTheOldPage() = runTest {
-        val connection = pagedConnection()
+    fun changingDayCancelsTheLoaderAndStopsFetchingTheOldDay() = runTest {
+        val connection = twoDayConnection()
         connection.thumbnailImage = PreviewBitmap(160, 120)
         val never = CompletableDeferred<Unit>()
         connection.thumbnailHook = { handle ->
-            if (handle == thumbHandle(THUMBNAIL_BATCH_SIZE)) never.await()
+            if (handle == thumbHandle(1)) never.await()
         }
-        val controller = WifiRemoteController(
-            backgroundScope, CameraSessionRegistry(), { _, _ -> connection }, {}, {})
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
+        controller.browseDates("camera")
+        runCurrent()
+        controller.browseDate("camera", "2024-05-02")
+        runCurrent()
+        val rev1 = registry.get("camera")!!.wifiRemote.photoBrowser.pageRevision
+        controller.requestThumbnails("camera", rev1, listOf("photo:0", "photo:1"), emptyList())
         runCurrent()
         val requestsBefore = connection.thumbnailRequests.size
-        assertEquals(THUMBNAIL_BATCH_SIZE + 1, requestsBefore)
-        controller.browsePhotos("camera", pageSize)
+        assertEquals(2, requestsBefore)
+        controller.showDates("camera")
         runCurrent()
-        assertEquals(listOf(pageSize), connection.pageRequests)
+        controller.browseDate("camera", "2024-05-01")
+        runCurrent()
+        val rev2 = registry.get("camera")!!.wifiRemote.photoBrowser.pageRevision
+        controller.requestThumbnails("camera", rev2, listOf("photo:2", "photo:3"), emptyList())
+        runCurrent()
         val later = connection.thumbnailRequests.drop(requestsBefore)
-        assertEquals(listOf(thumbHandle(pageSize), thumbHandle(pageSize + 1)), later,
-            "only the new page's thumbnails are fetched after the switch")
-        assertEquals(setOf(thumbHandle(pageSize), thumbHandle(pageSize + 1)), controller.thumbnails.value.keys)
+        assertEquals(listOf(thumbHandle(2), thumbHandle(3)), later,
+            "only the new day's thumbnails are fetched after the switch")
+        assertEquals(setOf(thumbHandle(2), thumbHandle(3)), controller.thumbnails.value.keys)
         controller.closeAndJoin()
     }
 
@@ -3144,11 +3120,13 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         connection.thumbnailHook = { handle ->
             if (handle == thumbHandle(THUMBNAIL_BATCH_SIZE)) stall.await()
         }
-        val controller = WifiRemoteController(
-            backgroundScope, CameraSessionRegistry(), { _, _ -> connection }, {}, {})
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
+        openFirstDay(controller)
+        val rev = registry.get("camera")!!.wifiRemote.photoBrowser.pageRevision
+        controller.requestThumbnails("camera", rev, (0 until pageSize).map { "photo:$it" }, emptyList())
         runCurrent()
         controller.downloadPhoto("camera", 0L)
         runCurrent()
@@ -3457,7 +3435,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         model.maybeAutoEnterBrowser()
         runCurrent()
         var browser = registry.get("camera")!!.wifiRemote.photoBrowser
-        assertTrue(browser.grouped && browser.dateKey == null, "browse-only opens the day list, not a page")
+        assertTrue(browser.open && browser.dateKey == null, "browse-only opens the day list, not a page")
         model.openDate("2024-05-01")
         runCurrent()
         model.togglePhotoSelection("a")
@@ -3529,14 +3507,12 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         runCurrent()
         val browser = registry.get("camera")!!.wifiRemote.photoBrowser
         assertEquals(listOf(UNKNOWN_DATE_KEY), connection.dayRequests, "the day is loaded once")
-        assertEquals(0, browser.offset)
         assertEquals(pageSize, model.viewedPhotoIndex)
         assertEquals("photo:$pageSize", model.viewedCapture()?.id)
         val last = groupCameraPhotos(browser.photos).size - 1
         model.viewPhotoAt(last + 1) // past the end of the day: the viewer stops
         runCurrent()
         assertEquals(pageSize, model.viewedPhotoIndex)
-        assertTrue(connection.pageRequests.isEmpty(), "grouped mode never uses the flat page API")
         assertEquals(1, connection.catalogOpens)
         assertTrue(model.batchSummary != null, "moving inside a day does not drop the batch summary")
         controller.closeAndJoin()
@@ -3699,8 +3675,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         model.recordBatchSummary(WifiBatchSummary(5, emptyMap())) // an older summary must not survive
         model.togglePhotoSelection("h")
         val started = mutableListOf<List<WifiPhotoDownload>>()
@@ -3732,8 +3707,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         controller.downloadPhotos("camera", listOf(WifiPhotoDownload(2)))
         runCurrent()
         assertEquals(WifiImageTransferStatus.Failed, registry.get("camera")!!.wifiRemote.imageTransfer.status)
@@ -3759,8 +3733,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         model.togglePhotoSelection("big")
         var started = 0
 
@@ -3778,8 +3751,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         model.togglePhotoSelection("jr")
         val state = registry.get("camera")!!.wifiRemote
         assertEquals(listOf(WifiPhotoDownload(2), WifiPhotoDownload(3)), model.batchPlan(WifiFormatPolicy.Original, state).downloads)
@@ -3802,8 +3774,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         model.togglePhotoSelection("h")
         model.togglePhotoSelection("jr")
         val started = mutableListOf<List<WifiPhotoDownload>>()
@@ -3822,8 +3793,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         model.togglePhotoSelection("h")
         var started = 0
 
@@ -3842,8 +3812,7 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
-        runCurrent()
+        openFirstDay(controller)
         model.togglePhotoSelection("h")
         model.togglePhotoSelection("jr")
         val state = registry.get("camera")!!.wifiRemote
@@ -3862,6 +3831,206 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         model.requestBatchDownload(choices[1].policy, state) { started += it }
         assertEquals(listOf(listOf(WifiPhotoDownload(3))), started)
         assertEquals(WifiBatchSummary(1, mapOf(WifiSkipReason.NoRaw to 1)), model.batchSummary)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun pruneHiddenSelectionDropsFullySavedAndPreservesBatchSummary() = runTest {
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> plannerConnection() }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        openFirstDay(controller)
+        model.togglePhotoSelection("h")
+        model.togglePhotoSelection("jr")
+        val summary = WifiBatchSummary(1, emptyMap())
+        model.recordBatchSummary(summary)
+
+        model.pruneHiddenSelection(onlyUnsaved = true, saved = setOf(WifiPhotoDownload(1)))
+        assertEquals(setOf("jr"), model.selectedPhotoIds)
+        assertEquals(summary, model.batchSummary)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun retryableBatchDownloadsAreScopedToCurrentSessionAndCatalogGeneration() = runTest {
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> plannerConnection() }, {}, {})
+        val model = WifiRemoteViewModel("camera", controller)
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        openFirstDay(controller)
+        model.togglePhotoSelection("h")
+        model.togglePhotoSelection("jr")
+        val state = registry.get("camera")!!.wifiRemote
+
+        val started = mutableListOf<List<WifiPhotoDownload>>()
+        model.requestBatchDownload(WifiFormatPolicy.Original, state) { started += it }
+        assertEquals(listOf(listOf(WifiPhotoDownload(1), WifiPhotoDownload(2), WifiPhotoDownload(3))), started)
+
+        // Simulate handle 1 already saved while 2 and 3 failed.
+        val partialSavedState = state.copy(
+            photoBrowser = state.photoBrowser.copy(savedDownloads = setOf(WifiPhotoDownload(1))),
+            imageTransfer = WifiImageTransferState(WifiImageTransferStatus.Failed),
+        )
+        registry.updateWifiRemote("camera", partialSavedState)
+        assertEquals(
+            listOf(WifiPhotoDownload(2), WifiPhotoDownload(3)),
+            model.retryableBatchDownloads(partialSavedState),
+        )
+
+        val retried = mutableListOf<List<WifiPhotoDownload>>()
+        model.retryFailedBatchDownloads(partialSavedState) { retried += it }
+        assertEquals(listOf(listOf(WifiPhotoDownload(2), WifiPhotoDownload(3))), retried)
+
+        // Catalog generation change or disconnect clears retryable handles and blocks stale callbacks.
+        val newGenerationState = partialSavedState.copy(
+            photoBrowser = partialSavedState.photoBrowser.copy(browserGeneration = state.photoBrowser.browserGeneration + 1),
+        )
+        registry.updateWifiRemote("camera", newGenerationState)
+        assertTrue(model.retryableBatchDownloads(newGenerationState).isEmpty())
+        val staleRetried = mutableListOf<List<WifiPhotoDownload>>()
+        model.retryFailedBatchDownloads(partialSavedState) { staleRetried += it }
+        assertTrue(staleRetried.isEmpty())
+
+        model.disconnectAndExit {}
+        runCurrent()
+        assertTrue(model.retryableBatchDownloads(partialSavedState).isEmpty())
+        controller.closeAndJoin()
+    }
+
+    // ---- Date list cover thumbnails (#17) ----
+
+    @Test
+    fun dateListCoverThumbnailsDoNotBatchAtRest() = runTest {
+        val connection = twoDayConnection().apply { thumbnailImage = PreviewBitmap(160, 120) }
+        val controller = WifiRemoteController(backgroundScope, CameraSessionRegistry(), { _, _ -> connection }, {}, {})
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browseDates("camera")
+        runCurrent()
+        assertTrue(connection.thumbnailRequests.isEmpty(), "No cover request until visible rows are reported")
+        assertTrue(controller.dateCoverThumbnails.value.isEmpty())
+        controller.requestDateCovers(
+            "camera",
+            controller.sessions.value["CAMERA"]!!.wifiRemote.photoBrowser.browserGeneration,
+            emptyList(),
+        )
+        runCurrent()
+        assertTrue(connection.thumbnailRequests.isEmpty())
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun dateListCoverThumbnailsLoadLazilyForVisibleRowsAtMostOncePerDay() = runTest {
+        val connection = twoDayConnection().apply { thumbnailImage = PreviewBitmap(160, 120) }
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browseDates("camera")
+        runCurrent()
+        val browser = registry.get("camera")!!.wifiRemote.photoBrowser
+        val cover1 = browser.dates[0].coverHandle!!
+        val cover2 = browser.dates[1].coverHandle!!
+        // Only the first visible row is reported -> only its cover is requested.
+        controller.requestDateCovers("camera", browser.browserGeneration, listOf(cover1))
+        runCurrent()
+        assertEquals(listOf(cover1), connection.thumbnailRequests)
+        assertEquals(setOf(cover1), controller.dateCoverThumbnails.value.keys)
+        // Reporting the same row again or returning from a day must not re-request cover1.
+        controller.requestDateCovers("camera", browser.browserGeneration, listOf(cover1))
+        runCurrent()
+        assertEquals(listOf(cover1), connection.thumbnailRequests)
+        controller.browseDate("camera", browser.dates[0].key)
+        runCurrent()
+        controller.showDates("camera")
+        runCurrent()
+        val genAfterReturn = registry.get("camera")!!.wifiRemote.photoBrowser.browserGeneration
+        controller.requestDateCovers("camera", genAfterReturn, listOf(cover1, cover2))
+        runCurrent()
+        assertEquals(listOf(cover1, cover2), connection.thumbnailRequests)
+        assertEquals(setOf(cover1, cover2), controller.dateCoverThumbnails.value.keys)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun dateListCoverThumbnailsCancelImmediatelyOnRefreshAndDisconnect() = runTest {
+        val connection = twoDayConnection().apply { thumbnailImage = PreviewBitmap(160, 120) }
+        val stall = CompletableDeferred<Unit>()
+        connection.thumbnailHook = { stall.await() }
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browseDates("camera")
+        runCurrent()
+        val browser = registry.get("camera")!!.wifiRemote.photoBrowser
+        val cover1 = browser.dates[0].coverHandle!!
+        val cover2 = browser.dates[1].coverHandle!!
+        controller.requestDateCovers("camera", browser.browserGeneration, listOf(cover1, cover2))
+        runCurrent()
+        assertEquals(listOf(cover1), connection.thumbnailRequests)
+        // Refreshing cancels the in-flight cover1 and never starts cover2.
+        controller.browseDates("camera")
+        runCurrent()
+        assertEquals(listOf(cover1), connection.thumbnailRequests)
+        assertTrue(controller.dateCoverThumbnails.value.isEmpty())
+        // Re-requesting on the new generation and disconnecting cancels immediately too.
+        val gen2 = registry.get("camera")!!.wifiRemote.photoBrowser.browserGeneration
+        controller.requestDateCovers("camera", gen2, listOf(cover1, cover2))
+        runCurrent()
+        assertEquals(listOf(cover1, cover1), connection.thumbnailRequests)
+        controller.closeAndJoin()
+        assertEquals(listOf(cover1, cover1), connection.thumbnailRequests)
+        assertTrue(controller.dateCoverThumbnails.value.isEmpty())
+    }
+
+    @Test
+    fun dateListCoverThumbnailsDropStaleGenerationBeforeWriteBack() = runTest {
+        val lateBitmap = PreviewBitmap(160, 120)
+        val stall = CompletableDeferred<Unit>()
+        val connection = object : WifiRemoteConnection {
+            override val cameraName = "Test camera"
+            override val canCapture = false
+            override val canTransferImages = true
+            override val hasLiveViewStream = false
+            private val photos = listOf(
+                WifiCameraPhoto(10L, "A.JPG", 100, "image/jpeg", "20240502T100000", captureId = "a"),
+                WifiCameraPhoto(20L, "B.JPG", 100, "image/jpeg", "20240501T100000", captureId = "b"),
+            )
+            private val snapshot = CatalogSnapshot.of(groupCameraPhotos(photos))
+            override suspend fun openCatalog() = snapshot.dates
+            override suspend fun dayPhotos(dateKey: String) = snapshot.day(dateKey)
+            override suspend fun photoThumbnail(handle: Long, stats: ThumbnailStatsSink?): ImageBitmap? {
+                // Non-cooperative: ignores cancellation and returns an old bitmap after refresh.
+                withContext(NonCancellable) { stall.await() }
+                return lateBitmap
+            }
+            override val images: Flow<ImageBitmap> = emptyFlow()
+            override val lost: Flow<Unit> = flow { awaitCancellation() }
+            override suspend fun capture() = error("unused")
+            override suspend fun close() {}
+        }
+        val registry = CameraSessionRegistry()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        controller.browseDates("camera")
+        runCurrent()
+        val gen1 = registry.get("camera")!!.wifiRemote.photoBrowser.browserGeneration
+        controller.requestDateCovers("camera", gen1, listOf(10L))
+        runCurrent()
+        // Refresh bumps generation while the old photoThumbnail is in-flight.
+        controller.browseDates("camera")
+        runCurrent()
+        stall.complete(Unit)
+        runCurrent()
+        assertTrue(
+            controller.dateCoverThumbnails.value.isEmpty(),
+            "A stale generation response must never be written into dateCoverThumbnails",
+        )
         controller.closeAndJoin()
     }
 }

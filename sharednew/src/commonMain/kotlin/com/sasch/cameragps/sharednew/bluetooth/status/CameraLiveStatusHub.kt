@@ -1,5 +1,6 @@
 package com.sasch.cameragps.sharednew.bluetooth.status
 
+import com.sasch.cameragps.sharednew.bluetooth.BleFailure
 import com.sasch.cameragps.sharednew.bluetooth.BleSessionPhase
 import com.sasch.cameragps.sharednew.bluetooth.location.PhoneLocationFix
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSession
@@ -69,8 +70,9 @@ class CameraLiveStatusHub(
     private val lastPersisted = mutableMapOf<String, Long>()
 
     val statuses: StateFlow<Map<String, CameraLiveStatus>> =
-        combine(registry.sessions, telemetry) { sessions, telemetry -> join(sessions, telemetry) }
-            .stateIn(scope, SharingStarted.Eagerly, emptyMap())
+        combine(registry.sessions, registry.failures, telemetry) { sessions, failures, telemetry ->
+            join(sessions, failures, telemetry)
+        }.stateIn(scope, SharingStarted.Eagerly, emptyMap())
 
     /** Status of one camera; emits only when it changes. `null` while the camera is unknown. */
     fun observe(address: String): Flow<CameraLiveStatus?> {
@@ -179,10 +181,11 @@ class CameraLiveStatusHub(
 
     private fun join(
         sessions: Map<String, CameraSession>,
+        failures: Map<String, BleFailure>,
         telemetry: Map<String, Telemetry>,
     ): Map<String, CameraLiveStatus> {
         val result = LinkedHashMap<String, CameraLiveStatus>()
-        for (id in telemetry.keys + sessions.keys) {
+        for (id in telemetry.keys + sessions.keys + failures.keys) {
             val session = sessions[id]
             val t = telemetry[id] ?: Telemetry()
             result[id] = CameraLiveStatus(
@@ -194,6 +197,7 @@ class CameraLiveStatusHub(
                 rssiAtMillis = t.rssiAtMillis,
                 mtu = session?.mtu,
                 battery = t.battery,
+                lastFailure = session?.failure ?: failures[id],
             )
         }
         return result

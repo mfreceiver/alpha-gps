@@ -62,7 +62,6 @@ import cameragps.sharednew.generated.resources.wifi_remote_shutdown_unavailable
 import cameragps.sharednew.generated.resources.wifi_remote_shutdown_unconfirmed
 import cameragps.sharednew.generated.resources.wifi_remote_title
 import com.diamondedge.logging.logging
-import com.sasch.cameragps.sharednew.remote.wifi.SonyImageTransfer
 import com.sasch.cameragps.sharednew.remote.wifi.WifiBatchSummary
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
 import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferState
@@ -78,6 +77,7 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiRemotePhase
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiShutdownStatus
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
+import com.sasch.cameragps.sharednew.remote.wifi.isCaptureFullySaved
 import com.sasch.cameragps.sharednew.remote.wifi.planDownloads
 import com.sasch.cameragps.sharednew.remote.wifi.toSummary
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
@@ -153,7 +153,7 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         if (index >= 0) {
             noteBatchCompletion()
             controller.clearPhotoTransferResult(identifier)
-            viewedPhotoIndex = state.photoBrowser.offset + index
+            viewedPhotoIndex = index
             viewPhotoAt(viewedPhotoIndex!!)
         }
     }
@@ -172,26 +172,10 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         if (!browser.open) return
         noteBatchCompletion()
         val captures = groupCameraPhotos(browser.photos)
-        val count = captures.size
-        if (index in browser.offset until browser.offset + count) {
+        if (index in captures.indices) {
             if (viewedPhotoIndex != index) controller.clearPhotoTransferResult(identifier)
             viewedPhotoIndex = index
-            controller.showPhotoPreview(identifier, captures[index - browser.offset].preview.handle)
-        } else if (!browser.grouped && !browser.loading && !state.imageTransfer.busy) {
-            // Only the legacy flat browser still pages; a day of the grouped browser is complete
-            // (offset 0, never `hasMore`), so the viewer simply stops at its first / last capture.
-            val offset = when {
-                index == browser.offset - 1 && browser.offset > 0 -> maxOf(
-                    0,
-                    browser.offset - SonyImageTransfer.PAGE_SIZE
-                )
-
-                index == browser.offset + count && browser.hasMore -> browser.offset + SonyImageTransfer.PAGE_SIZE
-                else -> return
-            }
-            controller.clearPhotoTransferResult(identifier)
-            viewedPhotoIndex = index
-            controller.browsePhotos(identifier, offset, preferredPhotoIndex = index)
+            controller.showPhotoPreview(identifier, captures[index].preview.handle)
         }
     }
 
@@ -211,9 +195,7 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     /** The capture the viewer shows, or null when it is closed. */
     internal fun viewedCapture(): WifiCameraCapture? {
         val index = viewedPhotoIndex ?: return null
-        val browser = controller.sessions.value[identifier.uppercase()]?.wifiRemote?.photoBrowser
-            ?: return null
-        return dayCaptures().getOrNull(index - browser.offset)
+        return dayCaptures().getOrNull(index)
     }
 
     fun isPhotoSelected(captureId: String): Boolean = captureId in selectedPhotos
@@ -234,7 +216,7 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     fun openDate(dateKey: String) {
         val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return
         val browser = state.photoBrowser
-        if (!browser.open || !browser.grouped || browser.dateKey != null) return
+        if (!browser.open || browser.dateKey != null) return
         if (browser.loading || state.imageTransfer.busy) return
         noteBatchCompletion()
         controller.browseDate(identifier, dateKey, expectedRevision = browser.pageRevision)
@@ -250,7 +232,7 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         confirmClearSelectionBack = false
         val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return
         val browser = state.photoBrowser
-        if (!browser.open || !browser.grouped || browser.dateKey == null) return
+        if (!browser.open || browser.dateKey == null) return
         if (browser.loading || state.imageTransfer.busy) { backBlockedNotice = true; return }
         clearPhotoSelection()
         controller.showDates(identifier)
@@ -296,7 +278,7 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     }
 
     private fun WifiPhotoBrowserState.identity() =
-        PageIdentity(browserGeneration, dateKey, offset, pageRevision)
+        PageIdentity(browserGeneration, dateKey, pageRevision)
 
     /**
      * Starts a long-press-and-drag selection at the capture [anchorId] of the current page and applies
@@ -304,11 +286,14 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
      * Refused (null) while the browser is loading, a transfer runs, the viewer is open or the anchor is
      * not on this page.
      */
-    internal fun beginRangeSelection(anchorId: String): RangeSelectionSession? {
+    internal fun beginRangeSelection(
+        anchorId: String,
+        visibleCaptureIds: List<String>? = null,
+    ): RangeSelectionSession? {
         val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return null
         val browser = state.photoBrowser
         if (!browser.open || browser.loading || state.imageTransfer.busy || viewedPhotoIndex != null) return null
-        val captures = groupCameraPhotos(browser.photos)
+        val captures = visibleCaptures(browser, visibleCaptureIds)
         val anchor = captures.indexOfFirst { it.id == anchorId }
         if (anchor < 0) return null
         // Beginning a new gesture retires any older one: overlapping long-presses leave only the
@@ -337,17 +322,31 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
      * load/transfer started, or the viewer opened — and the caller must end it; a stale gesture never
      * writes into the selection.
      */
-    internal fun updateRangeSelection(session: RangeSelectionSession, endIndex: Int): Boolean {
+    internal fun updateRangeSelection(
+        session: RangeSelectionSession,
+        endIndex: Int,
+        visibleCaptureIds: List<String>? = null,
+    ): Boolean {
         if (session.token != selectionGestureToken) return false
         val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: return false
         val browser = state.photoBrowser
         if (!browser.open || browser.loading || state.imageTransfer.busy || viewedPhotoIndex != null) return false
         if (browser.identity() != session.page) return false
-        val captures = groupCameraPhotos(browser.photos)
+        val captures = visibleCaptures(browser, visibleCaptureIds)
         if (captures.map { it.id } != session.pageIds || endIndex !in captures.indices) return false
         val result = rangeSelectionResult(session.initial, captures, session.anchorIndex, endIndex, session.select)
         if (result != selectedPhotos) selectedPhotos = result
         return true
+    }
+
+    private fun visibleCaptures(
+        browser: com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoBrowserState,
+        visibleCaptureIds: List<String>?,
+    ) = if (visibleCaptureIds == null) {
+        groupCameraPhotos(browser.photos)
+    } else {
+        val byId = groupCameraPhotos(browser.photos).associateBy { it.id }
+        visibleCaptureIds.mapNotNull { byId[it] }
     }
 
     /** The drag ended (finger lifted or the gesture was cancelled): it loses its token for good. */
@@ -361,6 +360,20 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         liveSelectionSession = null
         selectedPhotos = emptyMap()
         recordBatchSummary(null)
+    }
+
+    /**
+     * Drops any selected captures that are hidden by the "only unsaved" filter, so the selection
+     * count and batch actions never operate on invisible tiles. Preserves [batchSummary].
+     */
+    fun pruneHiddenSelection(onlyUnsaved: Boolean, saved: Set<WifiPhotoDownload>) {
+        if (!onlyUnsaved || selectedPhotos.isEmpty()) return
+        val remaining = selectedPhotos.filterValues { !isCaptureFullySaved(it, saved) }
+        if (remaining.size != selectedPhotos.size) {
+            selectionGestureToken++
+            liveSelectionSession = null
+            selectedPhotos = remaining
+        }
     }
 
     /** The download plan of the current cross-day selection under [policy] (see [planDownloads]). */
@@ -395,9 +408,13 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
             // "downloaded 0, skipped N" summary (only Idle/Saved results are shown alongside
             // one). Clearing resets to Idle; busy is already excluded above and no Saved is
             // faked for the plan itself.
+            clearPendingBatchRetry()
             controller.clearPhotoTransferResult(identifier)
             recordBatchSummary(plan.toSummary())
         } else {
+            pendingBatchDownloads = plan.downloads
+            pendingBatchGeneration = state.photoBrowser.browserGeneration
+            pendingBatchSkipped = plan.skipped
             recordBatchSummary(plan.toSummary())
             onDownload(plan.downloads)
         }
@@ -405,10 +422,57 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
 
     /** Explicit disconnect from the top bar: end the session and return to the caller. */
     fun disconnectAndExit(onClose: () -> Unit) {
+        clearPendingBatchRetry()
         clearPhotoSelection()
         closePhoto()
         controller.disconnect(identifier)
         onClose()
+    }
+
+    /**
+     * Downloads submitted by the most recent batch in the current connection & catalog generation,
+     * used only for session-scoped "Retry failed" on the batch card. Never persisted across
+     * disconnects or catalog refreshes.
+     */
+    private var pendingBatchDownloads by mutableStateOf<List<WifiPhotoDownload>>(emptyList())
+    private var pendingBatchGeneration by mutableStateOf<Long?>(null)
+    private var pendingBatchSkipped by mutableStateOf<Map<com.sasch.cameragps.sharednew.remote.wifi.WifiSkipReason, Int>>(emptyMap())
+
+    internal fun clearPendingBatchRetry() {
+        pendingBatchDownloads = emptyList()
+        pendingBatchGeneration = null
+        pendingBatchSkipped = emptyMap()
+    }
+
+    /**
+     * Failed/uncompleted items from the latest batch in this live session & catalog generation.
+     * Empty once disconnected, catalog-refreshed, or all items are saved.
+     */
+    internal fun retryableBatchDownloads(state: WifiRemoteState): List<WifiPhotoDownload> {
+        if (state.phase != WifiRemotePhase.Ready || !state.photoBrowser.open) return emptyList()
+        if (state.photoBrowser.browserGeneration != pendingBatchGeneration) return emptyList()
+        return pendingBatchDownloads.filter { it !in state.photoBrowser.savedDownloads }
+    }
+
+    /** Retries only the still-unsaved items from the latest batch in the current live session & catalog generation. */
+    internal fun retryFailedBatchDownloads(
+        state: WifiRemoteState,
+        onDownload: (List<WifiPhotoDownload>) -> Unit,
+    ) {
+        val liveState = controller.sessions.value[identifier.uppercase()]?.wifiRemote ?: state
+        if (liveState.imageTransfer.busy) return
+        val remaining = retryableBatchDownloads(liveState)
+        if (remaining.isEmpty()) {
+            clearPendingBatchRetry()
+            return
+        }
+        recordBatchSummary(WifiBatchSummary(remaining.size, pendingBatchSkipped))
+        onDownload(remaining)
+    }
+
+    internal fun dismissTransferResult() {
+        clearPendingBatchRetry()
+        controller.clearPhotoTransferResult(identifier)
     }
 
     /**
@@ -442,6 +506,7 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         downloads: List<WifiPhotoDownload>,
         onDownload: (List<WifiPhotoDownload>) -> Unit,
     ) {
+        clearPendingBatchRetry()
         recordBatchSummary(null)
         if (downloads.isNotEmpty()) onDownload(downloads)
     }
@@ -470,11 +535,15 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
     fun reconcilePhotoSelection() {
         val state = controller.sessions.value[identifier.uppercase()]?.wifiRemote
         if (state?.phase != WifiRemotePhase.Ready || !state.photoBrowser.open) {
+            clearPendingBatchRetry()
             clearPhotoSelection()
             selectedGeneration = null
             closePhoto()
         } else {
             val generation = state.photoBrowser.browserGeneration
+            if (pendingBatchGeneration != null && pendingBatchGeneration != generation) {
+                clearPendingBatchRetry()
+            }
             if (selectedGeneration != null && selectedGeneration != generation) {
                 // The catalog was refreshed or reopened: previous selections are stale.
                 clearPhotoSelection()
@@ -541,7 +610,7 @@ class WifiRemoteViewModel(val identifier: String, val controller: WifiRemoteCont
         val browser = controller.sessions.value[identifier.uppercase()]?.wifiRemote?.photoBrowser
         when {
             viewedPhotoIndex != null -> closePhoto()
-            browser?.open == true && browser.grouped && browser.dateKey != null -> {
+            browser?.open == true && browser.dateKey != null -> {
                 val state = controller.sessions.value[identifier.uppercase()]!!.wifiRemote
                 if (browser.loading || state.imageTransfer.busy) backBlockedNotice = true
                 else if (selectedPhotoIds.isNotEmpty()) confirmClearSelectionBack = true

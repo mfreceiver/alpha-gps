@@ -132,11 +132,6 @@ private class SonyWifiConnection(
         }
     }
 
-    override suspend fun openPhotoBrowser(): CameraPhotoPage {
-        enterTransferMode()
-        return checkNotNull(current).transfer.openBrowser()
-    }
-
     override suspend fun openCatalog(): List<DateGroup> {
         enterTransferMode()
         return checkNotNull(current).transfer.openCatalog()
@@ -145,7 +140,6 @@ private class SonyWifiConnection(
     override suspend fun dayPhotos(dateKey: String) =
         checkNotNull(current).transfer.dayPhotos(dateKey)
 
-    override suspend fun photoPage(offset: Int) = checkNotNull(current).transfer.page(offset)
     override suspend fun photoThumbnail(handle: Long, stats: ThumbnailStatsSink?) =
         checkNotNull(current).transfer.thumbnail(handle, stats)
 
@@ -178,18 +172,15 @@ private class SonyWifiConnection(
 
     override val hasLiveViewStream: Boolean get() = !browseOnly
 
-    override val images = flow {
-        // Browse-only sessions never start the live-view HTTP stream, so this flow
-        // completes immediately. Callers should consult [hasLiveViewStream] and not
-        // collect it in that case; the early return stays as a safe fallback for
-        // any collector that does (a normal completion upstream must not be read
-        // as a live-view failure).
+    override val liveViewFrames: Flow<WifiLiveViewFrame> = flow {
         if (browseOnly) return@flow
         val session = checkNotNull(current)
         check(session.ready.purpose == SonySessionPurpose.RemoteShooting)
         log.i { "Wi-Fi live view resolving camera endpoint" }
-        emitAll(session.preview.images(session.endpoint.resolve(host)))
+        emitAll(session.preview.decodedFrames(session.endpoint.resolve(host)))
     }
+
+    override val images: Flow<ImageBitmap> = liveViewFrames.map { it.image }
 
     override suspend fun capture(): WifiCaptureStatus {
         if (!canCapture) return WifiCaptureStatus.Rejected

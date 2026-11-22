@@ -1,6 +1,7 @@
 package com.saschl.cameragps.service.coordinator
 
 import android.annotation.SuppressLint
+import com.sasch.cameragps.sharednew.bluetooth.BleFailureReason
 import com.sasch.cameragps.sharednew.database.devices.CameraDevice
 import com.sasch.cameragps.sharednew.database.devices.CameraDeviceDAO
 import com.saschl.cameragps.service.transport.AndroidBleTransport
@@ -16,6 +17,7 @@ class ServiceShutdownCoordinator(
      * the same guard the activity and CDM entry points already apply.
      */
     private val isAppEnabled: () -> Boolean = { true },
+    private val onConnectFailed: (String, BleFailureReason) -> Unit = { _, _ -> },
 ) {
     /**
      * No explicit address: triggered by BOOT_COMPLETED / MY_PACKAGE_REPLACED.
@@ -40,16 +42,29 @@ class ServiceShutdownCoordinator(
         runCatching {
             bootReconnectTargets(deviceDao.getAllCameraDevices())
                 .forEach { device ->
-                    runCatching {
-                        transport.connect(device.mac)
-                    }.onFailure { handleGattConnectionFailure(startId, device) }
+                    var failureReason: BleFailureReason? = null
+                    val result = runCatching {
+                        transport.connectWithResult(device.mac)
+                    }.onFailure { error ->
+                        failureReason = handleGattConnectionFailure(startId, device, error)
+                    }.getOrNull()
+                    if (result == null) {
+                        onConnectFailed(device.mac, failureReason ?: BleFailureReason.GattFailure)
+                    } else if (result != AndroidBleTransport.ConnectStartResult.Started) {
+                        onConnectFailed(device.mac, result.toFailureReason())
+                    }
                 }
         }
     }
 
     @Suppress("UNUSED_PARAMETER")
-    private fun handleGattConnectionFailure(startId: Int, cameraDevice: CameraDevice) {
-        Timber.e("Failed to connect to device ${cameraDevice.deviceName}, bluetooth is likely disabled")
+    private fun handleGattConnectionFailure(
+        startId: Int,
+        cameraDevice: CameraDevice,
+        error: Throwable,
+    ): BleFailureReason {
+        Timber.e(error, "Failed to connect to device ${cameraDevice.deviceName}, bluetooth is likely disabled")
+        return if (error is SecurityException) BleFailureReason.PermissionMissing else BleFailureReason.GattFailure
     }
 
     @SuppressLint("MissingPermission")

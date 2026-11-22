@@ -463,4 +463,17 @@ class WifiFormatPolicyTest {
         val bigRaw = capture("bigRaw", file(80, jpegMime, 100), file(81, rawMime, 600_000_000, downloadable = false))
         assertEquals(listOf(WifiFormatPolicy.JpegOnly), singleFormatChoices(bigRaw, emptySet()).map { it.policy })
     }
+
+    @Test
+    fun isCaptureFullySavedMatchesOriginalPlanAndRejectsMixedTooLarge() {
+        assertTrue(isCaptureFullySaved(jpgRaw, setOf(WifiPhotoDownload(1), WifiPhotoDownload(2))))
+        assertFalse(isCaptureFullySaved(jpgRaw, setOf(WifiPhotoDownload(1))))
+        val mixedTooLarge = capture("mixed", file(80, jpegMime, 100), file(81, rawMime, 600_000_000, downloadable = false))
+        assertFalse(
+            isCaptureFullySaved(mixedTooLarge, setOf(WifiPhotoDownload(80))),
+            "JPG saved with over-limit RAW is not fully saved",
+        )
+        val allTooLarge = capture("huge", file(82, jpegMime, 600_000_000, downloadable = false))
+        assertFalse(isCaptureFullySaved(allTooLarge, emptySet()))
+    }
 }

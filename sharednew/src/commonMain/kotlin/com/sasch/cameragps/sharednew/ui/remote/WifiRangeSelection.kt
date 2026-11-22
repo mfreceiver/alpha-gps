@@ -8,7 +8,7 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
  * makes every later update of that gesture a no-op.
  */
 internal data class PageIdentity(
-    val generation: Long, val dateKey: String?, val offset: Int, val revision: Long
+    val generation: Long, val dateKey: String?, val revision: Long
 )
 
 /**

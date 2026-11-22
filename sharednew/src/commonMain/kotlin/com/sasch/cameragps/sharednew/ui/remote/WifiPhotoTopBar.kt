@@ -25,6 +25,7 @@ import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.arrow_back_24px
 import cameragps.sharednew.generated.resources.back
 import cameragps.sharednew.generated.resources.close_24px
+import cameragps.sharednew.generated.resources.mw_filter_only_unsaved
 import cameragps.sharednew.generated.resources.mw_grid_large
 import cameragps.sharednew.generated.resources.mw_grid_medium
 import cameragps.sharednew.generated.resources.mw_grid_small
@@ -78,9 +79,9 @@ internal fun WifiPhotoBrowserTopBar(
     val selecting = selectedIds.isNotEmpty()
     val dateKey = browser.dateKey
     // Selections survive switching days; say so when the count includes captures not on this day.
-    val includesOtherDates = browser.grouped && dateKey != null &&
+    val includesOtherDates = dateKey != null &&
             viewModel.selectedPhotos.values.any { it.dateKey != dateKey }
-    val gridShown = !browser.grouped || dateKey != null
+    val gridShown = dateKey != null
     val title = when {
         selecting && includesOtherDates -> stringResource(
             Res.string.wifi_remote_selection_count_other_dates, selectedIds.size
@@ -135,10 +136,7 @@ internal fun WifiPhotoBrowserTopBar(
                     painterResource(Res.drawable.refresh_24px),
                     contentDescription = stringResource(Res.string.wifi_remote_browser_refresh),
                     // A refresh re-enumerates the card and starts a new catalog generation.
-                    onClick = {
-                        if (browser.grouped) viewModel.controller.browseDates(viewModel.identifier)
-                        else viewModel.controller.browsePhotos(viewModel.identifier)
-                    },
+                    onClick = { viewModel.controller.browseDates(viewModel.identifier) },
                     enabled = !state.imageTransfer.busy,
                 )
             }
@@ -189,6 +187,9 @@ private fun WifiGridOptionsPopover(
             }
             OptionSwitch(stringResource(Res.string.mw_tag_size), options.showSize) {
                 onChange(options.copy(showSize = it))
+            }
+            OptionSwitch(stringResource(Res.string.mw_filter_only_unsaved), options.onlyUnsaved) {
+                onChange(options.copy(onlyUnsaved = it))
             }
         }
     }

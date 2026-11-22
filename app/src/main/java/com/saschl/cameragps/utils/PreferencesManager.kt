@@ -247,13 +247,14 @@ object PreferencesManager {
             putString(KEY_MW_WIFI_GRID_SIZE, options.size)
             putBoolean(KEY_MW_WIFI_GRID_SHOW_FORMAT, options.showFormat)
             putBoolean(KEY_MW_WIFI_GRID_SHOW_SIZE, options.showSize)
+            putBoolean(KEY_MW_WIFI_GRID_ONLY_UNSAVED, options.onlyUnsaved)
         }
     }
 
     /**
-     * Grid options from the stored preference map. Only the size / format / size-tag keys are read;
-     * keys of removed features (the 0.2.0 protection switch `mw_wifi_grid_show_protection`, the
-     * viewer histogram / parameter / lens switches) stay in old installs untouched and are ignored.
+     * Grid options from the stored preference map. Only the size / format / size-tag / unsaved-filter
+     * keys are read; keys of removed features (the 0.2.0 protection switch `mw_wifi_grid_show_protection`,
+     * the viewer histogram / parameter / lens switches) stay in old installs untouched and are ignored.
      * A value of the wrong type falls back to the default instead of throwing.
      */
     internal fun wifiGridOptionsFrom(stored: Map<String, *>): WifiGridOptions {
@@ -262,10 +263,12 @@ object PreferencesManager {
             size = stored[KEY_MW_WIFI_GRID_SIZE] as? String ?: defaults.size,
             showFormat = stored[KEY_MW_WIFI_GRID_SHOW_FORMAT] as? Boolean ?: defaults.showFormat,
             showSize = stored[KEY_MW_WIFI_GRID_SHOW_SIZE] as? Boolean ?: defaults.showSize,
+            onlyUnsaved = stored[KEY_MW_WIFI_GRID_ONLY_UNSAVED] as? Boolean ?: defaults.onlyUnsaved,
         )
     }
 
     internal const val KEY_MW_WIFI_GRID_SIZE = "mw_wifi_grid_size"
     internal const val KEY_MW_WIFI_GRID_SHOW_FORMAT = "mw_wifi_grid_show_format"
     internal const val KEY_MW_WIFI_GRID_SHOW_SIZE = "mw_wifi_grid_show_size"
+    internal const val KEY_MW_WIFI_GRID_ONLY_UNSAVED = "mw_wifi_grid_only_unsaved"
 }

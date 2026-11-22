@@ -34,8 +34,9 @@ class WifiPhotoViewerViewModelTest : WifiLoggingTest() {
             WifiCameraPhoto(44, "B.JPG", 4_000_000, "image/jpeg", "20260101T120100", captureId = "b"),
         )
         val heads = mutableListOf<Long>()
-        override suspend fun openPhotoBrowser() = cameraPhotoPage(groupCameraPhotos(photos), 0)
-        override suspend fun photoPage(offset: Int) = cameraPhotoPage(groupCameraPhotos(photos), offset)
+        private val snapshot by lazy { CatalogSnapshot.of(groupCameraPhotos(photos)) }
+        override suspend fun openCatalog() = snapshot.dates
+        override suspend fun dayPhotos(dateKey: String) = snapshot.day(dateKey)
         override suspend fun photoPreview(handle: Long): ImageBitmap? = null
         override suspend fun photoMetadataHead(handle: Long, length: Int): ByteArray {
             heads += handle
@@ -52,7 +53,9 @@ class WifiPhotoViewerViewModelTest : WifiLoggingTest() {
         val model = WifiRemoteViewModel("camera", controller)
         controller.connect("camera", "127.0.0.1")
         runCurrent()
-        controller.browsePhotos("camera")
+        controller.browseDates("camera")
+        runCurrent()
+        controller.browseDate("camera", "2026-01-01")
         runCurrent()
         return controller to model
     }
@@ -171,8 +174,9 @@ class WifiPhotoViewerViewModelTest : WifiLoggingTest() {
         val heads = mutableListOf<Long>()
         val headGates = mutableMapOf<Long, CompletableDeferred<ByteArray>>()
         val downloadGate = CompletableDeferred<Unit>()
-        override suspend fun openPhotoBrowser() = cameraPhotoPage(groupCameraPhotos(photos), 0)
-        override suspend fun photoPage(offset: Int) = cameraPhotoPage(groupCameraPhotos(photos), offset)
+        private val snapshot by lazy { CatalogSnapshot.of(groupCameraPhotos(photos)) }
+        override suspend fun openCatalog() = snapshot.dates
+        override suspend fun dayPhotos(dateKey: String) = snapshot.day(dateKey)
         override suspend fun photoPreview(handle: Long): ImageBitmap? = null
         override suspend fun photoMetadataHead(handle: Long, length: Int): ByteArray {
             heads += handle

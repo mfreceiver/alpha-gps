@@ -4,7 +4,12 @@ package com.sasch.cameragps.sharednew.remote.wifi
 internal const val UNKNOWN_DATE_KEY = "unknown"
 
 /** One calendar day of the card catalog; [count] is in captures (JPG+RAW pair = 1). */
-data class DateGroup(val key: String, val count: Int) {
+data class DateGroup(
+    val key: String,
+    val count: Int,
+    /** Thumbnail handle of the latest capture of this day, or null when unavailable. */
+    val coverHandle: Long? = null,
+) {
     val isUnknown: Boolean get() = key == UNKNOWN_DATE_KEY
 }
 
@@ -90,8 +95,13 @@ internal class CatalogSnapshot private constructor(
     private val byDate: Map<String, List<WifiCameraCapture>>
 ) {
     /** Newest day first, the unknown-date group always last. */
-    val dates: List<DateGroup> = byDate.map { (key, list) -> DateGroup(key, list.size) }
-        .sortedWith(compareBy<DateGroup> { it.isUnknown }.thenByDescending { it.key })
+    val dates: List<DateGroup> = byDate.map { (key, list) ->
+        DateGroup(key, list.size, coverHandle = list.firstOrNull()?.thumbnail?.handle)
+    }.sortedWith(compareBy<DateGroup> { it.isUnknown }.thenByDescending { it.key })
+
+    private val coverHandles: Set<Long> = dates.mapNotNullTo(HashSet()) { it.coverHandle }
+
+    fun isCoverHandle(handle: Long): Boolean = handle in coverHandles
 
     fun capturesOn(dateKey: String): List<WifiCameraCapture>? = byDate[dateKey]
 

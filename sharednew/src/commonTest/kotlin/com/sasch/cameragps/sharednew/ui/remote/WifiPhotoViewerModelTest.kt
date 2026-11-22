@@ -457,12 +457,6 @@ class WifiPhotoViewerModelTest {
     // ---- top bar / filmstrip -----------------------------------------------------------------------
 
     @Test
-    fun positionTotalIsTheDayForGroupedBrowsing() {
-        assertEquals(12, viewerPositionTotal(grouped = true, captureCount = 12, totalObjects = 30))
-        assertEquals(30, viewerPositionTotal(grouped = false, captureCount = 12, totalObjects = 30))
-    }
-
-    @Test
     fun captureTimeIsShownAsLocalDateAndTime() {
         assertEquals("2026-11-09 14:32:08", viewerCaptureTimeText("20261109T143208"))
         assertEquals("2026-11-09 14:32:08", viewerCaptureTimeText("20261109T143208.5Z"))
@@ -567,5 +561,32 @@ class WifiPhotoViewerModelTest {
         // A save shows as the greyed "Saved" button, not a message.
         assertEquals(ViewerNoticeAction.None, viewerNoticeAction(WifiImageTransferStatus.Downloading, WifiImageTransferStatus.Saved))
         assertEquals(ViewerNoticeAction.None, viewerNoticeAction(WifiImageTransferStatus.Failed, WifiImageTransferStatus.Idle))
+    }
+
+    @Test
+    fun rawOnlyCaptureIsDetectedAndJpgSavedOffersAlsoDownloadRaw() {
+        assertTrue(isRawOnlyCapture(rawOnly))
+        assertFalse(isRawOnlyCapture(jpgOnly))
+        assertFalse(isRawOnlyCapture(pair))
+
+        // JPG+RAW under JpegOnly with JPG saved: Saved phase carries remaining downloadable RAW.
+        val jpgSaved = viewerDownloadState(pair, WifiFormatPolicy.JpegOnly, setOf(WifiPhotoDownload(1)), idle, false)
+        assertEquals(ViewerDownloadPhase.Saved, jpgSaved.phase)
+        assertEquals(listOf(WifiPhotoDownload(2)), jpgSaved.alsoDownloadRaw)
+
+        // Both saved: no secondary RAW action.
+        val bothSaved = viewerDownloadState(
+            pair, WifiFormatPolicy.JpegOnly, setOf(WifiPhotoDownload(1), WifiPhotoDownload(2)), idle, false
+        )
+        assertEquals(ViewerDownloadPhase.Saved, bothSaved.phase)
+        assertTrue(bothSaved.alsoDownloadRaw.isEmpty())
+
+        // RAW too large: no secondary RAW action.
+        val bigRawPair = WifiCameraCapture("b", listOf(jpg, raw.copy(downloadable = false)))
+        val bigRawSaved = viewerDownloadState(
+            bigRawPair, WifiFormatPolicy.JpegOnly, setOf(WifiPhotoDownload(1)), idle, false
+        )
+        assertEquals(ViewerDownloadPhase.Saved, bigRawSaved.phase)
+        assertTrue(bigRawSaved.alsoDownloadRaw.isEmpty())
     }
 }

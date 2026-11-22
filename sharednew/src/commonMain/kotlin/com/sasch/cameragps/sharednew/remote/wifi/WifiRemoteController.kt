@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -40,12 +41,10 @@ internal interface WifiRemoteConnection {
     val canTransferImages: Boolean get() = false
     val canConvertHeif: Boolean get() = false
     val photoHandlesSurviveModeSwitch: Boolean get() = true
-    suspend fun openPhotoBrowser(): CameraPhotoPage = error("Photo browsing unavailable")
-    suspend fun photoPage(offset: Int): CameraPhotoPage = error("Photo browsing unavailable")
 
     /**
      * Enumerates the whole card and returns its days (newest first, unknown last) without showing any
-     * day: nothing is addressable until [dayPhotos].
+     * day: nothing is addressable until [dayPhotos] (except day cover thumbnails).
      */
     suspend fun openCatalog(): List<DateGroup> = error("Photo browsing unavailable")
 
@@ -89,6 +88,7 @@ internal interface WifiRemoteConnection {
      */
     val hasLiveViewStream: Boolean get() = true
     val images: Flow<ImageBitmap>
+    val liveViewFrames: Flow<WifiLiveViewFrame> get() = images.map { WifiLiveViewFrame(it) }
     val lost: Flow<Unit>
     suspend fun capture(): WifiCaptureStatus
     suspend fun turnOffWifi(): WifiShutdownStatus = WifiShutdownStatus.NotRequested
@@ -100,6 +100,12 @@ internal fun interface WifiRemoteConnector {
 
     /** A blank host requests address discovery when supported. */
     suspend fun open(host: String, scope: CoroutineScope): WifiRemoteConnection
+
+    suspend fun open(
+        host: String,
+        scope: CoroutineScope,
+        purpose: WifiSessionPurpose,
+    ): WifiRemoteConnection = open(host, scope)
 }
 
 /**
@@ -109,6 +115,13 @@ internal fun interface WifiRemoteConnector {
  */
 internal interface WifiAutomaticConnector {
     suspend fun open(identifier: String, scope: CoroutineScope, onPhase: (WifiRemotePhase) -> Unit): WifiRemoteConnection
+
+    suspend fun open(
+        identifier: String,
+        scope: CoroutineScope,
+        purpose: WifiSessionPurpose,
+        onPhase: (WifiRemotePhase) -> Unit,
+    ): WifiRemoteConnection = open(identifier, scope, onPhase)
 
     /**
      * Phone-side preconditions the controller checks before anything else; null only when the
@@ -124,6 +137,12 @@ internal interface WifiManualSetupConnector {
         credentials: CameraWifiCredentials,
         scope: CoroutineScope
     ): WifiRemoteConnection
+
+    suspend fun open(
+        credentials: CameraWifiCredentials,
+        scope: CoroutineScope,
+        purpose: WifiSessionPurpose,
+    ): WifiRemoteConnection = open(credentials, scope)
 }
 
 internal class WifiRemoteConnectException(
@@ -154,6 +173,8 @@ class WifiRemoteController internal constructor(
     private val diagnosticsDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val letterboxScan: (IntArray, Int, Int, () -> Unit) -> LetterboxBarCounts =
         { pixels, width, height, checkpoint -> letterboxBarCounts(pixels, width, height, checkpoint) },
+    /** Delay without a newly decoded live-view frame before freezing the last frame and marking `liveViewPaused`. */
+    private val liveViewStaleTimeoutMs: Long = 2_000L,
 ) {
     private val log = logging()
 
@@ -178,6 +199,8 @@ class WifiRemoteController internal constructor(
     val sessions = registry.sessions
     private val _image = MutableStateFlow<ImageBitmap?>(null)
     val image = _image.asStateFlow()
+    private val _liveViewFrame = MutableStateFlow<WifiLiveViewFrame?>(null)
+    val liveViewFrame: StateFlow<WifiLiveViewFrame?> = _liveViewFrame.asStateFlow()
     private val _owner = MutableStateFlow<String?>(null)
     val owner = _owner.asStateFlow()
     private var job: Job? = null
@@ -185,6 +208,8 @@ class WifiRemoteController internal constructor(
     private var preflightActive = false
     private val _thumbnails = MutableStateFlow<Map<Long, ImageBitmap>>(emptyMap())
     val thumbnails = _thumbnails.asStateFlow()
+    private val _dateCoverThumbnails = MutableStateFlow<Map<Long, ImageBitmap>>(emptyMap())
+    val dateCoverThumbnails = _dateCoverThumbnails.asStateFlow()
     private val _thumbnailsLoading = MutableStateFlow(false)
     /** True while the current page still has thumbnails to fetch (including while paused). */
     val thumbnailsLoading = _thumbnailsLoading.asStateFlow()
@@ -206,9 +231,12 @@ class WifiRemoteController internal constructor(
         applyBackgroundPolicy()
     }
 
-    /** Navigation closes Wi-Fi; background disposal must not cancel an accepted download. */
-    fun onRemoteScreenDisposed(identifier: String) {
-        if (!_owner.value.equals(identifier, true)) return
+    /** Navigation closes Wi-Fi; background disposal must not cancel an accepted download or another purpose's session. */
+    fun onRemoteScreenDisposed(identifier: String, expectedPurpose: WifiSessionPurpose? = null) {
+        val id = identifier.uppercase()
+        if (!_owner.value.equals(id, true)) return
+        val currentPurpose = registry.get(id)?.wifiRemote?.purpose
+        if (expectedPurpose != null && currentPurpose != expectedPurpose) return
         if (isForeground) disconnect(identifier) else applyBackgroundPolicy()
     }
 
@@ -240,10 +268,10 @@ class WifiRemoteController internal constructor(
             }
         }
     }
-    /** Background batched thumbnail loader of the current page (independent of [photoJob]). */
+    /** Background batched thumbnail loader of the current day (independent of [photoJob]). */
     private var thumbJob: Job? = null
-    /** Page-relative capture index the grid is showing; the loader serves it (and what follows) first. */
-    private var thumbFocus = 0
+    /** Serial cover-thumbnail loader for visible rows of the date list (independent of [photoJob]). */
+    private var dateCoverJob: Job? = null
     /**
      * While > 0 (a catalog load, download or screen preview is using the camera's single
      * command queue) the thumbnail loader waits between requests instead of competing.
@@ -251,6 +279,9 @@ class WifiRemoteController internal constructor(
     private val thumbnailHolds = MutableStateFlow(0)
     /** What the grid currently shows (conflated); only the grouped browser's loader consumes it. */
     private val thumbDemand = MutableStateFlow(ThumbnailDemand(-1, emptyList(), emptyList()))
+    private data class CoverDemand(val generation: Long, val handles: List<Long>)
+    private val coverDemand = MutableStateFlow(CoverDemand(-1L, emptyList()))
+    private val settledCoverHandles = HashSet<Long>()
     /** Monotonic catalog generation: every (re)open or refresh starts a new one. */
     private var browserGeneration = 0L
     /** Full handle index of pages that loaded successfully within the current generation. */
@@ -272,13 +303,20 @@ class WifiRemoteController internal constructor(
     val metadata: StateFlow<PhotoMetadataState> = metadataLoader.state
     private var manualJoin: CompletableDeferred<Unit>? = null
 
-    fun connect(identifier: String, host: String) {
-        start(identifier, WifiRemotePhase.OpeningSession) { _, sessionScope ->
-            connector.open(host.trim(), sessionScope)
+    fun connect(
+        identifier: String,
+        host: String,
+        purpose: WifiSessionPurpose = WifiSessionPurpose.Browse,
+    ) {
+        start(identifier, WifiRemotePhase.OpeningSession, purpose = purpose) { _, sessionScope ->
+            connector.open(host.trim(), sessionScope, purpose)
         }
     }
 
-    fun connectAutomatically(identifier: String) {
+    fun connectAutomatically(
+        identifier: String,
+        purpose: WifiSessionPurpose = WifiSessionPurpose.Browse,
+    ) {
         val automatic = automaticConnector ?: return
         // Phone-side preconditions are the first step of the managed attempt: a disabled phone
         // Wi-Fi (or location services on API <= 32) must not wake the camera via BLE control
@@ -288,13 +326,13 @@ class WifiRemoteController internal constructor(
         // belt-and-braces guard for any caller that reaches it directly.
         val preconditions = automatic.phonePreconditions
         start(
-            identifier, WifiRemotePhase.PreparingCamera,
+            identifier, WifiRemotePhase.PreparingCamera, purpose = purpose,
             preflight = preconditions?.let { radio -> { checkPhonePreconditions(radio) } },
         ) { id, sessionScope ->
-            automatic.open(id, sessionScope) { phase ->
-                log.i { "Wi-Fi remote attempt=$attempt phase=$phase" }
+            automatic.open(id, sessionScope, purpose) { phase ->
+                log.i { "Wi-Fi remote attempt=$attempt phase=$phase purpose=$purpose" }
                 if (registry.get(id)?.wifiRemote?.phase != WifiRemotePhase.Closing) {
-                    registry.updateWifiRemote(id, WifiRemoteState(phase = phase))
+                    registry.updateWifiRemote(id, WifiRemoteState(phase = phase, purpose = purpose))
                 }
             }
         }
@@ -321,9 +359,12 @@ class WifiRemoteController internal constructor(
         WifiRemoteFailure.ProtocolError
     }
 
-    fun prepareManualConnection(identifier: String) {
+    fun prepareManualConnection(
+        identifier: String,
+        purpose: WifiSessionPurpose = WifiSessionPurpose.Browse,
+    ) {
         val setup = manualSetupConnector ?: return
-        start(identifier, WifiRemotePhase.PreparingCamera) { id, sessionScope ->
+        start(identifier, WifiRemotePhase.PreparingCamera, purpose = purpose) { id, sessionScope ->
             val credentials = setup.prepare(id)
                 ?: throw WifiRemoteConnectException(WifiRemoteFailure.CameraSetupFailed)
             currentCoroutineContext().ensureActive()
@@ -332,12 +373,14 @@ class WifiRemoteController internal constructor(
             try {
                 registry.updateWifiRemote(
                     id, WifiRemoteState(
-                        phase = WifiRemotePhase.AwaitingManualNetwork, manualNetwork = credentials
+                        phase = WifiRemotePhase.AwaitingManualNetwork,
+                        purpose = purpose,
+                        manualNetwork = credentials,
                     )
                 )
                 log.i { "Wi-Fi remote attempt=$attempt waiting for manual network join" }
                 joined.await()
-                setup.open(credentials, sessionScope)
+                setup.open(credentials, sessionScope, purpose)
             } finally {
                 manualJoin = null
             }
@@ -345,15 +388,73 @@ class WifiRemoteController internal constructor(
     }
 
     fun continueManualConnection(identifier: String) {
+        val current = registry.get(identifier)?.wifiRemote ?: return
         if (_owner.value.equals(identifier, true) &&
-            registry.get(identifier)?.wifiRemote?.phase == WifiRemotePhase.AwaitingManualNetwork
+            current.phase == WifiRemotePhase.AwaitingManualNetwork
         ) {
             registry.updateWifiRemote(
                 identifier,
-                WifiRemoteState(phase = WifiRemotePhase.OpeningSession)
+                WifiRemoteState(phase = WifiRemotePhase.OpeningSession, purpose = current.purpose)
             )
             manualJoin?.complete(Unit)
         }
+    }
+
+    /**
+     * R2: Establish or switch a Wi-Fi session for [purpose].
+     * - If another camera owns Wi-Fi or an accepted user download is in progress, refuses (`false`).
+     * - If the same camera is already active/connecting with [purpose], reuses it (`true`).
+     * - If the same camera is active/connecting with a different purpose, closes and joins the
+     *   old session (discarding old frames, catalog, and handles) before starting [purpose].
+     */
+    suspend fun switchPurpose(
+        identifier: String,
+        purpose: WifiSessionPurpose,
+        host: String? = null,
+    ): Boolean {
+        val id = identifier.uppercase()
+        val currentOwner = _owner.value
+        if (currentOwner != null && currentOwner != id) return false
+        val current = registry.get(id)?.wifiRemote
+        if (userDownloadInProgress || current?.imageTransfer?.busy == true) return false
+        if (currentOwner == id && current != null &&
+            current.purpose == purpose &&
+            current.phase != WifiRemotePhase.Idle &&
+            current.phase != WifiRemotePhase.Failed &&
+            current.phase != WifiRemotePhase.Closing
+        ) {
+            return true
+        }
+        if (currentOwner == id || job != null) {
+            closeAndJoin(id)
+        }
+        if (!isForeground) return false
+        when {
+            host != null -> connect(id, host, purpose)
+            supportsAutomaticConnection -> connectAutomatically(id, purpose)
+            supportsManualSetup -> prepareManualConnection(id, purpose)
+            else -> return false
+        }
+        return true
+    }
+
+    /**
+     * R2: Reopen only the HTTP live-view stream after a preview failure while the control channel
+     * remains `Ready`.
+     */
+    fun retryLiveView(identifier: String) {
+        val id = identifier.uppercase()
+        val state = registry.get(id)?.wifiRemote ?: return
+        val connection = activeConnection ?: return
+        val parent = sessionScope ?: return
+        if (_owner.value != id || state.phase != WifiRemotePhase.Ready ||
+            !state.supportsLiveView || state.photoBrowser.open || photoJob != null ||
+            (state.preview != WifiPreviewStatus.Failed && !state.liveViewPaused)
+        ) return
+        previewJob?.cancel()
+        previewJob = null
+        updateReady(id) { it.copy(preview = WifiPreviewStatus.Waiting, liveViewPaused = false) }
+        startPreview(id, connection, parent)
     }
 
     /**
@@ -364,6 +465,7 @@ class WifiRemoteController internal constructor(
      * preflight, so a repeated start is ignored and a late result can never reach a newer session.
      */
     private fun start(identifier: String, phase: WifiRemotePhase,
+                      purpose: WifiSessionPurpose = WifiSessionPurpose.Browse,
                       preflight: (suspend () -> WifiRemoteFailure?)? = null,
                       open: suspend (String, CoroutineScope) -> WifiRemoteConnection) {
         if (job != null) {
@@ -376,12 +478,13 @@ class WifiRemoteController internal constructor(
         cancelBackgroundDownloadTimer()
         attempt++
         val thisAttempt = attempt
-        log.i { "Wi-Fi remote attempt=$attempt starting phase=$phase" }
+        log.i { "Wi-Fi remote attempt=$attempt starting phase=$phase purpose=$purpose" }
         val id = identifier.uppercase()
         if (registry.get(id) == null) registry.upsert(id) { it.copy(phase = BleSessionPhase.Disconnected) }
         _owner.value = id
         _image.value = null
-        if (preflight == null) registry.updateWifiRemote(id, WifiRemoteState(phase = phase))
+        _liveViewFrame.value = null
+        if (preflight == null) registry.updateWifiRemote(id, WifiRemoteState(phase = phase, purpose = purpose))
         preflightActive = preflight != null
         var entered = false
         var preflightFailure: WifiRemoteFailure? = null
@@ -397,10 +500,10 @@ class WifiRemoteController internal constructor(
                     preflightFailure = failure
                     return@launch
                 }
-                registry.updateWifiRemote(id, WifiRemoteState(phase = phase))
+                registry.updateWifiRemote(id, WifiRemoteState(phase = phase, purpose = purpose))
             }
             entered = true
-            runSession(id, open)
+            runSession(id, purpose, open)
         }
         job = connecting
         connecting.invokeOnCompletion {
@@ -409,7 +512,7 @@ class WifiRemoteController internal constructor(
                 val failure = preflightFailure
                 registry.updateWifiRemote(
                     id, if (failure == null) WifiRemoteState()
-                    else WifiRemoteState(WifiRemotePhase.Failed, failure)
+                    else WifiRemoteState(WifiRemotePhase.Failed, failure, purpose = purpose)
                 )
                 _owner.value = null
                 job = null
@@ -434,61 +537,11 @@ class WifiRemoteController internal constructor(
         if (captureRequests?.trySend(Unit)?.isSuccess != true) registry.updateWifiRemote(id, state)
     }
 
-    fun browsePhotos(identifier: String, offset: Int? = null, preferredPhotoIndex: Int? = null) {
-        // A refresh (offset == null) opens a new catalog generation: previously loaded pages,
-        // saved-download markers, and pending cross-page selections all become stale.
-        val generation = if (offset == null) ++browserGeneration else 0L
-        photoWork(identifier, { state ->
-            state.copy(
-                photoBrowser = state.photoBrowser.copy(
-                    open = true, loading = true, failed = false,
-                    browserGeneration = if (offset == null) generation
-                    else state.photoBrowser.browserGeneration,
-                    photos = if (offset == null) emptyList() else state.photoBrowser.photos,
-                    savedDownloads = if (offset == null) emptySet() else state.photoBrowser.savedDownloads,
-                    grouped = false, dates = emptyList(), dateKey = null
-                )
-            )
-        }) { id, connection ->
-            clearPhotoPreview(id)
-            previewJob?.cancelAndJoin()
-            previewJob = null
-            _image.value = null
-            thumbJob?.cancelAndJoin()
-            thumbJob = null
-            if (offset == null) {
-                photoCatalog = emptyMap()
-                _thumbnails.value = emptyMap()
-            }
-            updateReady(id) { it.copy(hasLiveView = false) }
-            val page =
-                if (offset == null) connection.openPhotoBrowser() else connection.photoPage(offset)
-            _thumbnails.value = emptyMap()
-            photoCatalog += page.photos.associateBy { it.handle }
-            updateReady(id) {
-                it.copy(
-                    photoBrowser = it.photoBrowser.copy(
-                        photos = page.photos,
-                        offset = page.offset,
-                        totalObjects = page.totalObjects,
-                        hasMore = page.hasMore,
-                        pageRevision = it.photoBrowser.pageRevision + 1
-                    )
-                )
-            }
-            val captures = groupCameraPhotos(page.photos)
-            thumbFocus = preferredPhotoIndex?.minus(page.offset)
-                ?.coerceIn(0, (captures.size - 1).coerceAtLeast(0)) ?: 0
-            // The catalog is on screen now: `loading` ends with this work, and the thumbnails
-            // arrive in small batches afterwards (paused while a transfer/preview runs).
-            thumbJob = sessionScope?.launch { loadThumbnails(connection, page.offset, captures) }
-        }
-    }
-
     /**
      * Date-grouped entry (a new catalog generation, like a refresh): enumerates the whole card and
-     * publishes its days. No page is shown and no thumbnail is requested until [browseDate]; a failure
-     * leaves `failed` set so the same call can simply be retried.
+     * publishes its days. No page is shown and no thumbnail is requested until [browseDate] (or
+     * [requestDateCovers] for visible cover rows); a failure leaves `failed` set so the same call
+     * can simply be retried.
      */
     fun browseDates(identifier: String) {
         val generation = ++browserGeneration
@@ -496,8 +549,8 @@ class WifiRemoteController internal constructor(
             state.copy(
                 photoBrowser = state.photoBrowser.copy(
                     open = true, loading = true, failed = false, browserGeneration = generation,
-                    photos = emptyList(), offset = 0, totalObjects = 0, hasMore = false,
-                    savedDownloads = emptySet(), grouped = true, dates = emptyList(), dateKey = null
+                    photos = emptyList(), totalObjects = 0,
+                    savedDownloads = emptySet(), dates = emptyList(), dateKey = null
                 )
             )
         }) { id, connection ->
@@ -505,11 +558,17 @@ class WifiRemoteController internal constructor(
             previewJob?.cancelAndJoin()
             previewJob = null
             _image.value = null
+            _liveViewFrame.value = null
             thumbJob?.cancelAndJoin()
             thumbJob = null
+            dateCoverJob?.cancelAndJoin()
+            dateCoverJob = null
+            coverDemand.value = CoverDemand(-1L, emptyList())
+            settledCoverHandles.clear()
             photoCatalog = emptyMap()
             _thumbnails.value = emptyMap()
-            updateReady(id) { it.copy(hasLiveView = false) }
+            _dateCoverThumbnails.value = emptyMap()
+            updateReady(id) { it.copy(hasLiveView = false, liveViewPaused = false) }
             val dates = connection.openCatalog()
             updateReady(id) {
                 it.copy(
@@ -534,7 +593,7 @@ class WifiRemoteController internal constructor(
         expectedRevision: Long? = null,
     ) {
         val browser = registry.get(identifier.uppercase())?.wifiRemote?.photoBrowser ?: return
-        if (!browser.open || !browser.grouped || browser.dates.none { it.key == dateKey }) return
+        if (!browser.open || browser.dates.none { it.key == dateKey }) return
         // A request made against an earlier view of the grid (A -> B -> A) must not replace this one.
         if (expectedRevision != null && expectedRevision != browser.pageRevision) return
         photoWork(identifier, { state ->
@@ -550,8 +609,12 @@ class WifiRemoteController internal constructor(
             previewJob?.cancelAndJoin()
             previewJob = null
             _image.value = null
+            _liveViewFrame.value = null
             thumbJob?.cancelAndJoin()
             thumbJob = null
+            dateCoverJob?.cancelAndJoin()
+            dateCoverJob = null
+            coverDemand.value = CoverDemand(-1L, emptyList())
             thumbDemand.value = ThumbnailDemand(-1, emptyList(), emptyList())
             val page = connection.dayPhotos(dateKey)
             _thumbnails.value = emptyMap()
@@ -560,15 +623,15 @@ class WifiRemoteController internal constructor(
             updateReady(id) {
                 it.copy(
                     photoBrowser = it.photoBrowser.copy(
-                        photos = page.photos, offset = page.offset, totalObjects = page.totalObjects,
-                        hasMore = page.hasMore, dateKey = dateKey, pageRevision = revision
+                        photos = page.photos, totalObjects = page.totalObjects,
+                        dateKey = dateKey, pageRevision = revision
                     )
                 )
             }
             val captures = groupCameraPhotos(page.photos)
             // Nothing is fetched until the grid reports its viewport (see requestThumbnails); a viewer
             // crossing into this page names the capture it is about to show instead.
-            preferredPhotoIndex?.minus(page.offset)?.let { captures.getOrNull(it) }?.let { shown ->
+            preferredPhotoIndex?.let { captures.getOrNull(it) }?.let { shown ->
                 thumbDemand.value = ThumbnailDemand(revision, listOf(shown.id), emptyList())
             }
             thumbJob = sessionScope?.launch {
@@ -586,7 +649,7 @@ class WifiRemoteController internal constructor(
         val state = registry.get(id)?.wifiRemote ?: return
         val browser = state.photoBrowser
         if (_owner.value != id || state.phase != WifiRemotePhase.Ready || !browser.open ||
-            !browser.grouped || browser.dateKey == null || browser.loading || photoJob != null ||
+            browser.dateKey == null || browser.loading || photoJob != null ||
             state.imageTransfer.busy
         ) return
         clearPhotoPreview(id)
@@ -595,7 +658,7 @@ class WifiRemoteController internal constructor(
         updateReady(id) {
             it.copy(
                 photoBrowser = it.photoBrowser.copy(
-                    photos = emptyList(), offset = 0, hasMore = false, dateKey = null,
+                    photos = emptyList(), dateKey = null,
                     totalObjects = it.photoBrowser.dates.sumOf { group -> group.count },
                     pageRevision = it.photoBrowser.pageRevision + 1
                 )
@@ -603,64 +666,8 @@ class WifiRemoteController internal constructor(
         }
     }
 
-    /** The grid reports the first capture (page-relative) it shows so nearby thumbnails load first. */
-    fun focusThumbnails(identifier: String, captureIndex: Int) {
-        if (_owner.value.equals(identifier, true)) thumbFocus = captureIndex.coerceAtLeast(0)
-    }
-
     private fun holdThumbnails() = thumbnailHolds.update { it + 1 }
     private fun releaseThumbnails() = thumbnailHolds.update { (it - 1).coerceAtLeast(0) }
-
-    /**
-     * Fetches the page's thumbnails in batches of [THUMBNAIL_BATCH_SIZE], each one published as soon
-     * as it arrives. The next batch is chosen from what is still missing, starting at the grid's
-     * current position. A failed or missing thumbnail only affects itself: already arrived ones are
-     * kept and the loader moves on. Cancelling (page change, refresh, disconnect) stops after the
-     * request in flight and keeps what arrived.
-     */
-    private suspend fun loadThumbnails(
-        connection: WifiRemoteConnection, pageOffset: Int, captures: List<WifiCameraCapture>
-    ) {
-        val settled = HashSet<Int>()
-        // "AlphaThumb" diagnostics: per-batch lines plus one per-page summary.
-        val pageStats = ThumbnailPageStats(pageOffset, captures.size)
-        var batchNumber = 0
-        _thumbnailsLoading.value = true
-        try {
-            while (true) {
-                val batch = nextThumbnailBatch(captures.size, settled, thumbFocus)
-                if (batch.isEmpty()) break
-                batchNumber++
-                val started = TimeSource.Monotonic.markNow()
-                var fetched = 0
-                var requestMs = 0L
-                var bytes = 0L
-                for (index in batch) {
-                    thumbnailHolds.first { it == 0 }
-                    settled += index
-                    val fetch = fetchThumbnail(connection, pageOffset, index, captures[index].thumbnail, pageStats)
-                        ?: continue
-                    fetched++
-                    requestMs += fetch.ms
-                    bytes += fetch.bytes
-                }
-                thumbLog.i {
-                    thumbnailBatchLine(
-                        pageOffset, batchNumber, fetched, batch.size, requestMs,
-                        started.elapsedNow().inWholeMilliseconds, bytes
-                    )
-                }
-            }
-            pageStats.takeSummary()?.let { line -> thumbLog.i { line } }
-        } catch (cancelled: CancellationException) {
-            cancelDiagnostics()
-            pageStats.takeCancelled()?.let { line -> thumbLog.i { line } }
-            throw cancelled
-        } finally {
-            // A replacement loader only starts after this one was joined, so this cannot clobber it.
-            _thumbnailsLoading.value = false
-        }
-    }
 
     private class ThumbnailFetch(val bytes: Long, val ms: Long)
 
@@ -747,6 +754,71 @@ class WifiRemoteController internal constructor(
     fun requestThumbnails(identifier: String, pageRevision: Long, visible: List<String>, margin: List<String>) {
         if (_owner.value.equals(identifier, true)) {
             thumbDemand.value = ThumbnailDemand(pageRevision, visible, margin)
+        }
+    }
+
+    /**
+     * Reports the cover handles currently visible in the date list. Lazily requests at most one
+     * thumbnail per day per catalog generation, serialized behind [thumbnailHolds] and guarded by
+     * [browserGeneration] so stale responses never overwrite a refreshed or disconnected session.
+     */
+    fun requestDateCovers(identifier: String, generation: Long, visibleHandles: List<Long>) {
+        val id = identifier.uppercase()
+        if (_owner.value != id) return
+        val state = registry.get(id)?.wifiRemote ?: return
+        val browser = state.photoBrowser
+        if (state.phase != WifiRemotePhase.Ready || !browser.open ||
+            browser.dateKey != null || generation != browserGeneration
+        ) return
+        val distinct = visibleHandles.distinct()
+        coverDemand.value = CoverDemand(generation, distinct)
+        if (dateCoverJob?.isActive == true) return
+        val hasPending = distinct.any { it !in settledCoverHandles && it !in _dateCoverThumbnails.value }
+        if (!hasPending) return
+        val connection = activeConnection ?: return
+        dateCoverJob = sessionScope?.launch { loadDateCovers(connection, id, generation) }
+    }
+
+    private suspend fun loadDateCovers(
+        connection: WifiRemoteConnection,
+        id: String,
+        generation: Long,
+    ) {
+        while (true) {
+            val demand = coverDemand.value
+            if (demand.generation != generation || generation != browserGeneration) break
+            val next = demand.handles.firstOrNull {
+                it !in settledCoverHandles && it !in _dateCoverThumbnails.value
+            }
+            if (next == null) {
+                val seen = demand
+                val updated = coverDemand.first { it != seen }
+                if (updated.generation != generation || generation != browserGeneration) break
+                continue
+            }
+            thumbnailHolds.first { it == 0 }
+            currentCoroutineContext().ensureActive()
+            val current = coverDemand.value
+            if (current.generation != generation || generation != browserGeneration) break
+            if (next !in current.handles) continue
+            if (next in settledCoverHandles || next in _dateCoverThumbnails.value) continue
+            settledCoverHandles += next
+            val bitmap = try {
+                connection.photoThumbnail(next)
+            } catch (_: TimeoutCancellationException) {
+                currentCoroutineContext().ensureActive()
+                thumbLog.w { "cover handle=$next timed out" }
+                null
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                thumbLog.w { "cover handle=$next failed: ${failure.message}" }
+                null
+            } ?: continue
+            currentCoroutineContext().ensureActive()
+            if (generation == browserGeneration && _owner.value == id) {
+                _dateCoverThumbnails.value += next to bitmap
+            }
         }
     }
 
@@ -1008,9 +1080,14 @@ class WifiRemoteController internal constructor(
             previewJob = null
             thumbJob?.cancelAndJoin()
             thumbJob = null
+            dateCoverJob?.cancelAndJoin()
+            dateCoverJob = null
+            coverDemand.value = CoverDemand(-1L, emptyList())
+            settledCoverHandles.clear()
             connection.closePhotoBrowser()
             photoCatalog = emptyMap()
             _thumbnails.value = emptyMap()
+            _dateCoverThumbnails.value = emptyMap()
             updateReady(id) {
                 it.copy(
                     photoBrowser = WifiPhotoBrowserState(
@@ -1019,6 +1096,8 @@ class WifiRemoteController internal constructor(
                     ),
                     canCaptureStill = connection.canCapture,
                     canTransferImages = connection.canTransferImages,
+                    supportsLiveView = connection.hasLiveViewStream,
+                    liveViewPaused = false,
                     imageTransfer = WifiImageTransferState(), preview = WifiPreviewStatus.Waiting
                 )
             }
@@ -1149,7 +1228,11 @@ class WifiRemoteController internal constructor(
         registry.updateWifiRemote(identifier, WifiRemoteState(WifiRemotePhase.Failed, WifiRemoteFailure.NetworkPermissionDenied))
     }
 
-    private suspend fun runSession(id: String, open: suspend (String, CoroutineScope) -> WifiRemoteConnection) {
+    private suspend fun runSession(
+        id: String,
+        purpose: WifiSessionPurpose,
+        open: suspend (String, CoroutineScope) -> WifiRemoteConnection,
+    ) {
         var connection: WifiRemoteConnection? = null
         var failure: WifiRemoteFailure? = null
         var shutdown = WifiShutdownStatus.NotRequested
@@ -1163,11 +1246,17 @@ class WifiRemoteController internal constructor(
                 log.i { "Wi-Fi remote attempt=$attempt ready; starting live view" }
                 val requests = Channel<Unit>(Channel.RENDEZVOUS)
                 captureRequests = requests
-                registry.updateWifiRemote(id, WifiRemoteState(phase = WifiRemotePhase.Ready,
-                    canCaptureStill = opened.canCapture, cameraName = opened.cameraName,
-                    canTransferImages = opened.canTransferImages,
-                    canConvertHeif = opened.canConvertHeif
-                )
+                registry.updateWifiRemote(
+                    id,
+                    WifiRemoteState(
+                        phase = WifiRemotePhase.Ready,
+                        purpose = purpose,
+                        canCaptureStill = opened.canCapture,
+                        supportsLiveView = opened.hasLiveViewStream,
+                        cameraName = opened.cameraName,
+                        canTransferImages = opened.canTransferImages,
+                        canConvertHeif = opened.canConvertHeif,
+                    ),
                 )
                 launch {
                     opened.lost.first()
@@ -1220,6 +1309,9 @@ class WifiRemoteController internal constructor(
             userDownloadInProgress = false
             cancelBackgroundDownloadTimer()
             thumbJob = null
+            dateCoverJob = null
+            coverDemand.value = CoverDemand(-1L, emptyList())
+            settledCoverHandles.clear()
             _thumbnailsLoading.value = false
             thumbnailHolds.value = 0
             photoPreviewJob = null
@@ -1227,6 +1319,7 @@ class WifiRemoteController internal constructor(
             metadataLoader.clear()
             _photoPreview.value = null
             _thumbnails.value = emptyMap()
+            _dateCoverThumbnails.value = emptyMap()
             captureRequests?.close()
             captureRequests = null
             withContext(NonCancellable) {
@@ -1250,6 +1343,7 @@ class WifiRemoteController internal constructor(
                     } catch (_: Exception) { /* Best-effort socket teardown. */
                     } finally {
                         _image.value = null
+                        _liveViewFrame.value = null
                         registry.updateWifiRemote(
                             id, if (failure == null) WifiRemoteState(wifiShutdown = shutdown)
                             else WifiRemoteState(WifiRemotePhase.Failed, failure)
@@ -1267,37 +1361,58 @@ class WifiRemoteController internal constructor(
     private fun startPreview(id: String, connection: WifiRemoteConnection, parent: CoroutineScope) {
         if (!connection.hasLiveViewStream) {
             log.i { "Wi-Fi live view not used for this connection (photo transfer only)" }
-            updateReady(id) { it.copy(hasLiveView = false, preview = WifiPreviewStatus.Unavailable) }
+            updateReady(id) {
+                it.copy(
+                    hasLiveView = false,
+                    supportsLiveView = false,
+                    liveViewPaused = false,
+                    preview = WifiPreviewStatus.Unavailable,
+                )
+            }
             return
         }
         previewJob = parent.launch {
             var receivedFrame = false
+            var staleWatchdog: Job? = null
             log.i { "Wi-Fi live view starting" }
             try {
-                connection.images.collect { image ->
+                connection.liveViewFrames.collect { frame ->
                     if (!receivedFrame) {
-                        log.i { "Wi-Fi live view first image ${image.width}x${image.height}" }
+                        log.i { "Wi-Fi live view first image ${frame.image.width}x${frame.image.height}" }
                         receivedFrame = true
                     }
-                    _image.value = image
+                    staleWatchdog?.cancel()
+                    staleWatchdog = launch {
+                        delay(liveViewStaleTimeoutMs)
+                        updateReady(id) {
+                            if (it.preview == WifiPreviewStatus.Streaming) it.copy(liveViewPaused = true)
+                            else it
+                        }
+                    }
+                    _image.value = frame.image
+                    _liveViewFrame.value = frame
                     updateReady(id) {
                         it.copy(
                             hasLiveView = true,
-                            preview = WifiPreviewStatus.Streaming
+                            supportsLiveView = true,
+                            liveViewPaused = false,
+                            preview = WifiPreviewStatus.Streaming,
                         )
                     }
                 }
-                updateReady(id) { it.copy(hasLiveView = false, preview = WifiPreviewStatus.Failed) }
+                updateReady(id) { it.copy(hasLiveView = false, liveViewPaused = false, preview = WifiPreviewStatus.Failed) }
             } catch (cancelled: CancellationException) {
                 currentCoroutineContext().ensureActive()
                 log.w { "Wi-Fi live view timed out: ${cancelled.message}" }
-                updateReady(id) { it.copy(hasLiveView = false, preview = WifiPreviewStatus.Failed) }
+                updateReady(id) { it.copy(hasLiveView = false, liveViewPaused = false, preview = WifiPreviewStatus.Failed) }
             } catch (failure: Exception) {
                 log.w { "Wi-Fi live view failed: ${failure.message}" }
-                updateReady(id) { it.copy(hasLiveView = false, preview = WifiPreviewStatus.Failed) }
+                updateReady(id) { it.copy(hasLiveView = false, liveViewPaused = false, preview = WifiPreviewStatus.Failed) }
             } finally {
+                staleWatchdog?.cancel()
                 log.i { "Wi-Fi live view stopped; receivedFrame=$receivedFrame" }
                 _image.value = null
+                _liveViewFrame.value = null
             }
         }
     }

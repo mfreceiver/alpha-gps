@@ -154,7 +154,8 @@ class SonyImageTransferTest : WifiLoggingTest() {
         }
         val queue = PtpIpCommandQueue(transport, backgroundScope)
         val transfer = SonyImageTransfer(queue, ready()) { error("Preview must not save a file") }
-        transfer.openBrowser()
+        val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.single().key)
         assertEquals(
             null,
             transfer.preview(1L),
@@ -167,17 +168,16 @@ class SonyImageTransferTest : WifiLoggingTest() {
     }
 
     @Test
-    fun browsesPagesAndDownloadsSelectedOriginalInBoundedChunks() = runTest {
-        val transport = Transport().apply { objectCount = SonyImageTransfer.PAGE_SIZE + 5; readyAfterPolls = 2 }
+    fun browsesCatalogAndDownloadsSelectedOriginalInBoundedChunks() = runTest {
+        val transport = Transport().apply { objectCount = 65; readyAfterPolls = 2 }
         val queue = PtpIpCommandQueue(transport, backgroundScope)
         val outputs = mutableListOf<Destination>()
         val progress = mutableListOf<WifiImageTransferState>()
         val transfer = SonyImageTransfer(queue, ready()) { Destination().also { outputs += it } }
-        val first = transfer.openBrowser()
-        assertEquals(transport.objectCount, first.totalObjects)
-        assertEquals((transport.objectCount.toLong() downTo 6L).toList(), first.photos.map { it.handle })
-        val second = transfer.page(SonyImageTransfer.PAGE_SIZE)
-        assertEquals((5L downTo 1L).toList(), second.photos.map { it.handle })
+        val dates = transfer.openCatalog()
+        assertEquals(transport.objectCount, dates.sumOf { it.count })
+        val day = transfer.dayPhotos(dates.first().key)
+        assertEquals((transport.objectCount.toLong() downTo 1L).toList(), day.photos.map { it.handle })
         val result = transfer.download(4L) { progress += it }
         assertEquals(WifiImageTransferStatus.Saved, result.status)
         assertTrue(
@@ -204,16 +204,16 @@ class SonyImageTransferTest : WifiLoggingTest() {
     }
 
     @Test
-    fun offPageDownloadRefusesChangedMetadata() = runTest {
+    fun downloadRefusesChangedMetadata() = runTest {
         val transport = Transport().apply {
-            objectCount = SonyImageTransfer.PAGE_SIZE + 5
+            objectCount = 65
             readyAfterPolls = 2
             metadata = mapOf(45L to info(600_000L, "DSC45.JPG"))
         }
         val queue = PtpIpCommandQueue(transport, backgroundScope)
         val transfer = SonyImageTransfer(queue, ready()) { Destination() }
-        transfer.openBrowser()
-        transfer.page(SonyImageTransfer.PAGE_SIZE)
+        val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.first().key)
         // The camera rewrote the file between browsing and downloading.
         transport.metadata = mapOf(45L to info(600_001L, "DSC45.JPG"))
         val result = transfer.download(45L) {}
@@ -224,9 +224,9 @@ class SonyImageTransferTest : WifiLoggingTest() {
     }
 
     @Test
-    fun legacyPairsStayTogetherAcrossPagesAndIdenticalNamesInOtherFoldersStaySeparate() = runTest {
+    fun legacyPairsStayTogetherAndIdenticalNamesInOtherFoldersStaySeparate() = runTest {
         val transport = Transport().apply {
-            objectCount = (SonyImageTransfer.PAGE_SIZE + 1) * 2
+            objectCount = 122
             metadata = (1L..objectCount.toLong()).associateWith { handle ->
                 val name = "DSC${(handle + 1) / 2}"
                 if (handle % 2 == 0L) info(size.toLong(), "$name.ARW", 0xb101)
@@ -235,11 +235,12 @@ class SonyImageTransferTest : WifiLoggingTest() {
         }
         val queue = PtpIpCommandQueue(transport, backgroundScope)
         val transfer = SonyImageTransfer(queue, ready()) { Destination() }
-        val first = transfer.openBrowser()
-        assertEquals(SonyImageTransfer.PAGE_SIZE + 1, first.totalObjects)
-        assertEquals(SonyImageTransfer.PAGE_SIZE * 2, first.photos.size)
-        val last = transfer.page(SonyImageTransfer.PAGE_SIZE)
-        assertEquals(listOf(2L, 1L), last.photos.map { it.handle })
+        val dates = transfer.openCatalog()
+        assertEquals(61, dates.sumOf { it.count })
+        val day = transfer.dayPhotos(dates.first().key)
+        assertEquals(122, day.photos.size)
+        assertEquals(122L, day.photos.first().handle)
+        assertEquals(1L, day.photos.last().handle)
         assertEquals(WifiImageTransferStatus.Saved, transfer.download(1) {}.status)
         assertEquals(WifiImageTransferStatus.Saved, transfer.download(2) {}.status)
         val jpg = SonyImageInfo.parse(info(1, "DSC.JPG", parent = 10))
@@ -267,7 +268,8 @@ class SonyImageTransferTest : WifiLoggingTest() {
                 }
             }
             val transfer = SonyImageTransfer(queue, ready(), store = store)
-            transfer.openBrowser()
+            val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.single().key)
             val progress = mutableListOf<WifiImageTransferState>()
             val result = transfer.download(1, WifiPhotoDownloadFormat.Jpeg) { progress += it }
             assertEquals("DSC.jpg", result.filename)
@@ -294,7 +296,8 @@ class SonyImageTransferTest : WifiLoggingTest() {
             override suspend fun createJpeg(info: SonyImageInfo): CameraImageDestination = output
         }
         val transfer = SonyImageTransfer(queue, ready(), store = store)
-        transfer.openBrowser()
+        val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.single().key)
         val job = launch { transfer.download(1, WifiPhotoDownloadFormat.Jpeg) {} }
         runCurrent()
         assertTrue(output.prepared)
@@ -310,7 +313,8 @@ class SonyImageTransferTest : WifiLoggingTest() {
         val transport = Transport().apply { metadata = mapOf(1L to info(size.toLong(), "DSC.HIF", 0xb110)) }
         val queue = PtpIpCommandQueue(transport, backgroundScope)
         val transfer = SonyImageTransfer(queue, ready()) { error("No file") }
-        transfer.openBrowser()
+        val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.single().key)
         val before = transport.operations.size
         assertEquals(WifiImageTransferStatus.ConversionFailed, transfer.download(1, WifiPhotoDownloadFormat.Jpeg) {}.status)
         assertEquals(before, transport.operations.size)
@@ -325,7 +329,8 @@ class SonyImageTransferTest : WifiLoggingTest() {
             val queue = PtpIpCommandQueue(transport, backgroundScope)
             val output = Destination()
             val transfer = SonyImageTransfer(queue, ready()) { output }
-            transfer.openBrowser()
+            val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.single().key)
             val result = transfer.download(1L) {}
             assertEquals(WifiImageTransferStatus.Failed, result.status)
             assertEquals(WifiTransferFailureReason.Protocol, result.failureReason)
@@ -342,7 +347,8 @@ class SonyImageTransferTest : WifiLoggingTest() {
         val queue = PtpIpCommandQueue(transport, backgroundScope)
         val output = Destination().apply { blockWrite = true }
         val transfer = SonyImageTransfer(queue, ready()) { output }
-        transfer.openBrowser()
+        val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.single().key)
         val job = launch { transfer.download(1L) {} }
         runCurrent()
         job.cancel()
@@ -361,7 +367,8 @@ class SonyImageTransferTest : WifiLoggingTest() {
             val output =
                 Destination().apply { failWrite = !commitFailure; failCommit = commitFailure }
             val transfer = SonyImageTransfer(queue, ready()) { output }
-            transfer.openBrowser()
+            val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.single().key)
             val result = transfer.download(1L) {}
             assertEquals(WifiImageTransferStatus.Failed, result.status)
             assertEquals(WifiTransferFailureReason.Storage, result.failureReason)
@@ -377,7 +384,8 @@ class SonyImageTransferTest : WifiLoggingTest() {
         val queue = PtpIpCommandQueue(transport, backgroundScope)
         val output = Destination().apply { blockWrite = true }
         val transfer = SonyImageTransfer(queue, ready()) { output }
-        transfer.openBrowser()
+        val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.single().key)
         val result = async { transfer.download(1L) {} }
         runCurrent()
         advanceTimeBy(5.minutes + 1.seconds)
@@ -395,7 +403,8 @@ class SonyImageTransferTest : WifiLoggingTest() {
         val transport = Transport()
         val queue = PtpIpCommandQueue(transport, backgroundScope)
         val transfer = SonyImageTransfer(queue, ready()) { Destination() }
-        transfer.openBrowser()
+        val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.single().key)
         // The pre-download metadata query gets no answer: a single-command timeout is a
         // communication failure, not proof that the photo or card changed.
         transport.hangCodes = setOf(0x1008)
@@ -411,7 +420,8 @@ class SonyImageTransferTest : WifiLoggingTest() {
         val transport = Transport()
         val queue = PtpIpCommandQueue(transport, backgroundScope)
         val transfer = SonyImageTransfer(queue, ready()) { Destination() }
-        transfer.openBrowser()
+        val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.single().key)
         transport.failCodes = setOf(0x1008)
         val result = transfer.download(1L) {}
         assertEquals(WifiImageTransferStatus.Failed, result.status)
@@ -424,7 +434,8 @@ class SonyImageTransferTest : WifiLoggingTest() {
         val transport = Transport()
         val queue = PtpIpCommandQueue(transport, backgroundScope)
         val transfer = SonyImageTransfer(queue, ready()) { Destination() }
-        transfer.openBrowser()
+        val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.single().key)
         transport.hangCodes = setOf(0x9211)
         val result = transfer.download(1L) {}
         assertEquals(WifiImageTransferStatus.Failed, result.status)
@@ -440,7 +451,8 @@ class SonyImageTransferTest : WifiLoggingTest() {
         val transport = Transport()
         val queue = PtpIpCommandQueue(transport, backgroundScope)
         val transfer = SonyImageTransfer(queue, ready()) { Destination() }
-        transfer.openBrowser()
+        val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.single().key)
         transport.failCodes = setOf(0x9211)
         val result = transfer.download(1L) {}
         assertEquals(WifiImageTransferStatus.Failed, result.status)
@@ -453,7 +465,8 @@ class SonyImageTransferTest : WifiLoggingTest() {
         val transport = Transport()
         val queue = PtpIpCommandQueue(transport, backgroundScope)
         val transfer = SonyImageTransfer(queue, ready()) { Destination() }
-        transfer.openBrowser()
+        val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.single().key)
         val state = transfer.download(1L) { error("Listener crashed") }
         assertEquals(WifiImageTransferStatus.Failed, state.status)
         assertEquals(WifiTransferFailureReason.Unknown, state.failureReason)
@@ -469,10 +482,11 @@ class SonyImageTransferTest : WifiLoggingTest() {
             ready().copy(deviceInfo = PtpDeviceInfo(emptySet()))
         ) { error("No file") }
         assertFalse(unsupported.supported)
-        assertFailsWith<IllegalStateException> { unsupported.openBrowser() }
+        assertFailsWith<IllegalStateException> { unsupported.openCatalog() }
         assertTrue(transport.operations.isEmpty())
         val transfer = SonyImageTransfer(queue, ready()) { error("No file") }
-        transfer.openBrowser()
+        val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.single().key)
         val before = transport.operations.size
         val missing = transfer.download(999L) {}
         assertEquals(WifiImageTransferStatus.Failed, missing.status)
@@ -486,7 +500,8 @@ class SonyImageTransferTest : WifiLoggingTest() {
         val transport = Transport()
         val queue = PtpIpCommandQueue(transport, backgroundScope)
         val transfer = SonyImageTransfer(queue, ready()) { error("No file") }
-        transfer.openBrowser()
+        val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.single().key)
         val before = transport.operations.size
         val head = transfer.metadataHead(1L, 65_536)
         assertEquals(65_536, head.size)
@@ -508,7 +523,8 @@ class SonyImageTransferTest : WifiLoggingTest() {
         val transport = Transport()
         val queue = PtpIpCommandQueue(transport, backgroundScope)
         val transfer = SonyImageTransfer(queue, ready()) { error("No file") }
-        transfer.openBrowser()
+        val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.single().key)
         transport.rejected = true
         val busy = assertFailsWith<PtpOperationRejected> { transfer.metadataHead(1L, 1000) }
         assertEquals(PtpResponse.DEVICE_BUSY, busy.code)
@@ -529,7 +545,8 @@ class SonyImageTransferTest : WifiLoggingTest() {
         val transport = Transport()
         val queue = PtpIpCommandQueue(transport, backgroundScope)
         val transfer = SonyImageTransfer(queue, ready()) { Destination() }
-        transfer.openBrowser()
+        val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.single().key)
         transport.hangCodes = setOf(0x9211)
         val timeout = assertFailsWith<PtpTransportException> { transfer.metadataHead(1L, 1000) }
         assertEquals(WifiTransferFailureReason.Timeout, timeout.reason)
@@ -545,7 +562,8 @@ class SonyImageTransferTest : WifiLoggingTest() {
         val capabilities =
             ready().copy(deviceInfo = PtpDeviceInfo(ready().deviceInfo.supportedOperations - 0x9211 + 0x101b))
         val transfer = SonyImageTransfer(queue, capabilities) { Destination() }
-        transfer.openBrowser()
+        val dates = transfer.openCatalog()
+        transfer.dayPhotos(dates.single().key)
         assertEquals(WifiImageTransferStatus.Saved, transfer.download(1L) {}.status)
         assertEquals(
             listOf(1L, 0L, 524288L),
@@ -576,23 +594,29 @@ class SonyImageTransferTest : WifiLoggingTest() {
         val transfer = SonyImageTransfer(queue, withThumbnails) { Destination() }
         assertEquals(
             listOf(
-                DateGroup("2024-05-02", 1), DateGroup("2024-05-01", 1), DateGroup(UNKNOWN_DATE_KEY, 1)
+                DateGroup("2024-05-02", 1, 3L),
+                DateGroup("2024-05-01", 1, 2L),
+                DateGroup(UNKNOWN_DATE_KEY, 1, 4L),
             ), transfer.openCatalog(),
             "A JPG+RAW pair counts as one capture"
         )
         val enumerated = transport.operations.size
-        // No page is displayed yet: nothing is addressable, and nothing is sent to the camera.
-        assertEquals(null, transfer.thumbnail(3L))
+        // No day is displayed yet: non-cover handles and previews are refused with zero camera traffic.
+        assertEquals(null, transfer.thumbnail(1L))
         assertEquals(null, transfer.preview(3L))
         assertEquals(enumerated, transport.operations.size)
+        // Cover thumbnails of enumerated days ARE addressable from the date list.
+        transfer.thumbnail(3L)
+        assertTrue(transport.operations.any { it.first == 0x100a && it.second == listOf(3L) })
+        val afterCover = transport.operations.size
         val pair = transfer.dayPhotos("2024-05-01")
         assertEquals(setOf(1L, 2L), pair.photos.map { it.handle }.toSet())
         assertEquals(1, pair.totalObjects)
         assertEquals(false, pair.hasMore)
-        assertEquals(enumerated, transport.operations.size, "Date paging is local")
-        // The page written back is the one the handle guard checks: other days stay refused.
-        transfer.thumbnail(3L)
-        assertEquals(enumerated, transport.operations.size)
+        assertEquals(afterCover, transport.operations.size, "Date paging is local")
+        // Non-cover handles of other days stay refused while 2024-05-01 is displayed.
+        transfer.thumbnail(999L)
+        assertEquals(afterCover, transport.operations.size)
         transfer.thumbnail(1L)
         assertTrue(transport.operations.any { it.first == 0x100a && it.second == listOf(1L) })
         // Downloads still resolve against the whole catalog, not just the displayed day.

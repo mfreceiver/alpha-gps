@@ -1,5 +1,6 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,11 +15,16 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
@@ -44,12 +50,14 @@ import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressCircle
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressSize
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassSurface
+import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import com.sasch.cameragps.sharednew.ui.theme.GlassLevel
 import com.sasch.cameragps.sharednew.ui.theme.WindowClass
 import com.sasch.cameragps.sharednew.ui.theme.currentWindowClass
+import kotlinx.coroutines.flow.distinctUntilChanged
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -95,6 +103,8 @@ internal fun WifiPhotoDateList(
     onOpen: (String) -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    coverThumbnails: Map<Long, ImageBitmap> = emptyMap(),
+    onVisibleCovers: (Long, List<Long>) -> Unit = { _, _ -> },
 ) {
     val windowClass = currentWindowClass()
     when {
@@ -130,18 +140,29 @@ internal fun WifiPhotoDateList(
 
         else -> {
             val columns = if (windowClass == WindowClass.Landscape) 2 else 1
+            val gridState = rememberLazyGridState()
+            LaunchedEffect(gridState, browser.browserGeneration, browser.dates) {
+                snapshotFlow {
+                    gridState.layoutInfo.visibleItemsInfo.mapNotNull { info ->
+                        browser.dates.getOrNull(info.index)?.coverHandle
+                    }
+                }.distinctUntilChanged().collect { visibleHandles ->
+                    onVisibleCovers(browser.browserGeneration, visibleHandles)
+                }
+            }
             Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                 LazyVerticalGrid(
                     GridCells.Fixed(columns),
                     Modifier.fillMaxSize().let {
                         if (windowClass == WindowClass.NearSquare) it.widthIn(max = 640.dp) else it
                     },
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    state = gridState,
+                    contentPadding = PaddingValues(horizontal = AlphaDimens.screenMargin, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(browser.dates, key = { it.key }) { group ->
-                        DateRow(group, enabled, onOpen)
+                        DateRow(group, group.coverHandle?.let(coverThumbnails::get), enabled, onOpen)
                     }
                 }
             }
@@ -150,17 +171,47 @@ internal fun WifiPhotoDateList(
 }
 
 @Composable
-private fun DateRow(group: DateGroup, enabled: Boolean, onOpen: (String) -> Unit) {
+private fun DateRow(
+    group: DateGroup,
+    cover: ImageBitmap?,
+    enabled: Boolean,
+    onOpen: (String) -> Unit,
+) {
     GlassSurface(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = AlphaDimens.rowMinHeight),
         level = GlassLevel.Card,
         shape = AlphaShapes.row,
         onClick = { onOpen(group.key) },
         enabled = enabled,
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+        contentPadding = PaddingValues(horizontal = AlphaDimens.screenMargin, vertical = 12.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(AlphaShapes.inset)
+                    .background(
+                        if (cover != null) AlphaTheme.colors.thumbnailFrame
+                        else AlphaTheme.colors.textMuted.copy(alpha = 0.14f)
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (cover != null) {
+                    FittedThumbnail(cover, Modifier.fillMaxSize())
+                } else {
+                    Icon(
+                        painterResource(Res.drawable.mw_photo_library_24px),
+                        contentDescription = null,
+                        tint = AlphaTheme.colors.textMuted,
+                        modifier = Modifier.size(AlphaDimens.iconSize),
+                    )
+                }
+            }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(dateGroupLabel(group), style = AlphaType.Heading, color = AlphaTheme.colors.textPrimary)
                 val subtitle = daySubtitle(group.key)

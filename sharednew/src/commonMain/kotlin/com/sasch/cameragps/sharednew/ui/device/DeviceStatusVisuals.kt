@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -33,10 +34,12 @@ import cameragps.sharednew.generated.resources.q_battery_a11y
 import cameragps.sharednew.generated.resources.q_battery_age_hours
 import cameragps.sharednew.generated.resources.q_battery_age_minutes
 import cameragps.sharednew.generated.resources.q_bt_signal_a11y
+import cameragps.sharednew.generated.resources.q_bt_signal_stale_a11y
 import cameragps.sharednew.generated.resources.q_bt_signal_unknown
 import com.sasch.cameragps.sharednew.bluetooth.status.SignalLevel
 import com.sasch.cameragps.sharednew.ui.components.glass.StatusTone
 import com.sasch.cameragps.sharednew.ui.components.glass.statusIconColor
+import com.sasch.cameragps.sharednew.ui.theme.AlphaColors
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.sasch.cameragps.sharednew.ui.theme.AlphaType
@@ -57,20 +60,29 @@ internal const val BATTERY_LOW_PERCENT = 20
  * connected: grey glyph, no ring. A level change eases the arc (short tween), nothing else moves.
  */
 @Composable
-internal fun BluetoothSignalRing(connected: Boolean, level: SignalLevel, modifier: Modifier = Modifier) {
+internal fun BluetoothSignalRing(
+    connected: Boolean,
+    level: SignalLevel,
+    modifier: Modifier = Modifier,
+    stale: Boolean = false,
+) {
     val colors = AlphaTheme.colors
     val target = if (connected) signalArcFraction(level) else 0f
     val sweep by animateFloatAsState(target, animationSpec = tween(durationMillis = 250), label = "signalArc")
-    val arcColor = statusIconColor(signalTone(level), colors)
+    val arcColor = signalArcColor(level, colors, stale)
     val trackColor = colors.textMuted.copy(alpha = 0.28f)
     val description = if (connected) {
-        stringResource(Res.string.q_bt_signal_a11y, signalLevelText(level) ?: stringResource(Res.string.q_bt_signal_unknown))
+        val levelText = signalLevelText(level) ?: stringResource(Res.string.q_bt_signal_unknown)
+        // A stale reading is announced as such: the muted arc alone would be colour-only.
+        stringResource(if (stale) Res.string.q_bt_signal_stale_a11y else Res.string.q_bt_signal_a11y, levelText)
     } else {
         null
     }
     Box(
         modifier
             .size(AlphaDimens.minTouchTarget)
+            // Only the arc is muted when the reading is stale ([signalArcColor]); the Bluetooth
+            // glyph keeps its full colour.
             .clearAndSetSemantics { if (description != null) contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
@@ -179,3 +191,13 @@ internal fun signalLevelText(level: SignalLevel): String? = when (level) {
     SignalLevel.Poor -> stringResource(Res.string.m2_signal_poor)
     SignalLevel.Unknown -> null
 }
+
+/**
+ * Opacity of the signal arc while its RSSI reading is stale ([isRssiStale]). Muted, but the
+ * composite must still hold the 3:1 non-text contrast (PaletteContrastTest).
+ */
+internal const val STALE_ARC_ALPHA = 0.85f
+
+/** The signal arc colour: the level's icon colour, muted by [STALE_ARC_ALPHA] when [stale]. */
+internal fun signalArcColor(level: SignalLevel, colors: AlphaColors, stale: Boolean): Color =
+    statusIconColor(signalTone(level), colors).let { if (stale) it.copy(alpha = STALE_ARC_ALPHA) else it }

@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.triStateToggleable
@@ -25,6 +27,9 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -199,7 +204,8 @@ fun GlassCheckbox(
 
 /**
  * Small action badge on a photo tile (N3, e.g. the magnifier "preview"): same 22 dp Viewer-glass
- * square as an unchecked [GlassCheckbox] with a 15 dp onPhoto icon, inside a 48 dp touch target.
+ * square as an unchecked [GlassCheckbox] with a 15 dp onPhoto icon, inside a [touchTarget] square
+ * (default 48 dp; clamped to >= 40 dp like [GlassIconButton]).
  */
 @Composable
 fun GlassTileAction(
@@ -207,19 +213,20 @@ fun GlassTileAction(
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    touchTarget: Dp = AlphaDimens.minTouchTarget,
+    enabled: Boolean = true,
+    contentAlignment: Alignment = Alignment.Center,
+    contentPadding: Dp = 0.dp,
 ) {
     val c = glassCheckboxColors(ToggleableState.Off, AlphaTheme.colors, onPhoto = true)
-    Box(
-        modifier
-            .size(AlphaDimens.minTouchTarget)
-            .clickable(
-                role = Role.Button,
-                onClickLabel = null,
-                interactionSource = null,
-                indication = ripple(bounded = false, radius = 20.dp),
-                onClick = onClick,
-            ),
-        contentAlignment = Alignment.Center,
+    GlassTileAction(
+        onClick = onClick,
+        modifier = modifier,
+        touchTarget = touchTarget,
+        enabled = enabled,
+        contentDescription = contentDescription,
+        contentAlignment = contentAlignment,
+        contentPadding = contentPadding,
     ) {
         Box(
             Modifier.size(22.dp).background(c.fill, CheckboxShape).border(1.dp, c.rim ?: Color.Transparent, CheckboxShape),
@@ -227,12 +234,51 @@ fun GlassTileAction(
         ) {
             Image(
                 icon,
-                contentDescription = contentDescription,
+                contentDescription = null,
                 modifier = Modifier.size(15.dp),
                 colorFilter = ColorFilter.tint(AlphaTheme.colors.onPhoto),
             )
         }
     }
+}
+
+/**
+ * Slot form of [GlassTileAction]: a [touchTarget] square (>= 40 dp) that hosts any tile badge
+ * (e.g. the unchecked/checked [GlassCheckbox] of a grid tile). The node carries
+ * [contentDescription], [role] and, for toggles, [selected]; [content] is decorative.
+ */
+@Composable
+fun GlassTileAction(
+    onClick: () -> Unit,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+    touchTarget: Dp = AlphaDimens.minTouchTarget,
+    enabled: Boolean = true,
+    role: Role = Role.Button,
+    selected: Boolean? = null,
+    contentAlignment: Alignment = Alignment.Center,
+    contentPadding: Dp = 0.dp,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    Box(
+        modifier
+            .size(touchTarget.coerceAtLeast(AlphaDimens.minDenseTouchTarget))
+            .clickable(
+                enabled = enabled,
+                role = role,
+                onClickLabel = null,
+                interactionSource = null,
+                indication = ripple(bounded = false, radius = 20.dp),
+                onClick = onClick,
+            )
+            .semantics {
+                this.contentDescription = contentDescription
+                if (selected != null) this.selected = selected
+            }
+            .padding(contentPadding),
+        contentAlignment = contentAlignment,
+        content = content,
+    )
 }
 
 /** Round icon glyph helper: an [icon] tinted [tint] at [size] (decorative). */

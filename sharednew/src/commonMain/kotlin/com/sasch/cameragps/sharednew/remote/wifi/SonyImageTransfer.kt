@@ -128,15 +128,10 @@ internal class SonyImageTransfer(
     private var snapshot = CatalogSnapshot.EMPTY
     private var pagePhotos = emptyList<WifiCameraPhoto>()
 
-    /** Unfiltered browser: enumerates the card, then shows the first page of everything. */
-    suspend fun openBrowser(): CameraPhotoPage {
-        enumerate()
-        return page(0)
-    }
-
     /**
      * Date-grouped browser: enumerates the whole card (the only camera traffic needed to know the
-     * days) and returns the days. No day is displayed, so no photo is addressable until [dayPhotos].
+     * days) and returns the days. No day is displayed, so no photo is addressable until [dayPhotos]
+     * (except day cover thumbnails).
      */
     suspend fun openCatalog(): List<DateGroup> {
         enumerate()
@@ -205,15 +200,9 @@ internal class SonyImageTransfer(
         }
     }
 
-    suspend fun page(offset: Int): CameraPhotoPage {
-        catalog?.let { return it.page(offset).also { page -> pagePhotos = page.photos } }
-        check(modeRequested)
-        return cameraPhotoPage(snapshot.captures, offset).also { pagePhotos = it.photos }
-    }
-
     suspend fun thumbnail(handle: Long, stats: ThumbnailStatsSink? = null): ImageBitmap? {
-        if (!(catalog?.hasThumbnails
-                ?: capabilities.deviceInfo.supports(GET_THUMB)) || pagePhotos.none { it.handle == handle }
+        if (!(catalog?.hasThumbnails ?: capabilities.deviceInfo.supports(GET_THUMB)) ||
+            (pagePhotos.none { it.handle == handle } && !snapshot.isCoverHandle(handle))
         ) return null
         return try {
             val requestStarted = TimeSource.Monotonic.markNow()
@@ -497,7 +486,6 @@ internal class SonyImageTransfer(
     }
 
     internal companion object {
-        const val PAGE_SIZE = 60
         const val MAX_METADATA_HEAD_BYTES = 128 * 1024
         const val MAX_IMAGE_BYTES = 512L * 1024 * 1024
         private const val GET_STORAGE_IDS = 0x1004

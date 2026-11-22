@@ -44,46 +44,4 @@ class WifiCameraCaptureTest {
     fun matchingNamesWithoutCaptureIdentityStaySeparate() {
         assertEquals(2, groupCameraPhotos(listOf(photo(1, "image/jpeg"), photo(2, "image/x-sony-arw"))).size)
     }
-
-    @Test
-    fun pagesCountCapturesAndKeepEveryFormatTogether() {
-        val captures = groupCameraPhotos((0..SonyImageTransfer.PAGE_SIZE).flatMap { index ->
-            listOf(photo(index * 2L, "image/jpeg", "content:1:$index"),
-                photo(index * 2L + 1, "image/x-sony-arw", "content:1:$index"))
-        })
-        val first = cameraPhotoPage(captures, 0)
-        val last = cameraPhotoPage(captures, SonyImageTransfer.PAGE_SIZE)
-        assertEquals(SonyImageTransfer.PAGE_SIZE + 1, first.totalObjects)
-        assertEquals(SonyImageTransfer.PAGE_SIZE * 2, first.photos.size)
-        assertTrue(first.hasMore)
-        assertEquals(captures.last().files, last.photos)
-        assertFalse(last.hasMore)
-        assertEquals(captures.flatMap { it.files }, first.photos + last.photos)
-    }
-
-    private fun captures(count: Int) = groupCameraPhotos((0 until count).map { index ->
-        photo(index.toLong(), "image/jpeg", "content:1:$index")
-    })
-
-    @Test
-    fun pageHolds60CapturesAndPagingBoundariesAreExact() {
-        assertEquals(60, SonyImageTransfer.PAGE_SIZE)
-        // Exactly one full page: nothing more to fetch.
-        val full = cameraPhotoPage(captures(60), 0)
-        assertEquals(60, full.photos.size)
-        assertFalse(full.hasMore)
-        // One capture over: the second page holds only the 61st.
-        val over = captures(61)
-        assertTrue(cameraPhotoPage(over, 0).hasMore)
-        assertEquals(60, cameraPhotoPage(over, 0).photos.size)
-        val tail = cameraPhotoPage(over, 60)
-        assertEquals(listOf(60L), tail.photos.map { it.handle })
-        assertFalse(tail.hasMore)
-        assertEquals(61, tail.totalObjects)
-        // 120 captures: page two is exactly full and last.
-        val two = captures(120)
-        assertEquals(60, cameraPhotoPage(two, 60).photos.size)
-        assertFalse(cameraPhotoPage(two, 60).hasMore)
-        assertTrue(cameraPhotoPage(two, 0).hasMore)
-    }
 }

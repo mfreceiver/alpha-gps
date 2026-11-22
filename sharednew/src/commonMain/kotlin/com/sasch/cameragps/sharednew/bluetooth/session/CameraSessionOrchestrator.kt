@@ -1,10 +1,14 @@
 package com.sasch.cameragps.sharednew.bluetooth.session
 
 import com.diamondedge.logging.logging
+import com.sasch.cameragps.sharednew.bluetooth.BleFailure
+import com.sasch.cameragps.sharednew.bluetooth.BleFailureReason
+import com.sasch.cameragps.sharednew.bluetooth.BleFailureStage
 import com.sasch.cameragps.sharednew.bluetooth.BleSessionPhase
 import com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants
 import com.sasch.cameragps.sharednew.bluetooth.coordinator.BleSessionCoordinator
 import com.sasch.cameragps.sharednew.bluetooth.coordinator.BleSessionEvent
+import com.sasch.cameragps.sharednew.bluetooth.coordinator.BleShutterState
 import com.sasch.cameragps.sharednew.bluetooth.coordinator.RemoteCommand
 import com.sasch.cameragps.sharednew.bluetooth.coordinator.RemoteControlCoordinator
 import com.sasch.cameragps.sharednew.bluetooth.location.LocationEvent
@@ -108,7 +112,12 @@ class CameraSessionOrchestrator(
         port, registry, scope,
         onStatus = { id, outcome, reason -> liveStatus.onTimeSync(id, outcome, reason) },
     )
-    private val remoteControl: RemoteControlCoordinator = RemoteControlCoordinator(port, scope)
+    private val remoteControl: RemoteControlCoordinator = RemoteControlCoordinator(
+        port = port,
+        scope = scope,
+        currentGeneration = registry::currentGeneration,
+        onBleShutterStateChanged = registry::updateBleShutter,
+    )
     private val sessionCoordinator =
         BleSessionCoordinator(port, remoteControl, timeSync::synchronize)
 
@@ -182,12 +191,18 @@ class CameraSessionOrchestrator(
 
     /** A connection attempt was started by the shell. */
     fun onConnectRequested(identifier: String) {
-        registry.upsert(identifier) { it.copy(phase = BleSessionPhase.Connecting) }
+        registry.clearFailure(identifier)
+        registry.upsert(identifier) { it.copy(phase = BleSessionPhase.Connecting, failure = null) }
     }
 
-    /** A connection attempt failed before any transport event (e.g. Bluetooth off). */
-    fun onConnectFailed(identifier: String) {
-        registry.updateIfPresent(identifier) { it.copy(phase = BleSessionPhase.Error) }
+    /** A connection attempt failed before any transport event (e.g. Bluetooth off, bond lost, permission missing). */
+    fun onConnectFailed(
+        identifier: String,
+        reason: BleFailureReason = BleFailureReason.Unknown,
+    ) {
+        val failure = BleFailure(reason, BleFailureStage.Connect)
+        registry.recordFailure(identifier, failure)
+        registry.updateIfPresent(identifier) { it.copy(phase = BleSessionPhase.Error, failure = failure) }
     }
 
     /**
@@ -230,6 +245,28 @@ class CameraSessionOrchestrator(
     fun triggerShutterSequence(identifier: String): Boolean =
         remoteControl.startShutterSequence(identifier)
 
+    /** R1 read-only single-shot BLE shutter state per device (retained across disconnect for Uncertain). */
+    val bleShutterStates: StateFlow<Map<String, BleShutterState>> get() = remoteControl.bleShutterStates
+
+    fun bleShutterState(identifier: String): BleShutterState =
+        remoteControl.bleShutterState(identifier)
+
+    fun acquireBleRemoteControl(identifier: String): Boolean =
+        remoteControl.acquireBleRemoteControl(identifier)
+
+    fun cancelActiveBleShutter(identifier: String) =
+        remoteControl.cancelActiveBleShutter(identifier)
+
+    fun triggerBleShutter(identifier: String): Boolean =
+        remoteControl.triggerBleShutter(identifier)
+
+    suspend fun releaseBleRemoteControl(identifier: String) =
+        remoteControl.releaseBleRemoteControl(identifier)
+
+    fun releaseBleRemoteControlAsync(identifier: String) {
+        scope.launch { remoteControl.releaseBleRemoteControl(identifier) }
+    }
+
     fun setRemoteMonitoring(identifier: String, enabled: Boolean) {
         val id = identifier.uppercase()
         if (enabled) {
@@ -251,14 +288,14 @@ class CameraSessionOrchestrator(
         liveStatus.onSessionEnded(id)
     }
 
-    fun shutdownAll() {
+    fun shutdownAll(preserveFailures: Boolean = false) {
         autoCorrection.clearAll()
         timeSync.clearAll()
         sessionCoordinator.clearAllSessions()
         queue.shutdown("shutdown")
         locationManager.shutdown()
         rssiMonitor.shutdown()
-        registry.clear()
+        if (preserveFailures) registry.clearSessions() else registry.clear()
     }
 
     // ---- Transport event routing ----
@@ -268,9 +305,18 @@ class CameraSessionOrchestrator(
             is BleTransportEvent.Connected -> handleConnected(event.identifier)
 
             is BleTransportEvent.Disconnected -> {
-                log.i { "Device ${event.identifier} disconnected (status=${event.statusCode})" }
+                log.i { "Device ${event.identifier} disconnected (status=${event.statusCode}, manual=${event.isManual})" }
+                val id = event.identifier.uppercase()
+                val previousPhase = registry.get(id)?.phase
+                if (event.isManual) {
+                    registry.clearFailure(id)
+                } else {
+                    mapDisconnectFailure(event.statusCode, previousPhase)?.let {
+                        registry.recordFailure(id, it)
+                    }
+                }
                 clearDevice(event.identifier)
-                _events.tryEmit(OrchestratorEvent.DeviceDisconnected(event.identifier.uppercase()))
+                _events.tryEmit(OrchestratorEvent.DeviceDisconnected(id))
             }
 
             is BleTransportEvent.CharacteristicWritten -> {
@@ -333,9 +379,11 @@ class CameraSessionOrchestrator(
 
     private fun handleConnected(identifier: String) {
         val id = identifier.uppercase()
+        registry.clearFailure(id)
         autoCorrection.clear(id)
         timeSync.clear(id)
         log.i { "Device $id connected" }
+        val generation = registry.nextGeneration(id)
         liveStatus.onSessionStarted(id)
         registry.upsert(id) {
             it.copy(
@@ -346,6 +394,9 @@ class CameraSessionOrchestrator(
                 autoTimeCorrection = CameraSettingState(),
                 autoAreaAdjustment = CameraSettingState(),
                 mtu = transport.currentMtu(id),
+                failure = null,
+                connectionGeneration = generation,
+                bleShutter = BleShutterState(connectionGeneration = generation),
             )
         }
         _events.tryEmit(OrchestratorEvent.DeviceConnected(id))
@@ -355,14 +406,54 @@ class CameraSessionOrchestrator(
         }
     }
 
+    /** Clears failure state on explicit user disconnect, even when no GATT handle was active. */
+    fun onManualDisconnect(identifier: String) {
+        val id = identifier.uppercase()
+        registry.clearFailure(id)
+        registry.updateIfPresent(id) { it.copy(failure = null) }
+    }
+
+    /** Retries service discovery and handshake on an already-connected handle that ended in [BleSessionPhase.Error]. */
+    fun retryDiscoveryAndHandshake(identifier: String) {
+        val id = identifier.uppercase()
+        if (registry.get(id)?.phase != BleSessionPhase.Error || !transport.isConnected(id)) return
+        registry.clearFailure(id)
+        registry.updateIfPresent(id) {
+            it.copy(
+                phase = BleSessionPhase.Connected,
+                pairingRetryCount = 0,
+                hasRetriedConfigRead = false,
+                failure = null,
+            )
+        }
+        scope.launch {
+            runDiscoveryAndHandshake(id)
+        }
+    }
+
     private suspend fun runDiscoveryAndHandshake(id: String) {
+        if (registry.get(id)?.phase == BleSessionPhase.Disconnected) return
         registry.updateIfPresent(id) { it.copy(phase = BleSessionPhase.DiscoveringServices) }
         when (queue.execute(id, BleOperation.DiscoverServices)) {
-            is BleOperationResult.Success -> sessionCoordinator.beginHandshake(id)
+            is BleOperationResult.Success -> {
+                if (registry.get(id)?.phase != BleSessionPhase.Disconnected) {
+                    sessionCoordinator.beginHandshake(id)
+                }
+            }
             is BleOperationResult.Cancelled -> Unit // disconnected meanwhile
+            is BleOperationResult.Timeout -> {
+                if (registry.get(id)?.phase == BleSessionPhase.Disconnected) return
+                log.e { "Service discovery timed out for $id" }
+                val failure = BleFailure(BleFailureReason.Timeout, BleFailureStage.DiscoverServices)
+                registry.recordFailure(id, failure)
+                registry.updateIfPresent(id) { it.copy(phase = BleSessionPhase.Error, failure = failure) }
+            }
             else -> {
+                if (registry.get(id)?.phase == BleSessionPhase.Disconnected) return
                 log.e { "Service discovery failed for $id" }
-                registry.updateIfPresent(id) { it.copy(phase = BleSessionPhase.Error) }
+                val failure = BleFailure(BleFailureReason.GattFailure, BleFailureStage.DiscoverServices)
+                registry.recordFailure(id, failure)
+                registry.updateIfPresent(id) { it.copy(phase = BleSessionPhase.Error, failure = failure) }
             }
         }
     }
@@ -441,6 +532,9 @@ class CameraSessionOrchestrator(
         val attempts = session.pairingRetryCount + 1
         if (attempts > pairingPolicy.maxRetries) {
             log.e { "Pairing retries exhausted for $identifier" }
+            val failure = BleFailure(BleFailureReason.AuthenticationFailed, BleFailureStage.Handshake)
+            registry.recordFailure(identifier, failure)
+            registry.updateIfPresent(identifier) { it.copy(phase = BleSessionPhase.Error, failure = failure) }
             _events.tryEmit(OrchestratorEvent.PairingFailed(identifier))
             return
         }
@@ -472,8 +566,17 @@ class CameraSessionOrchestrator(
 
     private suspend fun handleSessionEvent(event: BleSessionEvent) {
         when (event) {
-            is BleSessionEvent.PhaseChanged ->
-                registry.updateIfPresent(event.identifier) { it.copy(phase = event.phase) }
+            is BleSessionEvent.PhaseChanged -> {
+                val current = registry.get(event.identifier) ?: return
+                if (current.phase == BleSessionPhase.Disconnected) return
+                if (event.phase == BleSessionPhase.Error) {
+                    val failure = BleFailure(BleFailureReason.GattFailure, BleFailureStage.Handshake)
+                    registry.recordFailure(event.identifier, failure)
+                    registry.updateIfPresent(event.identifier) { it.copy(phase = event.phase, failure = failure) }
+                } else {
+                    registry.updateIfPresent(event.identifier) { it.copy(phase = event.phase) }
+                }
+            }
 
             is BleSessionEvent.HandshakeComplete -> handleHandshakeComplete(event.identifier)
         }
@@ -492,5 +595,23 @@ class CameraSessionOrchestrator(
         autoCorrection.refresh(id)
 
         _events.tryEmit(OrchestratorEvent.HandshakeCompleted(id))
+    }
+
+    /** Maps a non-manual GATT disconnect status code + prior phase into a [BleFailure], if any. */
+    internal fun mapDisconnectFailure(statusCode: Int?, previousPhase: BleSessionPhase?): BleFailure? {
+        if (statusCode == null || statusCode == 0) return null
+        val stage = when (previousPhase) {
+            null, BleSessionPhase.Disconnected, BleSessionPhase.Connecting, BleSessionPhase.Error -> BleFailureStage.Connect
+            BleSessionPhase.Connected, BleSessionPhase.DiscoveringServices -> BleFailureStage.DiscoverServices
+            else -> BleFailureStage.Handshake
+        }
+        val reason = when (statusCode) {
+            SonyBluetoothConstants.ATT_ERROR_INSUFFICIENT_AUTHENTICATION,
+            SonyBluetoothConstants.ATT_ERROR_INSUFFICIENT_ENCRYPTION -> BleFailureReason.AuthenticationFailed
+            8 -> if (stage == BleFailureStage.Connect || stage == BleFailureStage.Handshake) BleFailureReason.Timeout else BleFailureReason.OutOfRange
+            19 -> BleFailureReason.Unknown
+            else -> BleFailureReason.GattFailure
+        }
+        return BleFailure(reason = reason, stage = stage, platformStatus = statusCode)
     }
 }

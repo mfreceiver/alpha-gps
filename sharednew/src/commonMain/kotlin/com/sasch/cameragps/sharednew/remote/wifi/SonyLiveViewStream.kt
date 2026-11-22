@@ -44,12 +44,16 @@ internal class SonyLiveViewStream(
     private val log = logging()
     private var collecting = false
 
-    fun images(endpoint: SonyLiveViewEndpoint): Flow<ImageBitmap> = frames(endpoint).map { frame ->
-        withContext(decodeDispatcher) {
+    fun images(endpoint: SonyLiveViewEndpoint): Flow<ImageBitmap> =
+        decodedFrames(endpoint).map { it.image }
+
+    fun decodedFrames(endpoint: SonyLiveViewEndpoint): Flow<WifiLiveViewFrame> = frames(endpoint).map { frame ->
+        val decoded = withContext(decodeDispatcher) {
             frame.imageBytes.decodeToImageBitmap().also {
                 require(it.width == frame.width && it.height == frame.height) { "Invalid decoded image size" }
             }
         }
+        WifiLiveViewFrame(image = decoded, jpegBytes = frame.imageBytes)
     }
 
     fun frames(endpoint: SonyLiveViewEndpoint): Flow<SonyLiveViewFrame> = flow {

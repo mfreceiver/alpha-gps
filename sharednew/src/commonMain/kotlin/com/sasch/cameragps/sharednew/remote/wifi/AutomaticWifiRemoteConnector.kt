@@ -34,12 +34,23 @@ internal class AutomaticWifiRemoteConnector<N>(
     private val openCamera: suspend (N, String, CoroutineScope) -> WifiRemoteConnection,
     private val joinTimeoutMs: Long = 60_000,
     private val preconditions: WifiPreconditions? = null,
+    private val openCameraWithPurpose: (suspend (N, String, CoroutineScope, WifiSessionPurpose) -> WifiRemoteConnection)? = null,
 ) : WifiAutomaticConnector {
     /** The controller checks these before publishing a phase or claiming BLE controls. */
     override val phonePreconditions: WifiPreconditions? get() = preconditions
 
-    override suspend fun open(identifier: String, scope: CoroutineScope,
-                              onPhase: (WifiRemotePhase) -> Unit): WifiRemoteConnection {
+    override suspend fun open(
+        identifier: String,
+        scope: CoroutineScope,
+        onPhase: (WifiRemotePhase) -> Unit,
+    ): WifiRemoteConnection = open(identifier, scope, WifiSessionPurpose.Browse, onPhase)
+
+    override suspend fun open(
+        identifier: String,
+        scope: CoroutineScope,
+        purpose: WifiSessionPurpose,
+        onPhase: (WifiRemotePhase) -> Unit,
+    ): WifiRemoteConnection {
         // Fail before any BLE wake-up or phase is published: a disabled phone Wi-Fi makes the
         // whole attempt pointless, so the camera must not be needlessly woken first.
         if (preconditions?.isWifiEnabled() == false) {
@@ -71,7 +82,8 @@ internal class AutomaticWifiRemoteConnector<N>(
             } ?: throw WifiRemoteConnectException(if (available) WifiRemoteFailure.CameraAddressUnavailable
                 else WifiRemoteFailure.NetworkJoinFailed)
             onPhase(WifiRemotePhase.OpeningSession)
-            val opened = openCamera(ready.network, ready.host, scope)
+            val opened = openCameraWithPurpose?.invoke(ready.network, ready.host, scope, purpose)
+                ?: openCamera(ready.network, ready.host, scope)
             connection = opened
             return object : WifiRemoteConnection by opened {
                 override val lost = merge(opened.lost, requested.events.filter {

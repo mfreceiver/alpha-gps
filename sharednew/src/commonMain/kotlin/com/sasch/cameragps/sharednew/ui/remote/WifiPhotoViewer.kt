@@ -130,13 +130,17 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.r_viewer_no_raw
+import cameragps.sharednew.generated.resources.viewer_also_download_raw
+import cameragps.sharednew.generated.resources.viewer_raw_preview_tag
 import cameragps.sharednew.generated.resources.arrow_back_24px
 import cameragps.sharednew.generated.resources.check_24px
 import cameragps.sharednew.generated.resources.download_24px
@@ -279,145 +283,137 @@ internal fun WifiPhotoViewer(
     val windowClass = currentWindowClass()
     val portrait = windowClass == WindowClass.Portrait
     CameraGpsTheme(darkTheme = true, glassRenderMode = LocalGlassRenderMode.current) {
-        key(browser.offset) {
-            viewerCompositionProbe("viewer")
-            val preceding = if (browser.offset > 0) 1 else 0
-            val count = captures.size + preceding + if (browser.hasMore) 1 else 0
-            val initialPage =
-                ((viewModel.viewedPhotoIndex ?: browser.offset) - browser.offset + preceding)
-                    .coerceIn(0, maxOf(0, count - 1))
-            val pager = rememberPagerState(initialPage = initialPage) { count }
-            val filmstrip = rememberLazyListState(
-                initialFirstVisibleItemIndex = (initialPage - preceding - 2).coerceAtLeast(0)
-            )
-            val scope = rememberCoroutineScope()
-            val currentIndex = pager.currentPage - preceding
-            val current = captures.getOrNull(currentIndex)
-            val zoom = remember(current?.id) { ViewerZoomState() }
-            val changingPage = browser.loading && (viewModel.viewedPhotoIndex ?: browser.offset) !in
-                    browser.offset until browser.offset + captures.size
-            // Swiping and the filmstrip are locked while a download runs (design page 21 ⑥).
-            val navigationEnabled = !changingPage && !transfer.busy
+        viewerCompositionProbe("viewer")
+        val count = captures.size
+        val initialPage = (viewModel.viewedPhotoIndex ?: 0).coerceIn(0, maxOf(0, count - 1))
+        val pager = rememberPagerState(initialPage = initialPage) { count }
+        val filmstrip = rememberLazyListState(
+            initialFirstVisibleItemIndex = (initialPage - 2).coerceAtLeast(0)
+        )
+        val scope = rememberCoroutineScope()
+        val currentIndex = pager.currentPage
+        val current = captures.getOrNull(currentIndex)
+        val zoom = remember(current?.id) { ViewerZoomState() }
+        // Swiping and the filmstrip are locked while a download runs (design page 21 ⑥).
+        val navigationEnabled = !transfer.busy
 
-            // Metadata of the shown photo, extended (EXIF) included whether or not the details are
-            // visible: asked on entry, after every settled swipe and after a download (which
-            // interrupts a pending read); the loader's 250 ms debounce makes it "read once the user
-            // stays on the photo". A swipe that starts pauses a pending read (the photo is being
-            // left). The pager's motion is observed in the effect, not in composition.
-            LaunchedEffect(viewModel.viewedPhotoIndex, browser.pageRevision, transfer.busy) {
-                snapshotFlow { pager.isScrollInProgress }.distinctUntilChanged().collect { swiping ->
-                    when {
-                        viewerWantsExtendedMetadata(transfer.busy, swiping) ->
-                            viewModel.showViewerMetadata(extended = true)
-                        swiping && !transfer.busy -> viewModel.pauseViewerMetadata()
-                    }
+        // Metadata of the shown photo, extended (EXIF) included whether or not the details are
+        // visible: asked on entry, after every settled swipe and after a download (which
+        // interrupts a pending read); the loader's 250 ms debounce makes it "read once the user
+        // stays on the photo". A swipe that starts pauses a pending read (the photo is being
+        // left). The pager's motion is observed in the effect, not in composition.
+        LaunchedEffect(viewModel.viewedPhotoIndex, browser.pageRevision, transfer.busy) {
+            snapshotFlow { pager.isScrollInProgress }.distinctUntilChanged().collect { swiping ->
+                when {
+                    viewerWantsExtendedMetadata(transfer.busy, swiping) ->
+                        viewModel.showViewerMetadata(extended = true)
+                    swiping && !transfer.busy -> viewModel.pauseViewerMetadata()
                 }
             }
+        }
 
-            // Thumbnails on demand: the shown capture, the visible filmstrip and a small margin —
-            // never the whole day (the grid's loader and LRU cache serve them).
-            if (browser.grouped) LaunchedEffect(captures, browser.pageRevision) {
-                snapshotFlow {
-                    val visible = filmstrip.layoutInfo.visibleItemsInfo
-                    (pager.currentPage - preceding) to
-                            if (visible.isEmpty()) IntRange.EMPTY else visible.first().index..visible.last().index
-                }.distinctUntilChanged().collect { (shown, visible) ->
-                    val (now, margin) = filmstripThumbnailDemand(shown, visible, captures.size)
-                    controller.requestThumbnails(
-                        viewModel.identifier, browser.pageRevision,
-                        now.map { captures[it].id }, margin.map { captures[it].id },
-                    )
+        // Thumbnails on demand: the shown capture, the visible filmstrip and a small margin —
+        // never the whole day (the grid's loader and LRU cache serve them).
+        LaunchedEffect(captures, browser.pageRevision) {
+            snapshotFlow {
+                val visible = filmstrip.layoutInfo.visibleItemsInfo
+                pager.currentPage to
+                        if (visible.isEmpty()) IntRange.EMPTY else visible.first().index..visible.last().index
+            }.distinctUntilChanged().collect { (shown, visible) ->
+                val (now, margin) = filmstripThumbnailDemand(shown, visible, captures.size)
+                controller.requestThumbnails(
+                    viewModel.identifier, browser.pageRevision,
+                    now.map { captures[it].id }, margin.map { captures[it].id },
+                )
+            }
+        }
+        LaunchedEffect(pager.settledPage, browser.loading, browser.failed, transfer.busy) {
+            if (captures.isNotEmpty()) {
+                val settledIndex = pager.settledPage
+                if (settledIndex in captures.indices || !browser.failed) {
+                    viewModel.viewPhotoAt(settledIndex)
                 }
             }
-            LaunchedEffect(pager.settledPage, browser.loading, browser.failed, transfer.busy) {
-                if (captures.isNotEmpty()) {
-                    val settledIndex = pager.settledPage - preceding
-                    if (settledIndex in captures.indices || !browser.failed) {
-                        viewModel.viewPhotoAt(browser.offset + settledIndex)
-                    }
-                }
+        }
+        LaunchedEffect(currentIndex) {
+            if (currentIndex in captures.indices) {
+                val visible = filmstrip.layoutInfo.visibleItemsInfo
+                val inView = visible.isNotEmpty() &&
+                        currentIndex in (visible.first().index + 1) until visible.last().index
+                if (!inView) filmstrip.animateScrollToItem((currentIndex - 2).coerceAtLeast(0))
             }
-            LaunchedEffect(currentIndex) {
-                if (currentIndex in captures.indices) {
-                    val visible = filmstrip.layoutInfo.visibleItemsInfo
-                    val inView = visible.isNotEmpty() &&
-                            currentIndex in (visible.first().index + 1) until visible.last().index
-                    if (!inView) filmstrip.animateScrollToItem((currentIndex - 2).coerceAtLeast(0))
-                }
-            }
+        }
 
-            val shownPreview = preview?.takeIf { it.handle == current?.preview?.handle }
-            val shownImage = shownPreview?.image ?: current?.let { thumbnails[it.thumbnail.handle] }
-            val info = current?.let { viewerInfoStrip(it, policy, browser.savedDownloads) }
-            val download = current?.let {
-                viewerDownloadState(it, policy, browser.savedDownloads, transfer, browser.loading)
-            }
-            val selected = current != null && viewModel.isPhotoSelected(current.id)
-            val openDetails: (() -> Unit)? = if (portrait) remember(drawer) { { drawer.show() } } else null
-            val parts = ViewerParts(
-                title = current?.name ?: stringResource(Res.string.wifi_remote_browser_title),
-                capturedAt = current?.let { viewerCaptureTimeText(it.preview.capturedAt) },
-                position = current?.let {
-                    stringResource(
-                        Res.string.wifi_remote_viewer_position,
-                        browser.offset + currentIndex + 1,
-                        viewerPositionTotal(browser.grouped, captures.size, browser.totalObjects),
-                    )
+        val shownPreview = preview?.takeIf { it.handle == current?.preview?.handle }
+        val shownImage = shownPreview?.image ?: current?.let { thumbnails[it.thumbnail.handle] }
+        val info = current?.let { viewerInfoStrip(it, policy, browser.savedDownloads) }
+        val download = current?.let {
+            viewerDownloadState(it, policy, browser.savedDownloads, transfer, browser.loading)
+        }
+        val selected = current != null && viewModel.isPhotoSelected(current.id)
+        val openDetails: (() -> Unit)? = if (portrait) remember(drawer) { { drawer.show() } } else null
+        val parts = ViewerParts(
+            title = current?.name ?: stringResource(Res.string.wifi_remote_browser_title),
+            capturedAt = current?.let { viewerCaptureTimeText(it.preview.capturedAt) },
+            position = current?.let {
+                stringResource(
+                    Res.string.wifi_remote_viewer_position,
+                    currentIndex + 1,
+                    captures.size,
+                )
+            },
+            selectedCount = viewModel.selectedPhotoIds.size,
+            info = info,
+            capture = current,
+            image = shownImage,
+            metadata = controller.metadata,
+            download = download,
+            transfer = transfer,
+            selected = selected,
+            selectEnabled = current != null && !browser.loading && !transfer.busy,
+            onBack = viewModel::closePhoto,
+            onToggleSelected = { value -> current?.let { viewModel.setPhotoSelected(it.id, value) } },
+            onDownload = { downloads -> viewModel.downloadSingleCapture(downloads, onDownload) },
+            onCancel = { controller.cancelPhotoOperation(viewModel.identifier) },
+            onOpenDetails = openDetails,
+            showRawPreviewTag = current != null && isRawOnlyCapture(current) && shownImage != null,
+        )
+        val backdrop = rememberGlassBackdrop()
+        // Focus home of the info strip: the details drawer returns focus here when it closes.
+        val stripFocus = remember { FocusRequester() }
+        val photo: @Composable (Modifier) -> Unit = { modifier ->
+            ViewerPager(
+                pager = pager,
+                captures = captures,
+                state = state,
+                previewImage = { capture ->
+                    preview?.takeIf { it.handle == capture.preview.handle }?.image
+                        ?: thumbnails[capture.thumbnail.handle]
                 },
-                selectedCount = viewModel.selectedPhotoIds.size,
-                info = info,
-                capture = current,
-                image = shownImage,
-                metadata = controller.metadata,
-                download = download,
-                transfer = transfer,
-                selected = selected,
-                selectEnabled = current != null && !browser.loading && !transfer.busy,
-                onBack = viewModel::closePhoto,
-                onToggleSelected = { value -> current?.let { viewModel.setPhotoSelected(it.id, value) } },
-                onDownload = { downloads -> viewModel.downloadSingleCapture(downloads, onDownload) },
-                onCancel = { controller.cancelPhotoOperation(viewModel.identifier) },
-                onOpenDetails = openDetails,
+                previewLoading = { capture ->
+                    preview?.takeIf { it.handle == capture.preview.handle }?.loading == true
+                },
+                userScrollEnabled = navigationEnabled,
+                zoomState = zoom,
+                modifier = modifier.glassSource(backdrop),
             )
-            val backdrop = rememberGlassBackdrop()
-            // Focus home of the info strip: the details drawer returns focus here when it closes.
-            val stripFocus = remember { FocusRequester() }
-            val photo: @Composable (Modifier) -> Unit = { modifier ->
-                ViewerPager(
-                    pager = pager,
-                    captures = captures,
-                    preceding = preceding,
-                    state = state,
-                    previewImage = { capture ->
-                        preview?.takeIf { it.handle == capture.preview.handle }?.image
-                            ?: thumbnails[capture.thumbnail.handle]
-                    },
-                    previewLoading = { capture ->
-                        preview?.takeIf { it.handle == capture.preview.handle }?.loading == true
-                    },
-                    userScrollEnabled = navigationEnabled,
-                    zoomState = zoom,
-                    onRetry = { page -> viewModel.viewPhotoAt(browser.offset + page - preceding) },
-                    modifier = modifier.glassSource(backdrop),
-                )
-            }
-            val strip: @Composable (Modifier) -> Unit = { modifier ->
-                parts.info?.let { ViewerInfoStripBar(it, parts.onOpenDetails, modifier.focusRequester(stripFocus)) }
-            }
-            val film: @Composable (Modifier) -> Unit = { modifier ->
-                ViewerFilmstrip(
-                    captures = captures,
-                    thumbnails = thumbnails,
-                    current = currentIndex,
-                    enabled = navigationEnabled,
-                    state = filmstrip,
-                    onSelect = { index -> scope.launch { pager.animateScrollToPage(index + preceding) } },
-                    modifier = modifier,
-                )
-            }
-            CompositionLocalProvider(LocalGlassBackdrop provides backdrop) {
-                ViewerBody(windowClass, parts, drawer, stripFocus, photo, strip, film, zoom)
-            }
+        }
+        val strip: @Composable (Modifier) -> Unit = { modifier ->
+            parts.info?.let { ViewerInfoStripBar(it, parts.onOpenDetails, modifier.focusRequester(stripFocus)) }
+        }
+        val film: @Composable (Modifier) -> Unit = { modifier ->
+            ViewerFilmstrip(
+                captures = captures,
+                thumbnails = thumbnails,
+                current = currentIndex,
+                enabled = navigationEnabled,
+                state = filmstrip,
+                onSelect = { index -> scope.launch { pager.animateScrollToPage(index) } },
+                modifier = modifier,
+            )
+        }
+        CompositionLocalProvider(LocalGlassBackdrop provides backdrop) {
+            ViewerBody(windowClass, parts, drawer, stripFocus, photo, strip, film, zoom)
         }
     }
 }
@@ -434,14 +430,24 @@ internal class ViewerDrawerState(initiallyOpen: Boolean, private val onChanged: 
     var open by mutableStateOf(initiallyOpen)
         private set
 
+    /** True from the moment the drawer is opened until its exit animation finishes. */
+    internal var leaving by mutableStateOf(initiallyOpen)
+    internal var restoreFocusOnExit by mutableStateOf(false)
+
+    /** Unified modal state covering both open and exit-animation phases. */
+    val modalActive: Boolean get() = open || leaving
+
     fun show() {
         if (open) return
+        leaving = true
+        restoreFocusOnExit = false
         open = true
         onChanged(true)
     }
 
     fun hide() {
         if (!open) return
+        restoreFocusOnExit = true
         open = false
         onChanged(false)
     }
@@ -481,6 +487,7 @@ internal class ViewerParts(
     val onCancel: () -> Unit,
     /** Opens the portrait details drawer; null in the wide layouts (their panel is always shown). */
     val onOpenDetails: (() -> Unit)?,
+    val showRawPreviewTag: Boolean = false,
 )
 
 /**
@@ -502,12 +509,12 @@ internal fun ViewerBody(
 ) {
     val portrait = windowClass == WindowClass.Portrait
     val hasDetails = parts.capture != null
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(Modifier.fillMaxSize().background(AlphaTheme.colors.viewerBackground)) {
         // While the portrait details drawer is up it is modal: the viewer below (photo, download,
         // selection, filmstrip) is hidden from accessibility services, exactly like a dialog behind
         // a GlassBackground overlay host — this screen has none, so the isolation is applied here.
         // The wide layouts' side panel is not modal and never hides the photo.
-        ViewerSemanticsGate(hidden = { viewerHidesBackgroundSemantics(portrait, drawer.open, hasDetails) }) {
+        ViewerSemanticsGate(hidden = { viewerHidesBackgroundSemantics(portrait, drawer.modalActive, hasDetails) }) {
             when (windowClass) {
                 WindowClass.Portrait -> PortraitViewer(parts, photo, strip, film, zoomState)
                 WindowClass.NearSquare -> WideViewer(parts, photo, strip, film, landscape = false)
@@ -519,13 +526,19 @@ internal fun ViewerBody(
 }
 
 /**
- * Applies `clearAndSetSemantics` to [content] while [hidden] says so. [hidden] is read here, in this
+ * Applies background focus gate (`focusProperties { onEnter }` + `focusGroup`) and
+ * `clearAndSetSemantics` to [content] while [hidden] says so. [hidden] is read here, in this
  * small scope, so a change re-runs only this function; [content] is the same lambda and the layouts
  * inside it get unchanged arguments.
  */
 @Composable
 private fun ViewerSemanticsGate(hidden: () -> Boolean, content: @Composable () -> Unit) {
-    Box(Modifier.fillMaxSize().then(if (hidden()) Modifier.clearAndSetSemantics { } else Modifier)) {
+    Box(
+        Modifier.fillMaxSize()
+            .focusProperties { onEnter = { if (hidden()) cancelFocusChange() } }
+            .focusGroup()
+            .then(if (hidden()) Modifier.clearAndSetSemantics { } else Modifier)
+    ) {
         content()
     }
 }
@@ -640,6 +653,10 @@ private fun ViewerTopBar(
                     )
                 }
             }
+            if (parts.showRawPreviewTag) InfoTag(
+                stringResource(Res.string.viewer_raw_preview_tag),
+                modifier = Modifier.widthIn(max = 120.dp), style = InfoTagStyle.OnPhoto,
+            )
             if (showSelection && parts.selectedCount > 0) InfoTag(
                 stringResource(Res.string.m7_viewer_selected_count, parts.selectedCount),
                 modifier = Modifier.widthIn(max = 120.dp), style = InfoTagStyle.OnPhoto,
@@ -658,13 +675,11 @@ internal class ViewerZoomState {
 internal fun ViewerPager(
     pager: PagerState,
     captures: List<WifiCameraCapture>,
-    preceding: Int,
     state: WifiRemoteState,
     previewImage: (WifiCameraCapture) -> ImageBitmap?,
     previewLoading: (WifiCameraCapture) -> Boolean,
     userScrollEnabled: Boolean,
     zoomState: ViewerZoomState,
-    onRetry: (Int) -> Unit,
     modifier: Modifier,
 ) {
     val browser = state.photoBrowser
@@ -679,39 +694,13 @@ internal fun ViewerPager(
     HorizontalPager(
         state = pager, modifier = modifier,
         userScrollEnabled = userScrollEnabled && zoom.scale <= 1f,
-        key = { page -> captures.getOrNull(page - preceding)?.id ?: "boundary:$page" },
+        key = { page -> captures[page].id },
     ) { page ->
         viewerCompositionProbe("page")
-        val capture = captures.getOrNull(page - preceding)
-        val image = capture?.let(previewImage)
+        val capture = captures[page]
+        val image = previewImage(capture)
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             when {
-                // Page boundaries of the legacy flat browser only; a day is complete.
-                capture == null -> Column(
-                    Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    when {
-                        browser.failed -> {
-                            Text(stringResource(Res.string.wifi_remote_browser_failed), color = AlphaTheme.colors.onPhoto, style = AlphaType.Body)
-                            CapsuleButton(
-                                text = stringResource(Res.string.wifi_remote_viewer_retry),
-                                onClick = { onRetry(page) },
-                                role = CapsuleRole.Secondary,
-                                enabled = !browser.loading && !state.imageTransfer.busy,
-                                glass = true,
-                                glassLevel = GlassLevel.Viewer,
-                            )
-                        }
-                        state.imageTransfer.busy ->
-                            Text(stringResource(Res.string.wifi_remote_viewer_transfer_wait), color = AlphaTheme.colors.onPhoto, style = AlphaType.Body)
-                        else -> {
-                            GlassProgressCircle(onPhoto = true, size = GlassProgressSize.Large)
-                            Text(stringResource(Res.string.wifi_remote_browser_loading), color = AlphaTheme.colors.onPhoto, style = AlphaType.Body)
-                        }
-                    }
-                }
                 // Bitmaps arrive already upright (EXIF orientation applied at decode).
                 image != null -> {
                     var viewport by remember(capture.id) { mutableStateOf(Size.Zero) }
@@ -862,44 +851,52 @@ private fun Modifier.detailsSwipeUpToOpen(onOpen: (() -> Unit)?, isZoomed: () ->
 
 /** Enter animation of the portrait details drawer (scrim fade + sheet slide), ms. */
 const val VIEWER_DETAILS_ENTER_MILLIS = 280
-private const val VIEWER_DETAILS_EXIT_MILLIS = 200
+internal const val VIEWER_DETAILS_EXIT_MILLIS = 200
 
 /**
  * The portrait details drawer as its own subtree: the only place besides the semantics gate that
- * reads [ViewerDrawerState.open]. The enter / exit animation is one [Animatable] whose value is read
- * only inside `graphicsLayer` blocks (scrim alpha, sheet translationY), so animating redraws two
- * layers and recomposes nothing; the drawer stays composed until the exit animation has finished.
+ * reads [ViewerDrawerState.open] / [ViewerDrawerState.modalActive]. The enter / exit animation is
+ * one [Animatable] whose value is read only inside `graphicsLayer` blocks (scrim alpha, sheet
+ * translationY), so animating redraws two layers and recomposes nothing; the drawer stays composed
+ * until the exit animation has finished, and focus returns to [stripFocus] only after exit.
  */
 @Composable
 private fun ViewerDetailsDrawerLayer(drawer: ViewerDrawerState, parts: ViewerParts, stripFocus: FocusRequester) {
     val capture = parts.capture
     val open = drawer.open && capture != null
-    val progress = remember { Animatable(0f) }
+    val progress = remember { Animatable(if (open) 1f else 0f) }
     LaunchedEffect(open) {
-        progress.animateTo(
-            if (open) 1f else 0f,
-            if (open) tween(VIEWER_DETAILS_ENTER_MILLIS, easing = FastOutSlowInEasing)
-            else tween(VIEWER_DETAILS_EXIT_MILLIS, easing = FastOutLinearInEasing),
-        )
-    }
-    val leaving by remember { derivedStateOf { progress.value > 0f } }
-    if (capture == null || !(open || leaving)) return
-    val onClose = remember(drawer, stripFocus) {
-        {
-            drawer.hide()
-            // Focus returns to the strip that opened the drawer.
-            requestFocusGuarded("details strip") { stripFocus.requestFocus() }
-            Unit
+        if (open) {
+            drawer.leaving = true
+            progress.animateTo(1f, tween(VIEWER_DETAILS_ENTER_MILLIS, easing = FastOutSlowInEasing))
+        } else {
+            progress.animateTo(0f, tween(VIEWER_DETAILS_EXIT_MILLIS, easing = FastOutLinearInEasing))
+            drawer.leaving = false
+            if (drawer.restoreFocusOnExit) {
+                drawer.restoreFocusOnExit = false
+                requestFocusGuarded("details strip") { stripFocus.requestFocus() }
+            }
         }
     }
-    ViewerDetailsDrawer(capture, parts.metadata, parts.image, open, progress = { progress.value }, onClose = onClose)
+    if (capture == null || !drawer.modalActive) return
+    val onClose = remember(drawer) { { drawer.hide() } }
+    ViewerDetailsDrawer(
+        capture = capture,
+        metadata = parts.metadata,
+        image = parts.image,
+        open = open,
+        modalActive = drawer.modalActive,
+        progress = { progress.value },
+        onClose = onClose,
+    )
 }
 
 /**
  * Portrait details: an opaque dark sheet ([AlphaColors.viewerSheet]) over a scrim — no blur, so
  * nothing of the viewer shows through and opening it costs no backdrop pass. Closes on Back (before
- * the viewer itself, only while [open]), a tap on the scrim, the close button or a downward drag on
- * its title row. [progress] (0 → 1) drives the scrim alpha and the sheet's slide.
+ * the viewer itself, enabled for the full [modalActive] lifetime), a tap on the scrim, the close
+ * button or a downward drag on its title row. [progress] (0 → 1) drives the scrim alpha and the
+ * sheet's slide.
  */
 @Composable
 private fun ViewerDetailsDrawer(
@@ -907,19 +904,20 @@ private fun ViewerDetailsDrawer(
     metadata: StateFlow<PhotoMetadataState>,
     image: ImageBitmap?,
     open: Boolean,
+    modalActive: Boolean,
     progress: () -> Float,
     onClose: () -> Unit,
 ) {
     NavigationBackHandler(
         state = rememberNavigationEventState(NavigationEventInfo.None),
-        isBackEnabled = open,
+        isBackEnabled = modalActive,
         onBackCompleted = onClose,
     )
     val closeLabel = stringResource(Res.string.b1_details_close)
     val title = stringResource(Res.string.b1_details_title)
-    // The drawer is its own accessibility pane (like CapsuleDialog) and takes focus on entry.
+    // The drawer is its own accessibility pane (like CapsuleDialog) and takes focus on entry and re-open.
     val sheetFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { requestFocusGuarded("details drawer") { sheetFocus.requestFocus() } }
+    LaunchedEffect(open) { if (open) requestFocusGuarded("details drawer") { sheetFocus.requestFocus() } }
     Box(Modifier.fillMaxSize()) {
         Box(
             Modifier.fillMaxSize()
@@ -1284,12 +1282,39 @@ private fun ViewerDownloadControl(
         // Every viewer button is the Viewer-glass variant (GV fill + edge light, label in the
         // photo-overlay colour) so it reads as frosted glass even where it sits on the black
         // letterbox below the photo, and never as an opaque light pill.
-        ViewerDownloadPhase.Saved -> CapsuleButton(
-            text = stringResource(Res.string.wifi_remote_download_saved), onClick = {},
-            modifier = fill,
-            icon = painterResource(Res.drawable.check_24px), enabled = false,
-            glass = true, glassLevel = GlassLevel.Viewer,
-        )
+        ViewerDownloadPhase.Saved -> if (download.alsoDownloadRaw.isNotEmpty()) {
+            Row(
+                modifier = fill,
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CapsuleButton(
+                    text = stringResource(Res.string.wifi_remote_download_saved),
+                    onClick = {},
+                    modifier = Modifier.fillMaxHeight(),
+                    icon = painterResource(Res.drawable.check_24px),
+                    enabled = false,
+                    glass = true,
+                    glassLevel = GlassLevel.Viewer,
+                )
+                CapsuleButton(
+                    text = stringResource(Res.string.viewer_also_download_raw),
+                    onClick = { parts.onDownload(download.alsoDownloadRaw) },
+                    modifier = Modifier.fillMaxHeight().weight(1f, fill = false),
+                    role = CapsuleRole.Secondary,
+                    icon = painterResource(Res.drawable.download_24px),
+                    glass = true,
+                    glassLevel = GlassLevel.Viewer,
+                )
+            }
+        } else {
+            CapsuleButton(
+                text = stringResource(Res.string.wifi_remote_download_saved), onClick = {},
+                modifier = fill,
+                icon = painterResource(Res.drawable.check_24px), enabled = false,
+                glass = true, glassLevel = GlassLevel.Viewer,
+            )
+        }
         // The info strip already says "Only RAW" in the warning colour; the full reason is the
         // button's state for TalkBack.
         ViewerDownloadPhase.NoJpeg, ViewerDownloadPhase.NoRaw -> CapsuleButton(

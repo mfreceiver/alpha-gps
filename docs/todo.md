@@ -71,18 +71,14 @@
 - 验收：逐项无异常；弹层与菜单均为页内叠层，没有系统窗口。
 - 依据：批 R 提交（`WifiFormatPolicy.kt` 的 `WifiDownloadFormatSetting`/`RawOnly`/`NoRaw`/`batchFormatChoices`/`singleFormatChoices`，`WifiFormatChooser.kt`，`WifiPhotoViewer.kt` 的 `ViewerDownloadArea`，`WifiPhotoBrowser.kt`，`SharedLogViewerScreen.kt` 的 `LogLevelSelector`，`SettingsScreen.kt`，`PreferencesManager.wifiDownloadFormat`）；JVM 已覆盖：`WifiFormatPolicyTest`、`WifiPhotoViewerModelTest`、`WifiRemoteControllerTest`（RAW/询问批量）、`WifiFormatChooserTest`、`LogLevelOptionsTest`、`WifiDownloadFormatPreferencesTest`（app，含旧值迁移），`WifiFormatChooserComposeTest`（Robolectric：预览页询问弹层的选择/取消/单格式直下与批量行文案/置灰）；批量悬浮按钮→弹层的接线、日志级别菜单、设置页布局与焦点回位没有 Compose 用例，需真机。另：`ViewerDetailsDrawerComposeTest.kt:161-218` 用 `Dispatchers.Default` + `waitUntil` 5s + 两处 `Thread.sleep(600)`（等待“不再发生读取/重组”的负向断言窗口），建议改为统一测试调度器（可控虚拟时间）或显式完成信号；`WifiFormatChooserComposeTest` 未覆盖网格“下载所选 N 张”→chooser 的接线（上文已承认）。
 
-### 38. 真机核对：Wi-Fi 首次提示弹窗背景与详情直方图对齐（0.3.2）
-- 做什么：①全新安装（或清除应用数据）后进入“Wi-Fi 照片传输”：先见“实验性 Wi-Fi 照片传输”对话框，背后只有空白玻璃背景（不露出“一键自动连接/手动连接”页）；点“继续”直接进入自动连接过程卡；点“取消”回设备页；自动连接不可用时才落到手动连接页；②预览页详情（抽屉与宽屏面板）：文件信息与直方图顶部对齐、左右并排；只有一项时占满行，窄屏与 200% 字体下文件信息可折行且不溢出。
-- 验收：逐项无异常；与 #19 的下载区（高度恒定）一并目视核对。
-- 依据：`WifiRemoteScreen.kt` 的首次提示分支、`WifiPhotoViewer.kt` 的 `ViewerDetailsContent`（直方图 `weight(1f)` 两列）。
+
 
 ## P2
 
-### 13. 恢复遥控拍摄功能（后续计划，暂不实现）
-- 做什么：遥控与"照片传输"做平级入口。**协议层整体保留**（BLE FF01/FF02 + RemoteControlCoordinator + `triggerShutterSequence`、Wi-Fi capture/liveview、DB `remoteControlEnabled`），UI 入口已移除。研究与设计见 `docs/design/remote-control/`（`research.md`、`remote-control-design.pdf`）。拆分：R1 蓝牙单次拍摄恢复（入口/状态/防重复/离页释放/与位置联动互斥提示）；R2 Wi-Fi 取景+单拍（按用途建会话，当前 Android `AppServices.kt:72` 固定 `browseOnly=true` 是取景被关的原因，并非 v4 不支持 HTTP 取景）；R3 参数面板（缺 access/form 完整属性模型与写入读回链，先单机型单属性白名单）；R4 独立对焦。后台语义沿用 v3：后台/划卡结束 Wi-Fi，蓝牙+GPS 常驻（有用户指定下载时保留 Wi-Fi 至完成）。
-- 验收：设计评审后分阶段实施；恢复入口不得影响 GPS 写入/时间校正/照片下载；保留的协议层测试继续通过；需实机矩阵（型号/固件/协议版本/GPS 并用/单拍释放/取景首帧/浏览切换）。
-- 待用户决策/实机核实：①第一版做到 R1 还是 R1+R2；②ILCE-7M4 上蓝牙遥控是否与位置联动冲突（官方只明确 α6400 互斥）；③v4 取景能否稳定出帧；④参数面板与独立对焦是否后置。
-- 依据：用户 2026-11-10 决定；astra 研究报告。
+### 13. 遥控拍摄恢复：R1/R2 实机核对与后续 R3/R4 评估
+- 做什么：R1（BLE 极简快门）与 R2（Wi-Fi 取景 + 单拍）已按 `docs/design/remote-control/research.md` 实现并接入 UI；剩余待真机核对（α6400/ILCE-7M4 互斥表现、GPS 恢复检测、v4 取景首帧与停帧重连、后台立即释放 Wi-Fi），以及后续是否推进 R3（参数面板，需单机型单属性白名单与 `GlassSlider`）与 R4（独立对焦）。
+- 验收：实机矩阵（型号/固件/协议版本/GPS 并用/单拍释放/取景首帧/浏览切换）通过；不回归 GPS 写入/时间校正/照片下载；R3/R4 经评审后另行排期。
+- 依据：`docs/design/remote-control/research.md`、`BleRemoteModels.kt`、`RemoteControlCoordinator.kt`、`WifiRemoteControlScreen.kt`。
 
 ### 25. 日志页 snackbar 是否遮挡日志面板底部（真机确认）
 - 做什么：日志页 `GlassSnackbarHost` 作为页内叠层浮在底部，估计会盖住日志面板最后约 70dp。真机（竖屏/横屏、大字体）触发复制/清空等提示，看是否遮住最后几行日志且无法滚出；若遮挡，给日志列表加底部 contentPadding（或提示出现时留出空间）。
@@ -102,24 +98,11 @@
 - 验收：①②通过；③④⑤与已知剩余缺口有结论（改或记录为接受）；不引入系统窗口；`OverlayFocusMemoryTest`、`OverlayHostLifecycleTest`、`OverlayFocusComposeTest` 仍通过。
 - 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/components/glass/GlassOverlayFocus.kt`（焦点路径、`OverlayFocusNode`/`OverlayFocusHandle`）、`GlassOverlayHost.kt`（层门控、entry 生命周期、栈式返回）、`GlassBackground.kt`（底页门控 + settle）、`GlassPopover.kt`；基线行为为叠加的 `PopupProperties(focusable = true)` / `Dialog` 窗口。
 
-### 38. 预览页详情抽屉不是完整键盘模态（沿袭 0.3.0，非 0.3.1 回归）
-- 做什么：竖屏详情抽屉对硬键盘/DPAD 用户不是完整模态：①`WifiPhotoViewer.kt:484-504`（`ViewerSemanticsGate`）只用 `clearAndSetSemantics` 对读屏隐藏背景，没有焦点闸，Tab/方向键仍可进入背后的照片/信息条/下载/胶片条；②`WifiPhotoViewer.kt:797-865`：关闭时 `onClose` 立即 `drawer.hide()` 并 `stripFocus.requestFocus()`，但 200ms 退出动画（`VIEWER_DETAILS_EXIT_MILLIS`）期间 sheet 仍在组合内、仍 `focusable()` 且带 `paneTitle` 语义；`NavigationBackHandler` 的 `isBackEnabled = open`，动画期间 Back 已不被抽屉接管；③快速重开（200ms 内再次打开）不会重启 `LaunchedEffect(Unit)` 的 sheet 焦点请求（sheet 未离开组合），焦点留在信息条/背景。
-- 复现：硬键盘/DPAD 打开详情后遍历焦点（应进不了背后控件）；关闭动画期间按 Tab/Back；关闭后 200ms 内重开，看焦点是否进入抽屉。
-- 建议：把可交互模态的 presence、背景 focus 与 semantics 隐藏、Back 启用统一到同一个状态（含退出动画期间），抽屉彻底离场后再恢复焦点到信息条；重开时重新请求 sheet 焦点（以 open 为 key）；补暂停 Compose clock 的退出动画/重开测试（参考 `overlayLayerGate`/`OverlayFocusComposeTest` 的做法）。
-- 验收：键盘焦点在抽屉打开及退出动画期间到不了背景；退出动画结束后焦点回信息条；200ms 内重开焦点进入抽屉；Back 在退出动画期间行为明确；有上述 Compose 用例并随 `testAndroidHostTest` 通过。
-- 依据：sol 对 23aafd0..594605b 的审阅（既有 P2，沿袭 0.3.0）；`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiPhotoViewer.kt`；`GlassOverlayFocus.kt` 的 `overlayLayerGate`；TalkBack 侧见 #19 ⑧。
+
 
 ## P3
 
-### 28. 网格格子放大镜触摸区与 GlassTileAction 统一
-- 做什么：网格格子的放大镜保留自有 40dp 触摸区（`TILE_ACTION_DP=40`，格子角落空间有限），而 `GlassTileAction` 强制 48dp 点击区。给 `GlassTileAction` 加 `touchTarget` 参数（≥40dp 钳制，同 `GlassIconButton`），网格放大镜/复选框改用它，删除自绘实现。
-- 验收：网格放大镜与复选框都用 `GlassTileAction(touchTarget = …)`；`WifiBrowserModelTest` 的触摸区/角标几何断言仍通过；触摸区不重叠、不触发点格子。
-- 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiPhotoBrowser.kt:644`（`TileActionSize`）、`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiBrowserModel.kt:138`；`sharednew/src/commonTest/.../remote/WifiBrowserModelTest.kt:125-133`（`TILE_ACTION_DP`）；`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/components/glass/GlassSelectionControls.kt:205`。
 
-### 29. 预览页背景色抽 viewerBackground token
-- 做什么：预览页背景 `Color.Black` 抽成 `viewerBackground` token（`ui/theme/Color.kt`，`AlphaColors`），预览页与相关 Viewer 玻璃/对比度测试引用它。
-- 验收：`WifiPhotoViewer.kt` 无字面 `Color.Black` 背景；`PaletteContrastTest` 的 Viewer 背景取值引用 token，测试通过。
-- 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/remote/WifiPhotoViewer.kt:476`（`ViewerBody`）。
 
 ### 30. Wi-Fi 连接叠层分段 StepRing 保留自定义
 - 做什么：连接叠层用自绘分段 `StepRing` 表达 4 步当前所处位置，不是 `GlassProgress*`（后者不表达分段）。如需统一进度控件，需先设计分段进度形态（`GlassProgressSteps` 之类）再迁移；否则保持现状并在设计文档确认。
@@ -130,11 +113,6 @@
 - 做什么：`GlassTopBar` 的玻璃取样源是页面背景，内容按 Scaffold padding 排在栏下方，滚动内容并不从栏后穿过（`docs/glass-material-notes.md` §5.1 的结构改动未做）。让内容铺满全屏、栏悬浮其上（内容加顶部 contentPadding，栏取样到滚动内容），各页（`GlassPageScaffold`、设备页、Wi-Fi 屏）核对首屏位置与滚动。
 - 验收：滚动时内容从顶栏后穿过并被模糊；首屏内容不被栏遮住；各页对话框/叠层宿主行为不回归。
 - 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/components/glass/GlassTopBar.kt:55`、`GlassPageScaffold`；`docs/glass-material-notes.md` §5.1。
-
-### 32. 排障指南“远程提示”步骤改用 GlassWarningCard
-- 做什么：`guide_location_link_step_remote_note` 是警示性步骤，目前按普通步骤呈现，可用 `GlassWarningCard` 展示；需要新增标题字符串（`values` 与 `values-zh-rCN` 同写）。
-- 验收：该步骤以警示卡片呈现且有标题；两种语言字符串齐全；排障页其余步骤不变。
-- 依据：`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/help/TroubleshootingGuideScreen.kt:110`；`sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/components/glass/GlassStatus.kt:77`（`GlassWarningCard`）。
 
 ### 20. 缩略图黑边成因：待真机日志
 - 做什么：网格“相机缩略图自带黑边”仍只是推断（暗景/夜景也可能命中近黑边缘检测，因此日志里的 `nearBlackBars` 非零不等于相机像素里有黑边）。真机用 `adb logcat -s AlphaThumb` 取前 3 张缩略图的 `decoded=WxH nearBlackBars=top/bottom/left/right`，对照同一张照片在相机上的实际画面（明亮场景与暗景各取几张）后下结论；确认前不要据此改网格呈现。
@@ -166,17 +144,19 @@
 - 验收：≥1 台实机确认取消后无自动重连、无残余 GATT；与 retiredGatts 机制兼容。
 - 依据：M2 设备页实现；AndroidBleTransport.connect 使用 autoConnect。
 
-### 17. 日期列表封面缩略图（设计 v3 有，0.2.0 Wi-Fi 屏未做）
-- 做什么：日期列表每行左侧显示该日最新一张的缩略图（可见行惰性、每日 1 次请求、中性占位）。需放宽 `SonyImageTransfer.thumbnail()` 只服务“当前显示日”的门控（或为封面单独开放每日首张），并接入 `WifiRemoteController` 的串行队列与代次失效。
-- 验收：静置不批量请求；滚动只请求可见行；刷新/断开立即停；不压垮串行 PTP 队列。
-- 依据：`docs/design/ui-v3/content3a.py` 日期列表；wave2/wifi 报告“对设计稿的偏离”。
 
-### 18. 清理平铺分页遗留路径
-- 做什么：Android UI 只走按日分组浏览（`browseDates`/`browseDate`）；`WifiRemoteController.browsePhotos(offset)`、`WifiRemoteConnection.openPhotoBrowser/photoPage`、`WifiRemoteViewModel.viewPhotoAt` 的平铺翻页分支、`WifiPhotoViewer` 的平铺边界页（加载/失败/传输等待）与 `SonyImageTransfer.page()`/`PAGE_SIZE` 仍保留（大量测试以其为夹具）。评估迁移测试夹具到按日路径后删除平铺分页。
-- 验收：全仓无 UI 可达的平铺翻页代码；测试改用按日路径且覆盖不降；全量验证通过。
-- 依据：wave2/wifi 取消日期内分页时为控制风险保留（见 `docs/wifi-architecture.md` “Day list, day grid, and thumbnails”）。
 
 ### 22. 复审遗留的测试强度与展示边界（0.2.1 复审 P3，不阻断）
 - 前置检查"晚返回"测试：现有测试用可取消的 `CompletableDeferred.await()`，取消后旧检查已退出，没有制造"忽略取消后仍返回"的非协作检查；建议补一个先取消、再放行旧结果、断言零 claim/open 并可重连的用例。
 - 诊断取消测试只覆盖 disconnect；建议补"同一 Ready 会话内换日/刷新后，排队扫描不再执行"的断言。
 - JPG-only 下"无 JPG 且 RAW/HEIF 原件全部超限"的照片：格子仍显示原件大小+无 JPG 警示（NoJpeg），预览页回退原件计划为空显示"超限"并禁用下载；不会误下载也不误报已保存，属 JPG-only 批量与手动 Original 动作的语义区别，待决定是否对齐提示。
+
+### 53. BLE 广播状态位（0x21/0x22/0x23）实机抓包验证与处境化引导评估
+- 做什么：在调试构建中实机抓取 Sony `0x012D` 厂商广播负载（至少 α7 IV、α6700 等机型），核验配对位/位置联动位/Wi-Fi Handover 位的真实字节布局与 Android API 31/32 vs 33+ CDM 回调差异，评估是否值得接入“连接前处境化引导”。
+- 验收：有实机抓包记录与可行性结论（做或放弃）；暂不直接修改生产扫描权限或 UI。
+- 依据：whc2001 `PROTOCOL_EN.md`（未核实）、`DeviceAssociationUtils.kt`。
+
+### 54. 选择模式悬浮栏格式 chip（仅固定格式用户）
+- 做什么：评估为偏好设置非“每次询问”的用户，在网格多选底部悬浮下载栏提供临时格式覆盖 chip（不改全局设置）。
+- 验收：明确是否需要（鉴于默认已为“每次询问”）；若实施，需保持悬浮栏窄屏不换行/不截断。
+- 依据：`WifiPhotoBrowser.kt`、`WifiFormatPolicy.kt`。

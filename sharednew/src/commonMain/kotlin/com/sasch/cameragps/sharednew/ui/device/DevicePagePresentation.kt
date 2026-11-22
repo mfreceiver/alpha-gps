@@ -1,5 +1,7 @@
 package com.sasch.cameragps.sharednew.ui.device
 
+import com.sasch.cameragps.sharednew.bluetooth.BleFailure
+import com.sasch.cameragps.sharednew.bluetooth.BleFailureReason
 import com.sasch.cameragps.sharednew.bluetooth.location.PhoneLocationFix
 import com.sasch.cameragps.sharednew.bluetooth.status.BatteryFreshness
 import com.sasch.cameragps.sharednew.bluetooth.status.CameraBattery
@@ -11,6 +13,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
+import com.sasch.cameragps.sharednew.ui.help.GuideTopic
 
 /**
  * Read-only live status for the device page (signal, GPS write counters, time correction, cached
@@ -194,7 +197,69 @@ enum class StatusCardAlert {
 
     /** The camera answered the time correction with a rejection. */
     TimeSyncRejected,
+
+    /** The link works but the last Bluetooth signal reading is weak ([isSignalWeak]). Lowest priority. */
+    WeakSignal,
+
+    /** Disconnected after a specific BLE failure reason. */
+    BleBondLost,
+    BleAuthenticationFailed,
+    BleTimeout,
+    BleOutOfRange,
+    BleBluetoothOff,
+    BlePermissionMissing,
+    BleGattFailed,
+    BleUnknown,
 }
+
+/**
+ * Troubleshooting-guide section that explains an alert; null when the guide has nothing to add
+ * (no alert, or a weak signal, which only needs the phone moved closer).
+ */
+fun statusCardAlertTopic(alert: StatusCardAlert): GuideTopic? = when (alert) {
+    StatusCardAlert.LocationDisabledByCamera,
+    StatusCardAlert.TimeSyncFailed,
+    StatusCardAlert.TimeSyncRejected -> GuideTopic.LocationLink
+    StatusCardAlert.LocationWriteFailing,
+    StatusCardAlert.BleBondLost,
+    StatusCardAlert.BleAuthenticationFailed -> GuideTopic.Repair
+    StatusCardAlert.None,
+    StatusCardAlert.WeakSignal,
+    StatusCardAlert.BleTimeout,
+    StatusCardAlert.BleOutOfRange,
+    StatusCardAlert.BleBluetoothOff,
+    StatusCardAlert.BlePermissionMissing,
+    StatusCardAlert.BleGattFailed,
+    StatusCardAlert.BleUnknown -> null
+}
+
+/** An RSSI reading older than this no longer says anything about the link now (sampling is every 10 s). */
+const val RSSI_STALE_AFTER_MILLIS: Long = 30_000L
+
+/** Readings below this (dBm) mean the camera is too far away for a dependable link. */
+const val RSSI_WEAK_BELOW_DBM: Int = -85
+
+/** No reading, or none newer than [RSSI_STALE_AFTER_MILLIS]: the signal ring is drawn muted. */
+fun isRssiStale(rssiAtMillis: Long?, nowMillis: Long): Boolean =
+    rssiAtMillis == null || nowMillis - rssiAtMillis > RSSI_STALE_AFTER_MILLIS
+
+/**
+ * Milliseconds from [nowMillis] until the reading taken at [rssiAtMillis] turns stale
+ * ([isRssiStale]); null when there is no reading or it is stale already. The page waits exactly
+ * this long instead of relying on its coarse page clock.
+ */
+fun rssiStaleInMillis(rssiAtMillis: Long?, nowMillis: Long): Long? {
+    if (rssiAtMillis == null || isRssiStale(rssiAtMillis, nowMillis)) return null
+    return rssiAtMillis + RSSI_STALE_AFTER_MILLIS + 1 - nowMillis
+}
+
+/**
+ * A fresh reading strictly below [RSSI_WEAK_BELOW_DBM]. Stale readings and values outside what an
+ * Android stack reports (positive, or -127 and below = not available) never count as weak.
+ */
+fun isSignalWeak(rssiDbm: Int?, rssiAtMillis: Long?, nowMillis: Long): Boolean =
+    rssiDbm != null && rssiDbm <= 0 && rssiDbm > -127 &&
+        rssiDbm < RSSI_WEAK_BELOW_DBM && !isRssiStale(rssiAtMillis, nowMillis)
 
 /**
  * Only a connected link can have an alert (connecting / disconnected headlines say enough).
@@ -205,7 +270,21 @@ fun statusCardAlert(
     locationDisabledByCamera: Boolean,
     gps: GpsWriteStats?,
     timeSync: TimeSyncOutcome?,
+    weakSignal: Boolean = false,
+    bleFailure: BleFailure? = null,
 ): StatusCardAlert {
+    if (headline == ConnectionHeadline.Disconnected && bleFailure != null) {
+        return when (bleFailure.reason) {
+            BleFailureReason.BondLost -> StatusCardAlert.BleBondLost
+            BleFailureReason.AuthenticationFailed -> StatusCardAlert.BleAuthenticationFailed
+            BleFailureReason.Timeout -> StatusCardAlert.BleTimeout
+            BleFailureReason.OutOfRange -> StatusCardAlert.BleOutOfRange
+            BleFailureReason.BluetoothOff -> StatusCardAlert.BleBluetoothOff
+            BleFailureReason.PermissionMissing -> StatusCardAlert.BlePermissionMissing
+            BleFailureReason.GattFailure -> StatusCardAlert.BleGattFailed
+            BleFailureReason.Unknown -> StatusCardAlert.BleUnknown
+        }
+    }
     if (headline != ConnectionHeadline.Connected) return StatusCardAlert.None
     if (locationDisabledByCamera) return StatusCardAlert.LocationDisabledByCamera
     if (gps != null && gps.failedCount > 0) {
@@ -218,7 +297,7 @@ fun statusCardAlert(
     return when (timeSync) {
         TimeSyncOutcome.Failed -> StatusCardAlert.TimeSyncFailed
         TimeSyncOutcome.Rejected -> StatusCardAlert.TimeSyncRejected
-        else -> StatusCardAlert.None
+        else -> if (weakSignal) StatusCardAlert.WeakSignal else StatusCardAlert.None
     }
 }
 
