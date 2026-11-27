@@ -73,7 +73,9 @@ data class GpsRecoveryBaseline(
     val writtenCountAtExit: Int,
     val lastWriteAtMillisAtExit: Long?,
     val active: Boolean = true,
-)
+) {
+    internal var diagnostics: com.sasch.cameragps.sharednew.database.logging.RemoteDiagnostics? = null
+}
 
 enum class GpsRecoveryStatus {
     /** Not observing recovery (inactive or disconnected). */

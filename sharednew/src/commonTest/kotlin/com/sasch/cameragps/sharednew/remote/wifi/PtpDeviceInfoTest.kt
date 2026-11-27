@@ -51,6 +51,17 @@ class PtpDeviceInfoTest {
     }
 
     @Test
+    fun readsModelAndFirmwareWithoutConsumingSerial() {
+        fun field(s: String) = byteArrayOf((s.length + 1).toByte()) +
+            u16(*s.map { it.code }.toIntArray(), 0)
+        val prefix = byteArrayOf(100, 0, 6, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0) + ByteArray(20)
+        val info = PtpDeviceInfoParser.parse(prefix + field("Sony") + field("ILCE-7M4") +
+            field("3.00") + byteArrayOf(-1))
+        assertEquals("ILCE-7M4", info.model)
+        assertEquals("3.00", info.firmware)
+    }
+
+    @Test
     fun truncatedOrImplausiblePropertyListsKeepTheOperationsAndYieldNoProperties() {
         val head = byteArrayOf(100, 0, 6, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0) + u32(1) + u16(0x1001)
         for (tail in listOf(

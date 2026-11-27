@@ -1,5 +1,6 @@
 package com.sasch.cameragps.sharednew.bluetooth.coordinator
 
+import com.sasch.cameragps.sharednew.database.logging.RemoteDiagnostics
 import com.diamondedge.logging.logging
 import com.sasch.cameragps.sharednew.bluetooth.SonyBluetoothConstants
 import kotlinx.coroutines.CoroutineScope
@@ -68,7 +69,11 @@ class RemoteControlCoordinator(
     fun bleShutterState(identifier: String): BleShutterState =
         _bleShutterStates.value[identifier.uppercase()] ?: BleShutterState()
 
+    private val diagnostics = mutableMapOf<String, RemoteDiagnostics>()
+
     private fun publishBleShutterState(id: String, state: BleShutterState) {
+        diagnostics[id]?.record(state.toString())
+        if (state.phase == BleShutterPhase.Idle) diagnostics.remove(id)
         _bleShutterStates.value = _bleShutterStates.value + (id to state)
         onBleShutterStateChanged(id, state)
     }
@@ -246,6 +251,7 @@ class RemoteControlCoordinator(
      */
     fun acquireBleRemoteControl(identifier: String): Boolean {
         val id = identifier.uppercase()
+        diagnostics[id] = RemoteDiagnostics("BLE", id)
         val gen = currentGeneration(id)
         prepareTimeoutJobs.remove(id)?.cancel()
 

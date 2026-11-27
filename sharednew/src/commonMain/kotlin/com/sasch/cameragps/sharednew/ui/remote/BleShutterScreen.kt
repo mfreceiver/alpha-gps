@@ -139,7 +139,10 @@ fun BleShutterScreen(
         if (confirmed && !guard.left) {
             guard.left = true
             controlsNow.releaseAsync(id)
-            onLeftNow(captureGpsRecoveryBaseline(guard.hadPriorWrite, liveNow))
+            onLeftNow(captureGpsRecoveryBaseline(guard.hadPriorWrite, liveNow).also {
+                it.diagnostics = com.sasch.cameragps.sharednew.database.logging.RemoteDiagnostics.forDevice(id)
+                it.diagnostics?.record("BLE remote exited; observing GPS")
+            })
         }
     }
     val leaveNow by rememberUpdatedState(leave)

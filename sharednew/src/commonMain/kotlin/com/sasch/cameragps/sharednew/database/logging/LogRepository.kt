@@ -28,6 +28,7 @@ class LogRepository {
         logs.map { it.take(limit.coerceAtLeast(0)) }.distinctUntilChanged()
 
     suspend fun clearAllLogs() {
+        RemoteDiagnostics.latest.value = emptyList()
         logs.value = emptyList()
     }
 }

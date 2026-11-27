@@ -737,4 +737,6 @@
     <string name="wifi_remote_copy_password">复制 Wi-Fi 密码</string>
     <string name="wifi_remote_ssid_copied">已复制网络名称</string>
     <string name="wifi_remote_password_copied">已复制 Wi-Fi 密码</string>
+    <string name="remote_summary_copy">复制最近遥控会话摘要</string>
+    <string name="remote_probe">读取相机参数到遥控会话摘要</string>
 </resources>

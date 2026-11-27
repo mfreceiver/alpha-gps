@@ -1,5 +1,6 @@
 package com.sasch.cameragps.sharednew.ui.logs
 
+import com.sasch.cameragps.sharednew.database.logging.RemoteDiagnostics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,8 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
+import cameragps.sharednew.generated.resources.baseline_view_list_24
+import cameragps.sharednew.generated.resources.remote_summary_copy
 import cameragps.sharednew.generated.resources.cancel_button
 import cameragps.sharednew.generated.resources.content_copy_24px
 import cameragps.sharednew.generated.resources.delete_24px
@@ -110,6 +113,7 @@ fun SharedLogViewerScreen(
     logRepository: LogRepository,
     onBackClick: () -> Unit,
     logLevel: Int? = null,
+    appVersion: String = "",
     onLogLevelChange: (Int) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
@@ -121,6 +125,7 @@ fun SharedLogViewerScreen(
     // Copy feedback (formerly an inline notice line) is an in-page glass snackbar.
     val snackbar = rememberGlassSnackbarHostState()
 
+    val summary by RemoteDiagnostics.latest.collectAsState()
     val copyLabel = stringResource(Res.string.m9_logs_copy)
     val clearLabel = stringResource(Res.string.logs_clear_all)
     val nothingToCopy = stringResource(Res.string.m9_logs_copy_empty)
@@ -132,6 +137,16 @@ fun SharedLogViewerScreen(
         onBackClick = onBackClick,
         scrolled = scrollState.isScrolledUnderTopBar,
         actions = {
+            if (summary.isNotEmpty()) {
+                GlassIconButton(
+                    icon = painterResource(Res.drawable.baseline_view_list_24),
+                    contentDescription = stringResource(Res.string.remote_summary_copy),
+                    onClick = {
+                        clipboard.setText(AnnotatedString("AlphaGPS $appVersion\n" + summary.joinToString("\n")))
+                        snackbar.show(summary.first())
+                    },
+                )
+            }
             GlassIconButton(
                 icon = painterResource(Res.drawable.content_copy_24px),
                 contentDescription = copyLabel,
@@ -150,7 +165,7 @@ fun SharedLogViewerScreen(
             GlassIconButton(
                 icon = painterResource(Res.drawable.delete_24px),
                 contentDescription = clearLabel,
-                enabled = logs.isNotEmpty(),
+                enabled = logs.isNotEmpty() || summary.isNotEmpty(),
                 onClick = { showClearConfirm = true },
             )
         },

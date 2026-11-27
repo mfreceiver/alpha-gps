@@ -90,6 +90,7 @@ internal interface WifiRemoteConnection {
     val images: Flow<ImageBitmap>
     val liveViewFrames: Flow<WifiLiveViewFrame> get() = images.map { WifiLiveViewFrame(it) }
     val lost: Flow<Unit>
+    suspend fun probeProperties() {}
     suspend fun capture(): WifiCaptureStatus
     suspend fun turnOffWifi(): WifiShutdownStatus = WifiShutdownStatus.NotRequested
     suspend fun close()
@@ -519,6 +520,17 @@ class WifiRemoteController internal constructor(
             }
         }
         connecting.start()
+    }
+
+    private var propertyProbe: Job? = null
+
+    fun probeProperties(identifier: String) {
+        val id = identifier.uppercase()
+        val state = registry.get(id)?.wifiRemote ?: return
+        if (_owner.value != id || state.phase != WifiRemotePhase.Ready || state.photoBrowser.open ||
+            state.capture == WifiCaptureStatus.Shooting || propertyProbe?.isActive == true) return
+        val connection = activeConnection ?: return
+        propertyProbe = sessionScope?.launch { connection.probeProperties() }
     }
 
     fun capture(identifier: String) {

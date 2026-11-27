@@ -31,6 +31,7 @@ internal class SonyPtpShutter(
     private val capabilities: SonyPtpInitializationResult.Ready,
     private val events: PtpIpEventMonitor? = null,
     private val halfPressHoldMs: Long = 500,
+    private val observe: (String) -> Unit = {},
 ) {
     init { require(halfPressHoldMs in 0..2_000) }
 
@@ -40,7 +41,7 @@ internal class SonyPtpShutter(
         val params = if ((capabilities.vendorCodeVersion ?: 0) >= 310) listOf(code.toLong(), 1L)
         else listOf(code.toLong())
         return commands.executeDataOut(SonyPtpOperation.SDIO_CONTROL_DEVICE, params,
-            byteArrayOf(if (down) 2 else 1, 0), operationTimeoutMs = if (down) 15_000 else 3_000)
+            byteArrayOf(if (down) 2 else 1, 0), operationTimeoutMs = if (down) 15_000 else 3_000).also { observe("shutter=0x${code.toString(16)} down=$down ${it.diagnosticSummary()}") }
     }
 
     suspend fun captureStill(): SonyPtpCaptureResult {

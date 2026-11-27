@@ -11,6 +11,7 @@ internal object SonyCameraProperties {
         controlCodes: Set<Int>,
         selected: Set<Int>,
         selectedStrings: Set<Int> = emptySet(),
+        describe: ((String) -> Unit)? = null,
     ): Map<Int, SonyCameraProperty> {
         var offset = 0
         fun take(size: Int): Int {
@@ -65,7 +66,7 @@ internal object SonyCameraProperties {
         repeat(count.toInt()) {
             val code = number(2).toInt()
             val kind = number(2).toInt()
-            number(1) // Access flag; availability properties are read-only.
+            val access = number(1)
             val enabled = number(1)
             if (code in controlCodes) {
                 take(4)
@@ -74,17 +75,31 @@ internal object SonyCameraProperties {
                 value(kind)
                 val text = if (kind == 0xffff && code in selectedStrings) stringValue() else null
                 val current = if (text == null) value(kind) else null
-                when (number(1).toInt()) {
+                val form = number(1).toInt()
+                val numeric = kind in 1..8 && code in selected && describe != null
+                val choices = if (numeric) mutableListOf<String>() else null
+                when (form) {
                     0 -> Unit
-                    1 -> repeat(3) { value(kind) }
+                    1 -> repeat(3) {
+                        val v = value(kind)
+                        choices?.add(v.toString())
+                    }
                     2 -> repeat(2) {
                         val options = number(2).toInt()
                         require(options <= 4096) { "Too many camera property values" }
-                        repeat(options) { value(kind) }
+                        choices?.add("count=$options")
+                        repeat(options) { index ->
+                            val v = value(kind)
+                            if (index < 96) choices?.add(v.toString())
+                        }
                     }
 
                     else -> error("Unsupported camera property form")
                 }
+                describe?.invoke(buildString {
+                    append("0x${code.toString(16)} type=$kind access=$access enabled=$enabled form=$form")
+                    if (numeric) append(" raw=$current options=${choices.orEmpty().joinToString(",")}")
+                })
                 if (code in selected || code in selectedStrings) {
                     require(seen.add(code)) { "Duplicate camera property" }
                     properties[code] = SonyCameraProperty(enabled in 1L..2L, current, text)

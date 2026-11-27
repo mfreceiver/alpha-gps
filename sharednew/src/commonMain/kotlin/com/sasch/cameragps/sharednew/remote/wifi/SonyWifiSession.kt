@@ -1,5 +1,6 @@
 package com.sasch.cameragps.sharednew.remote.wifi
 
+import com.sasch.cameragps.sharednew.database.logging.RemoteDiagnostics
 import androidx.compose.ui.graphics.ImageBitmap
 import com.diamondedge.logging.logging
 import kotlinx.coroutines.CoroutineScope
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -47,6 +49,7 @@ internal suspend fun openSonyWifiSession(
         connection.open()
         return connection
     } catch (failure: Throwable) {
+        connection.openFailed(failure)
         withContext(NonCancellable) { connection.close() }
         throw failure
     }
@@ -66,6 +69,7 @@ private class SonyWifiConnection(
     /** When set, the session starts (and stays) in ImageTransfer mode: no remote shooting, no live view. */
     private val browseOnly: Boolean = false,
 ) : WifiRemoteConnection {
+    private val report = if (browseOnly) null else RemoteDiagnostics("Wi-Fi")
     private val log = logging("SonyWifiSession")
 
     // Kept alive through caller cancellation so CloseSession can still use its command queue.
@@ -91,7 +95,7 @@ private class SonyWifiConnection(
             decodePreview,
             store
         )
-        val shutter = SonyPtpShutter(ptp.commands, ready, ptp.events)
+        val shutter = SonyPtpShutter(ptp.commands, ready, ptp.events, observe = { report?.record(it) })
         val preview = SonyLiveViewStream(ptp.commands, ready, ptp.events, http)
         val endpoint = SonyLiveViewEndpointResolver(ptp.commands, ready)
 
@@ -103,6 +107,8 @@ private class SonyWifiConnection(
             }
         }
     }
+
+    fun openFailed(error: Throwable) { report?.record("open failed: ${error::class.simpleName}") }
 
     suspend fun open() {
         // Browse-only skips the remote-shooting protocol entirely: open straight into
@@ -124,7 +130,7 @@ private class SonyWifiConnection(
                     ready.extendedInfo.supportsControl(SonyPtpControlCode.HALF_PRESS) &&
                     ready.extendedInfo.supportsControl(SonyPtpControlCode.FULL_PRESS)
         } == true
-    override val lost: Flow<Unit> = merge(networkLost, disconnected.filter { it }.map { })
+    override val lost: Flow<Unit> = merge(networkLost.onEach { report?.record("network lost") }, disconnected.filter { it }.map { })
 
     private suspend fun enterTransferMode() {
         if (separateTransfer && current?.ready?.purpose != SonySessionPurpose.ImageTransfer) {
@@ -163,7 +169,42 @@ private class SonyWifiConnection(
 
     override suspend fun readBatteryPercent(): Int? {
         val session = current ?: return null
-        return SonyBatteryReader(session.ptp.commands, session.ready).read()
+        return SonyBatteryReader(session.ptp.commands, session.ready).read().also { report?.record("battery=${it ?: "unknown"}") }
+    }
+
+    override suspend fun probeProperties() {
+        val session = current ?: return
+        val diagnostics = report ?: return
+        if (session.ready.purpose != SonySessionPurpose.RemoteShooting) return
+        val op = SonyPtpOperation.SDIO_GET_ALL_EXT_DEVICE_PROP_INFO
+        if (!session.ready.deviceInfo.supports(op)) {
+            diagnostics.record("property read unsupported")
+            return
+        }
+        diagnostics.record("property read started")
+        val start = kotlin.time.TimeSource.Monotonic.markNow()
+        try {
+            val params = if ((session.ready.vendorCodeVersion ?: 0) >= 310) listOf(0L, 1L) else listOf(0L)
+            val result = session.ptp.commands.executeDataIn(op, params, maxDataBytes = 1024 * 1024)
+            diagnostics.record("property read ${start.elapsedNow()} ${result.diagnosticSummary()}")
+            if (result !is PtpIpTransactionResult.Response || result.response.code != 0x2001) return
+            val data = result.data ?: return
+            // Only known shooting properties may include values. Vendor strings can contain identifiers.
+            val shooting = setOf(0x5001, 0x5003, 0x5004, 0x5005, 0x5007, 0x5008, 0x500a,
+                0x500b, 0x500c, 0x500d, 0x500e, 0x500f, 0x5010, 0x5013, 0xd20d, 0xd21e, 0xd218)
+            val snapshot = buildString {
+                append("Property descriptors (raw integers, writes untested)")
+                SonyCameraProperties.parse(data, session.ready.extendedInfo.controlCodes, shooting, describe = {
+                    if (length < 48000) append("\n$it")
+                    else if (!endsWith("[truncated]")) append("\n[truncated]")
+                })
+            }
+            diagnostics.record(snapshot)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            diagnostics.record("property probe failed: ${error::class.simpleName}")
+        }
     }
 
     override suspend fun prepareToDisconnect() {
@@ -177,14 +218,21 @@ private class SonyWifiConnection(
         val session = checkNotNull(current)
         check(session.ready.purpose == SonySessionPurpose.RemoteShooting)
         log.i { "Wi-Fi live view resolving camera endpoint" }
-        emitAll(session.preview.decodedFrames(session.endpoint.resolve(host)))
+        report?.record("waiting for first frame")
+        var first = true
+        emitAll(session.preview.decodedFrames(session.endpoint.resolve(host)).onEach {
+            if (first) {
+                first = false
+                report?.record("first frame")
+            }
+        })
     }
 
     override val images: Flow<ImageBitmap> = liveViewFrames.map { it.image }
 
     override suspend fun capture(): WifiCaptureStatus {
         if (!canCapture) return WifiCaptureStatus.Rejected
-        return when (checkNotNull(current).shutter.captureStill()) {
+        return when (checkNotNull(current).shutter.captureStill().also { report?.record("capture=$it") }) {
             SonyPtpCaptureResult.CaptureEventObserved -> WifiCaptureStatus.Captured
             is SonyPtpCaptureResult.Rejected, SonyPtpCaptureResult.Unsupported -> WifiCaptureStatus.Rejected
             else -> WifiCaptureStatus.Uncertain
@@ -232,12 +280,26 @@ private class SonyWifiConnection(
                     }
                 }
                 log.i { "Wi-Fi Sony initialized: $ready" }
+                report?.record(buildString {
+                    append("$ready model=${ready.deviceInfo.model ?: "unknown"} firmware=${ready.deviceInfo.firmware ?: "unknown"}")
+                    fun codes(label: String, values: Set<Int>) {
+                        append("\n$label=")
+                        append(values.sorted().joinToString(",") { it.toString(16) })
+                    }
+                    codes("operations", ready.deviceInfo.supportedOperations)
+                    codes("standard properties", ready.deviceInfo.supportedProperties)
+                    codes("Sony properties", ready.extendedInfo.propertyCodes)
+                    codes("controls", ready.extendedInfo.controlCodes)
+                })
                 Session(ptp, ready, sessionScope)
             }
             current = session
             lossMonitor = protocolScope.launch(start = CoroutineStart.UNDISPATCHED) {
                 session.ptp.events.isClosed.first { it }
-                if (current === session && !closed) disconnected.value = true
+                if (current === session && !closed) {
+                    report?.record("event channel closed")
+                    disconnected.value = true
+                }
             }
         } catch (failure: Throwable) {
             withContext(NonCancellable) {
@@ -254,6 +316,7 @@ private class SonyWifiConnection(
     override suspend fun close() {
         if (closed) return
         closed = true
+        report?.record("session closed")
         val session = current
         current = null
         withContext(NonCancellable) {

@@ -7,6 +7,8 @@ package com.sasch.cameragps.sharednew.remote.wifi
 internal data class PtpDeviceInfo(
     val supportedOperations: Set<Int>,
     val supportedProperties: Set<Int> = emptySet(),
+    val model: String? = null,
+    val firmware: String? = null,
 ) {
     fun supports(code: Int): Boolean = code in supportedOperations
     fun supportsProperty(code: Int): Boolean = code in supportedProperties
@@ -31,7 +33,7 @@ internal const val PTP_DEVICE_PROP_BATTERY_LEVEL = 0x5001
 
 /**
  * Parses OperationsSupported, then (tolerantly) EventsSupported and DevicePropertiesSupported.
- * The trailing strings (manufacturer, model, version, serial number) are never read; a truncated
+ * Optional model and firmware are restricted to product/version formats. Serial is skipped. A truncated
  * or implausible property list yields an empty property set instead of failing the parse.
  */
 internal object PtpDeviceInfoParser {
@@ -70,6 +72,7 @@ internal object PtpDeviceInfoParser {
                 add((data[start].toInt() and 0xff) or ((data[start + 1].toInt() and 0xff) shl 8))
             }
         }
+        var propertiesComplete = false
         val properties = try {
             take(parseCount(2) * 2) // EventsSupported
             val propertyCount = parseCount(2)
@@ -78,10 +81,29 @@ internal object PtpDeviceInfoParser {
                     val start = take(2)
                     add((data[start].toInt() and 0xff) or ((data[start + 1].toInt() and 0xff) shl 8))
                 }
-            }
+            }.also { propertiesComplete = true }
         } catch (_: IllegalArgumentException) {
             emptySet()
         }
-        return PtpDeviceInfo(operations, properties)
+        val identity = if (propertiesComplete) runCatching {
+            repeat(2) { take(parseCount(2) * 2) } // capture formats and image formats
+            take(uint8() * 2) // manufacturer
+            fun productField(): String {
+                val count = uint8()
+                val start = take(count * 2)
+                if (count !in 2..40) return ""
+                return buildString {
+                    repeat(count - 1) { i ->
+                        val pos = start + i * 2
+                        if (data[pos + 1].toInt() != 0) return ""
+                        append(data[pos].toInt().toChar())
+                    }
+                }
+            }
+            val model = productField().takeIf { it.matches(Regex("(ILCE|ILME|DSC|ZV|SLT|NEX)-[A-Za-z0-9-]{1,24}")) }
+            val firmware = productField().takeIf { it.matches(Regex("[0-9]+([.][0-9]+){0,3}")) }
+            model to firmware
+        }.getOrNull() else null
+        return PtpDeviceInfo(operations, properties, identity?.first, identity?.second)
     }
 }

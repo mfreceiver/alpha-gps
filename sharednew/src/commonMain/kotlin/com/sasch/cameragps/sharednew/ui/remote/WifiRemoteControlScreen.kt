@@ -57,6 +57,8 @@ import cameragps.sharednew.generated.resources.remote_mode_wifi_desc
 import cameragps.sharednew.generated.resources.remote_mode_wifi_title
 import cameragps.sharednew.generated.resources.remote_shutter_cd
 import cameragps.sharednew.generated.resources.remote_wifi_busy
+import cameragps.sharednew.generated.resources.remote_probe
+import cameragps.sharednew.generated.resources.baseline_view_list_24
 import cameragps.sharednew.generated.resources.remote_wifi_capture_confirmed
 import cameragps.sharednew.generated.resources.remote_wifi_capture_rejected
 import cameragps.sharednew.generated.resources.remote_wifi_capture_uncertain
@@ -256,6 +258,7 @@ fun WifiRemoteControlScreen(
                 onBack = close,
                 onShutter = { controller.capture(id) },
                 onRetryLiveView = { controller.retryLiveView(id) },
+                onProbe = { controller.probeProperties(id) },
             )
             else -> RemoteConnectControls(
                 state = state,
@@ -286,6 +289,7 @@ internal fun RemoteLiveView(
     onBack: () -> Unit,
     onShutter: () -> Unit,
     onRetryLiveView: () -> Unit,
+    onProbe: (() -> Unit)? = null,
 ) {
     CameraGpsTheme(darkTheme = true, glassRenderMode = LocalGlassRenderMode.current) {
         ViewerStage(backdrop = null) {
@@ -298,7 +302,7 @@ internal fun RemoteLiveView(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    RemoteLiveTopBar(state.cameraName, onBack, Modifier.align(Alignment.Start))
+                    RemoteLiveTopBar(state.cameraName, onBack, onProbe, Modifier.align(Alignment.Start))
                     if (landscape) {
                         Row(
                             Modifier.fillMaxSize(),
@@ -337,7 +341,7 @@ private fun RemoteLiveImage(frame: State<WifiLiveViewFrame?>) {
 }
 
 @Composable
-private fun RemoteLiveTopBar(cameraName: String, onBack: () -> Unit, modifier: Modifier) {
+private fun RemoteLiveTopBar(cameraName: String, onBack: () -> Unit, onProbe: (() -> Unit)?, modifier: Modifier) {
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -347,6 +351,12 @@ private fun RemoteLiveTopBar(cameraName: String, onBack: () -> Unit, modifier: M
             icon = painterResource(Res.drawable.arrow_back_24px),
             contentDescription = stringResource(Res.string.back),
             onClick = onBack,
+            container = GlassLevel.Viewer,
+        )
+        if (onProbe != null) GlassIconButton(
+            icon = painterResource(Res.drawable.baseline_view_list_24),
+            contentDescription = stringResource(Res.string.remote_probe),
+            onClick = onProbe,
             container = GlassLevel.Viewer,
         )
         if (cameraName.isNotEmpty()) {

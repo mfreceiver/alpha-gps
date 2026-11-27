@@ -199,7 +199,10 @@ fun DeviceDetailContent(
     val hasRecentFix = fixNow != null && now - fixNow.timeMillis < RECENT_FIX_MILLIS
     val recovery = evaluateGpsRecoveryStatus(gpsRecoveryBaseline, session, live, hasRecentFix)
     val restoredText = stringResource(Res.string.remote_gps_restored)
-    LaunchedEffect(recovery) {
+    LaunchedEffect(recovery, gpsRecoveryBaseline) {
+        if (gpsRecoveryBaseline?.active == true) {
+            gpsRecoveryBaseline.diagnostics?.record("GPS recovery=$recovery")
+        }
         if (shouldAnnounceGpsRecovery(recovery)) {
             snackbar.show(restoredText)
             onGpsRecoveryResolved()

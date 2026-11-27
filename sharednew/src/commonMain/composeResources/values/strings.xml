@@ -765,4 +765,6 @@
     <string name="wifi_remote_copy_password">Copy Wi-Fi password</string>
     <string name="wifi_remote_ssid_copied">Network name copied</string>
     <string name="wifi_remote_password_copied">Wi-Fi password copied</string>
+    <string name="remote_summary_copy">Copy latest remote session summary</string>
+    <string name="remote_probe">Read camera properties into session summary</string>
 </resources>

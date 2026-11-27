@@ -77,6 +77,7 @@
 
 ### 13. 遥控拍摄恢复：R1/R2 实机核对与后续 R3/R4 评估
 - 做什么：R1（BLE 极简快门）与 R2（Wi-Fi 取景 + 单拍）已按 `docs/design/remote-control/research.md` 实现并接入 UI；剩余待真机核对（α6400/ILCE-7M4 互斥表现、GPS 恢复检测、v4 取景首帧与停帧重连、后台立即释放 Wi-Fi），以及后续是否推进 R3（参数面板，需单机型单属性白名单与 `GlassSlider`）与 R4（独立对焦）。R3 写入前先做**只读参数/状态展示评估**：验证 RemoteShooting 会话能否经 DeviceInfo / 0x9209 取得拍摄模式、快门、光圈、ISO、曝光补偿、白平衡、对焦/测光/驱动模式、文件格式/质量/宽高比、存储余量的类型、访问权、合法值与当前值；记录各属性读取时延及对快门/取景/传输队列的影响，电池仍按 best-effort，不把 EXIF 当实时参数。
+- 0.5.1 采样：Wi-Fi 取景页点列表图标读取一次，在机身切换模式后可再次点按，再拍一张并退出。从设置 → 帮助与诊断 → 运行日志复制最近遥控会话摘要；开始下一条 BLE/Wi-Fi 会话前先保存本次摘要。核对两次描述符差异、读取耗时、快门释放与首帧。
 - 验收：实机矩阵（型号/固件/协议版本/GPS 并用/单拍释放/取景首帧/浏览切换）通过；不回归 GPS 写入/时间校正/照片下载；R3/R4 经评审后另行排期。只读评估须有目标机型实测的属性清单、刷新频率与失败/未知表现，未知或不支持不伪造，读取不阻塞快门、取景和传输。
 - 依据：`docs/design/remote-control/research.md`、`BleRemoteModels.kt`、`RemoteControlCoordinator.kt`、`WifiRemoteControlScreen.kt`、`SonyCameraProperties.kt`、`PtpDeviceInfo.kt`、`SonyBatteryReader.kt`、`SonyWifiSession.kt`。
 

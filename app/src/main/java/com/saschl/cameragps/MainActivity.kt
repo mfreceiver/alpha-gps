@@ -283,6 +283,7 @@ class MainActivity : AppCompatActivity() {
                             var logLevel by remember { mutableIntStateOf(PreferencesManager.logLevel(context)) }
                             SharedLogViewerScreen(
                                 logFormatter,
+                                appVersion = appVersion,
                                 logRepository = logRepository,
                                 onBackClick = {
                                     popBackStackIfPossible()
