@@ -793,7 +793,8 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
                 Box(Modifier.fillMaxSize().padding(padding)) {
                     browserStateHolder.SaveableStateProvider("photos") {
                         WifiPhotoBrowser(
-                            state, viewModel, onDownloadPhotos, downloadFormat, gridOptions
+                            state, viewModel, onDownloadPhotos, downloadFormat, gridOptions,
+                            onGridOptionsChange = onGridOptionsChange,
                         )
                     }
                 }

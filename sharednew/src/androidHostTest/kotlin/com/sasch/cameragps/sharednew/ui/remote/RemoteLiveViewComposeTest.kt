@@ -141,8 +141,8 @@ class RemoteLiveViewComposeTest {
         }
 
         compose.onNodeWithText("Switch to remote shooting?").assertExists()
-        compose.onNodeWithText("Wi-Fi live view remote", useUnmergedTree = true).assertExists()
-        compose.onNodeWithText("Wi-Fi live view remote").assertDoesNotExist()
+        compose.onNodeWithText("Wi-Fi live view", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Wi-Fi live view").assertDoesNotExist()
         compose.onNodeWithText("Cancel").performClick()
         compose.runOnIdle {
             assertEquals(true, closed)
