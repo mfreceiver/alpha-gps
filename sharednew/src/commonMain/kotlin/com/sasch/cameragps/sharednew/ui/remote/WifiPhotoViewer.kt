@@ -44,7 +44,6 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.navigationevent.NavigationEventInfo
@@ -63,7 +62,7 @@ import cameragps.sharednew.generated.resources.b1_exif_focal
 import cameragps.sharednew.generated.resources.b1_exif_iso
 import cameragps.sharednew.generated.resources.b1_exif_shutter
 import cameragps.sharednew.generated.resources.d1_exif_focal_35mm
-import cameragps.sharednew.generated.resources.chevron_right_24px
+import cameragps.sharednew.generated.resources.info_24px
 import cameragps.sharednew.generated.resources.close_24px
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -789,7 +788,7 @@ internal fun ViewerPager(
 /**
  * Single-layer glass info strip: "JPG + RAW · 24.6 MB" on one viewer-glass layer, no tag chips. The
  * size is what the default download format fetches (the grid tag's number, with its unit here). With
- * [onOpenDetails] (portrait) the strip is a button opening the details drawer, marked by a chevron.
+ * [onOpenDetails] (portrait) the strip is a button opening the details drawer, marked by an info icon.
  */
 @Composable
 internal fun ViewerInfoStripBar(
@@ -803,6 +802,7 @@ internal fun ViewerInfoStripBar(
         onClick = onOpenDetails,
         onClickLabel = onOpenDetails?.let { stringResource(Res.string.b1_details_open) },
         contentPadding = PaddingValues(start = 14.dp, end = if (onOpenDetails != null) 8.dp else 14.dp, top = 8.dp, bottom = 8.dp),
+        contentAlignment = Alignment.Center,
     ) {
         val sizeLabel = stringResource(Res.string.m7_viewer_file_size)
         val size = formatByteSize(info.sizeBytes)
@@ -833,8 +833,8 @@ internal fun ViewerInfoStripBar(
                 )
             }
             if (onOpenDetails != null) Image(
-                painterResource(Res.drawable.chevron_right_24px), contentDescription = null,
-                modifier = Modifier.size(20.dp).rotate(-90f),
+                painterResource(Res.drawable.info_24px), contentDescription = null,
+                modifier = Modifier.size(20.dp).testTag(VIEWER_DETAILS_INDICATOR_TAG),
                 colorFilter = ColorFilter.tint(AlphaTheme.colors.onPhotoSecondary),
             )
         }
@@ -872,6 +872,7 @@ private fun Modifier.detailsSwipeUpToOpen(onOpen: (() -> Unit)?, isZoomed: () ->
 /** Enter animation of the portrait details drawer (scrim fade + sheet slide), ms. */
 const val VIEWER_DETAILS_ENTER_MILLIS = 280
 internal const val VIEWER_DETAILS_EXIT_MILLIS = 200
+private const val VIEWER_DETAILS_INDICATOR_TAG = "viewer-details-indicator"
 
 /**
  * The portrait details drawer as its own subtree: the only place besides the semantics gate that
