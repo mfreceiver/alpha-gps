@@ -732,7 +732,7 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
         catalogShown = viewModel.catalogShown,
     )
     val shownFrame = rememberShownWifiConnectionFrame(frame, ready)
-    GlassBackground(contentIsBackdropSource = false) {
+    GlassBackground(contentIsBackdropSource = !state.photoBrowser.open) {
         if (viewModel.confirmClearSelectionBack) {
             CapsuleDialog(
                 onDismissRequest = viewModel::cancelClearSelectionBack,

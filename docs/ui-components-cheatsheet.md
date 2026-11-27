@@ -67,8 +67,8 @@ Modifier.glass(level, shape, shadow = true, tint = Color.Transparent)  // 自定
 ### 按钮
 ```kotlin
 CapsuleButton(text, onClick, modifier = Modifier, role = CapsuleRole.Primary, size = CapsuleSize.Regular,
-              icon: Painter? = null, enabled = true, loading = false,
-              glass = false, glassLevel = GlassLevel.Float)
+              icon: Painter? = null, enabled = true, loading = false, glass = false,
+              glassLevel = GlassLevel.Float, maxLines = 1)  // 窄屏可折行的按钮可增大 maxLines
 // CapsuleRole { Primary, Secondary, Tonal, Danger, DangerOutlined, GlassPrimary }
 // CapsuleSize { Small(32), Regular(48), Medium(52), Large(56), Hero(68) } —— 只管高度/圆角/内边距，文字永远 AlphaType.Label
 CapsuleButton("下载", onClick, role = CapsuleRole.GlassPrimary, glassLevel = GlassLevel.Viewer) // 照片上（onPhoto 文字）
@@ -126,7 +126,7 @@ GlassTopBar(title, modifier = Modifier, subtitle: String? = null,
 二级页面（设置/帮助/关于/许可证/隐私/日志）直接用页面骨架 `GlassPageScaffold`（`ui/components/page/`）：`GlassBackground` + 带返回键的 `GlassTopBar` + `ScreenContent` 限宽。
 ```kotlin
 GlassPageScaffold(title, onBackClick, modifier = Modifier, actions = { … },
-                  scrolled = scrollState.isScrolledUnderTopBar) { padding -> … }   // scrolled 默认 false
+                  scrolled = scrollState.isScrolledUnderTopBar, overlay = { /* 同宿主的 CapsuleDialog / Snackbar 等 */ }) { padding -> … }   // scrolled 默认 false
 ```
 
 ### 弹出菜单 / 气泡（N6）
@@ -172,11 +172,13 @@ StatusItem(label, value, icon: Painter? = null, tone = StatusTone.Neutral,
 StatusBadge(text, tone, modifier = Modifier, showCheck = tone == StatusTone.Success)   // 只读胶囊徽章
 StatusDot(tone, modifier = Modifier)
 GlassWarningCard(title, message: String?, modifier = Modifier, tone = StatusTone.Warning,
-                 icon: Painter? = null, actionLabel: String? = null, onAction: (() -> Unit)? = null)
+                 icon: Painter? = null, actionLabel: String? = null, actionModifier = Modifier,
+                 onAction: (() -> Unit)? = null)  // 仅 actionLabel 与 onAction 同时提供时显示动作
 GlassIconTile(icon, modifier = Modifier, tone = StatusTone.Active, size = 44.dp, contentDescription: String? = null)
 RevealValueRow(label, value, revealed, onRevealedChange: (Boolean) -> Unit, modifier = Modifier,
                masked = maskValue(value))   // maskValue("AA:BB:CC:DD:EE:FF", visibleSuffix = 2) == "••:••:••:••:••:FF"
-InfoTag(text, modifier = Modifier, style = InfoTagStyle.OnSurface /* OnPhoto */, contentColor = Unspecified, icon = null)
+InfoTag(text, modifier = Modifier, style = InfoTagStyle.OnSurface /* OnPhoto */, contentColor = Unspecified, icon = null,
+         maxLines = 1)  // OnPhoto 也可显式传 onPhoto 系颜色，如 onPhotoMuted
 ```
 
 ### 对话框 / 面板（N18、N20）
@@ -228,7 +230,7 @@ SharedRadioOption(label, selected, onClick, description = null, enabled = true) 
 
 ## 6. 样式守卫
 
-- `scripts/ui_style_guard.sh`：扫描 `sharednew/…/ui/` 与 `app/src/main/java/com/saschl/cameragps/ui/` 下 `*.kt`（豁免 `sharednew/…/ui/theme/`），模式 `fontSize =`、`MaterialTheme.typography`、`Color.White`、`Color(0x`。
+- `scripts/ui_style_guard.sh`：扫描 `sharednew/…/ui/` 与 `app/src/main/java/com/saschl/cameragps/ui/` 下 `*.kt`（豁免 `sharednew/…/ui/theme/`），并把两个生产源码树中其它带 `@Composable` 的 Kotlin 文件（如 `whatsnew/`）一并纳入；模式 `fontSize =`、`MaterialTheme.typography`、`Color.White`、`Color(0x`。
 - 基线 `docs/ui-style-guard-baseline.txt`（`<违规行数> <路径>`）：不在基线的文件必须 0；基线文件只能下降。**迁移完一个页面后运行 `scripts/ui_style_guard.sh --update-baseline`**（只接受下降）并提交基线变化。最后一批清空基线后改用 `--strict`。
 - 扫描必须真实发生：仓库根或任一扫描目录缺失、受管 `*.kt` 为 0 个、grep 出错（如文件不可读）均 rc=2 失败，不当作"无违规"；成功输出报告"扫描了 N 个文件"。
 - 自测：`scripts/ui_style_guard_test.sh`。

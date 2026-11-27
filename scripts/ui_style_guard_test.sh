@@ -44,13 +44,13 @@ new_repo() {
 # guard <root> [args…]：运行守卫，rc 写到全局 RC
 guard() {
   local r=$1; shift
-  UI_STYLE_GUARD_ROOT=$r "$GUARD" "$@" >"$TMP/out" 2>"$TMP/err"; RC=$?
+  UI_STYLE_GUARD_ROOT=$r "$GUARD" "$@" >"$TMP/out" 2>"$TMP/err" < /dev/null; RC=$?
 }
 rc_is() { test "$RC" -eq "$1"; }
 err_has() { grep -q -- "$1" "$TMP/err"; }
 
 # 场景 1
-"$GUARD" >"$TMP/out" 2>"$TMP/err"; RC=$?
+"$GUARD" >"$TMP/out" 2>"$TMP/err" < /dev/null; RC=$?
 check "真实仓库在当前基线下通过" rc_is 0
 
 # 场景 2
@@ -198,7 +198,7 @@ R=$(new_repo count)
 printf 'package x\nval a = AlphaType.Body\n' > "$R/$APPUI/Screen.kt"
 guard "$R"; check "干净骨架报告扫描了 2 个文件（不含 ui/theme/ 豁免文件）" out_has '扫描了 2 个文件'
 check "  且通过" rc_is 0
-guard "$HERE/.." --strict >/dev/null; check "真实仓库 --strict 报告扫描文件数 > 0" grep -qE '扫描了 [1-9][0-9]* 个文件' "$TMP/out"
+guard "$HERE/.." --strict >/dev/null < /dev/null; check "真实仓库 --strict 报告扫描文件数 > 0" grep -qE '扫描了 [1-9][0-9]* 个文件' "$TMP/out"
 
 # 场景 12 变异验证：逐条删掉守卫里 "# mut:<名>" 标记的检查行，对应用例必须不再得到 "2|y"
 for m in root dirs zero grep; do

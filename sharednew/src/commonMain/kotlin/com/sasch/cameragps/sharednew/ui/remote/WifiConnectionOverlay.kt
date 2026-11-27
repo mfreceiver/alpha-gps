@@ -139,7 +139,8 @@ internal fun wifiFailureText(failure: WifiRemoteFailure?): StringResource = when
  * three steps. Photo transfer passes a fourth step for reading the catalog.
  *
  * [onCancel] ends the active attempt. [onDismiss] leaves a failed or unsupported attempt via the
- * background or the existing timeout. A missing permission with a settings action waits for input.
+ * background or the existing timeout. A missing permission or disabled Wi-Fi with a settings
+ * action waits for input.
  */
 @Composable
 internal fun WifiConnectionOverlay(
@@ -154,6 +155,9 @@ internal fun WifiConnectionOverlay(
 ) {
     val ended = frame is WifiConnectionFrame.Failed || frame is WifiConnectionFrame.Unsupported
     val permission = frame.needsPermissionAction() && onAppSettings != null
+    val wifiSettingsAction = frame is WifiConnectionFrame.Failed &&
+        frame.failure == WifiRemoteFailure.WifiDisabled && onWifiSettings != null
+    val waitsForSettings = permission || wifiSettingsAction
     val readsCatalog = totalSteps > WifiConnectStep.ReadCatalog.ordinal
     val presentedFrame = if (!readsCatalog && frame is WifiConnectionFrame.Progress && frame.step == WifiConnectStep.ReadCatalog) {
         WifiConnectionFrame.Progress(WifiConnectStep.JoinCamera)
@@ -162,7 +166,7 @@ internal fun WifiConnectionOverlay(
     val accessibilityEnabled = rememberAccessibilityEnabled()
     val autoDismissMs = connectionFailureAutoDismissMs(hint.length, accessibilityEnabled)
     val dismissNow by rememberUpdatedState(onDismiss)
-    if (ended && !permission && autoDismissMs != null) {
+    if (ended && !waitsForSettings && autoDismissMs != null) {
         LaunchedEffect(frame, autoDismissMs) {
             delay(autoDismissMs)
             dismissNow()

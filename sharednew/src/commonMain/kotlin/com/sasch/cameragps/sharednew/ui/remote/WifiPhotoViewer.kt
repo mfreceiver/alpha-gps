@@ -1220,7 +1220,7 @@ private fun ViewerActionRow(parts: ViewerParts, modifier: Modifier, spacing: Dp 
         ) {
             if (balanced && !stackSaved) Spacer(Modifier.size(sideWidth))
             Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                ViewerDownloadArea(parts, height, stackSaved)
+                ViewerDownloadArea(parts, height, stackSaved, viewerActionSlotHeight(labelLineHeight))
             }
             ViewerSelectionToggle(parts)
         }
@@ -1233,7 +1233,7 @@ private fun ViewerActionRow(parts: ViewerParts, modifier: Modifier, spacing: Dp 
  * finished transfer's message is layered above the control by [GlassSnackbarHost].
  */
 @Composable
-private fun ViewerDownloadArea(parts: ViewerParts, slotHeight: Dp, stackSaved: Boolean) {
+private fun ViewerDownloadArea(parts: ViewerParts, slotHeight: Dp, stackSaved: Boolean, singleControlHeight: Dp) {
     val transfer = parts.transfer
     // Transfer results: announced once when they happen while the viewer is up (never for a state
     // the viewer was opened with), cleared as soon as a new transfer starts.
@@ -1291,7 +1291,7 @@ private fun ViewerDownloadArea(parts: ViewerParts, slotHeight: Dp, stackSaved: B
         val (shown, shownTransfer) = if (phase == download.phase) download to transfer
         else latest[phase] ?: (download to transfer)
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            ViewerDownloadControl(shown, shownTransfer, parts, stackSaved, onAsk = { asking = true })
+            ViewerDownloadControl(shown, shownTransfer, parts, stackSaved, singleControlHeight, onAsk = { asking = true })
         }
     }
 }
@@ -1302,10 +1302,12 @@ private fun ViewerDownloadControl(
     transfer: WifiImageTransferState,
     parts: ViewerParts,
     stackSaved: Boolean,
+    singleControlHeight: Dp,
     onAsk: () -> Unit,
 ) {
-    // Every control fills the slot's height, so they all look the same size at any font scale.
-    val fill = Modifier.fillMaxHeight()
+    // Only Saved + RAW fills the taller stacked slot. A lone control keeps its regular capsule
+    // height and is centred, rather than stretching when the slot grows for large text.
+    val fill = if (stackSaved) Modifier.height(singleControlHeight) else Modifier.fillMaxHeight()
     val reason = when (download.phase) {
         ViewerDownloadPhase.NoJpeg -> stringResource(Res.string.wifi_remote_photo_no_jpg)
         ViewerDownloadPhase.NoRaw -> stringResource(Res.string.r_viewer_no_raw)

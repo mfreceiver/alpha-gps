@@ -93,6 +93,7 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteController
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemotePhase
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiSessionPurpose
+import com.sasch.cameragps.sharednew.ui.components.ScreenContent
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
@@ -107,6 +108,8 @@ import com.sasch.cameragps.sharednew.ui.components.glass.GlassTopBar
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassWarningCard
 import com.sasch.cameragps.sharednew.ui.components.glass.InfoTag
 import com.sasch.cameragps.sharednew.ui.components.glass.InfoTagStyle
+import com.sasch.cameragps.sharednew.ui.components.glass.overlayFocusLevel
+import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import com.sasch.cameragps.sharednew.ui.theme.CameraGpsTheme
@@ -510,12 +513,18 @@ private fun RemoteConnectControls(
         },
     ) { padding ->
         if (existingBrowseSession) {
-            Box(Modifier.fillMaxSize().padding(padding).verticalScroll(scroll).padding(16.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            ScreenContent(
+                modifier = Modifier.fillMaxSize().padding(padding).overlayFocusLevel()
+                    .verticalScroll(scroll)
+                    .padding(horizontal = AlphaDimens.screenMargin, vertical = 12.dp),
+                maxWidth = 560.dp,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(AlphaDimens.cardGap)) {
                     noticeMessage?.let {
                         GlassWarningCard(
                             title = stringResource(Res.string.wifi_remote_blocked_heading),
                             message = it,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                         )
                     }
                     if (notice == null) {

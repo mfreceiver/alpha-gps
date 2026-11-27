@@ -70,7 +70,7 @@ while IFS= read -r f; do
   esac
 done <<< "$LISTED"
 if [ "${#OTHER[@]}" -gt 0 ]; then
-  COMPOSABLES=$(cd "$ROOT" && grep -lE -e '(^|[[:space:]])@(androidx\.compose\.runtime\.)?Composable([[:space:](]|$)' -- "${OTHER[@]}")
+  COMPOSABLES=$(cd "$ROOT" && grep -lE -e '(^|[[:space:]])@(androidx\.compose\.runtime\.)?Composable([[:space:](]|$)' -- "${OTHER[@]}" < /dev/null)
   COMPOSABLE_RC=$?
   if [ "$COMPOSABLE_RC" -gt 1 ]; then
     echo "ui_style_guard: grep 检查 @Composable 出错（rc=$COMPOSABLE_RC）" >&2; exit 2
@@ -83,7 +83,7 @@ SCANNED=${#FILES[@]}
 if [ "$SCANNED" -eq 0 ]; then echo "ui_style_guard: 扫描了 0 个文件（$ROOT 下没有受管的 *.kt），视为失败" >&2; exit 2; fi # mut:zero
 
 # 当前违规行 "<path>:<line>:<text>"。grep：0 有匹配、1 无匹配，>1 扫描出错（stderr 原样保留）。
-HITS=$(cd "$ROOT" && grep -HnE -e "$PATTERN" -- "${FILES[@]}"); GREP_RC=$?
+HITS=$(cd "$ROOT" && grep -HnE -e "$PATTERN" -- "${FILES[@]}" < /dev/null); GREP_RC=$?
 if [ "$GREP_RC" -gt 1 ]; then echo "ui_style_guard: grep 扫描出错（rc=$GREP_RC），结果不可信" >&2; exit 2; fi # mut:grep
 if [ "$LIST" -eq 1 ] && [ -n "$HITS" ]; then printf '%s\n' "$HITS"; fi
 CURRENT=$(printf '%s\n' "$HITS" | sed -n 's/^\([^:]*\):.*/\1/p' | sort | uniq -c | awk '{print $1" "$2}')
