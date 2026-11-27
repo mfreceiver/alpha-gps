@@ -739,4 +739,8 @@
     <string name="wifi_remote_password_copied">已复制 Wi-Fi 密码</string>
     <string name="remote_summary_copy">复制最近遥控会话摘要</string>
     <string name="remote_probe">读取相机参数到遥控会话摘要</string>
+    <string name="remote_probe_reading">正在读取相机参数…</string>
+    <string name="remote_probe_recorded">第 %1$d 次读取已记入摘要</string>
+    <string name="remote_probe_unsupported">相机不支持读取参数</string>
+    <string name="remote_probe_failed">读取失败，请查看会话摘要</string>
 </resources>

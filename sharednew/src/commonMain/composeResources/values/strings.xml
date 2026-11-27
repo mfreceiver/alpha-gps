@@ -767,4 +767,8 @@
     <string name="wifi_remote_password_copied">Wi-Fi password copied</string>
     <string name="remote_summary_copy">Copy latest remote session summary</string>
     <string name="remote_probe">Read camera properties into session summary</string>
+    <string name="remote_probe_reading">Reading camera properties…</string>
+    <string name="remote_probe_recorded">Read %1$d saved to summary</string>
+    <string name="remote_probe_unsupported">Property read unsupported</string>
+    <string name="remote_probe_failed">Read failed. See session summary.</string>
 </resources>

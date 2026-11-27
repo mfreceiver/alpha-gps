@@ -122,6 +122,8 @@ data class WifiPhotoBrowserState(
     val pageRevision: Long = 0,
 )
 
+enum class PropertyProbeStatus { Idle, Reading, Recorded, Unsupported, Failed }
+
 data class WifiRemoteState(
     val phase: WifiRemotePhase = WifiRemotePhase.Idle,
     val failure: WifiRemoteFailure? = null,
@@ -139,6 +141,8 @@ data class WifiRemoteState(
     val imageTransfer: WifiImageTransferState = WifiImageTransferState(),
     val wifiShutdown: WifiShutdownStatus = WifiShutdownStatus.NotRequested,
     val manualNetwork: CameraWifiCredentials? = null,
+    val propertyProbe: PropertyProbeStatus = PropertyProbeStatus.Idle,
+    val probeAttempt: Int = 0,
 ) {
     /** R2 control channel readiness, independent of live-view stream state. */
     val isControlReady: Boolean get() = phase == WifiRemotePhase.Ready

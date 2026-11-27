@@ -172,23 +172,23 @@ private class SonyWifiConnection(
         return SonyBatteryReader(session.ptp.commands, session.ready).read().also { report?.record("battery=${it ?: "unknown"}") }
     }
 
-    override suspend fun probeProperties() {
-        val session = current ?: return
-        val diagnostics = report ?: return
-        if (session.ready.purpose != SonySessionPurpose.RemoteShooting) return
+    override suspend fun probeProperties(): PropertyProbeStatus {
+        val session = current ?: return PropertyProbeStatus.Failed
+        val diagnostics = report ?: return PropertyProbeStatus.Failed
+        if (session.ready.purpose != SonySessionPurpose.RemoteShooting) return PropertyProbeStatus.Unsupported
         val op = SonyPtpOperation.SDIO_GET_ALL_EXT_DEVICE_PROP_INFO
         if (!session.ready.deviceInfo.supports(op)) {
             diagnostics.record("property read unsupported")
-            return
+            return PropertyProbeStatus.Unsupported
         }
         diagnostics.record("property read started")
         val start = kotlin.time.TimeSource.Monotonic.markNow()
-        try {
+        return try {
             val params = if ((session.ready.vendorCodeVersion ?: 0) >= 310) listOf(0L, 1L) else listOf(0L)
             val result = session.ptp.commands.executeDataIn(op, params, maxDataBytes = 1024 * 1024)
             diagnostics.record("property read ${start.elapsedNow()} ${result.diagnosticSummary()}")
-            if (result !is PtpIpTransactionResult.Response || result.response.code != 0x2001) return
-            val data = result.data ?: return
+            if (result !is PtpIpTransactionResult.Response || result.response.code != 0x2001) return PropertyProbeStatus.Failed
+            val data = result.data ?: return PropertyProbeStatus.Failed
             // Only known shooting properties may include values. Vendor strings can contain identifiers.
             val shooting = setOf(0x5001, 0x5003, 0x5004, 0x5005, 0x5007, 0x5008, 0x500a,
                 0x500b, 0x500c, 0x500d, 0x500e, 0x500f, 0x5010, 0x5013, 0xd20d, 0xd21e, 0xd218)
@@ -200,10 +200,12 @@ private class SonyWifiConnection(
                 })
             }
             diagnostics.record(snapshot)
+            PropertyProbeStatus.Recorded
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
         } catch (error: Exception) {
             diagnostics.record("property probe failed: ${error::class.simpleName}")
+            PropertyProbeStatus.Failed
         }
     }
 

@@ -51,6 +51,8 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
     }
 
     private class Connection : WifiRemoteConnection {
+        var probe: suspend () -> PropertyProbeStatus = { PropertyProbeStatus.Unsupported }
+        override suspend fun probeProperties() = probe()
         override val cameraName = "Test camera"
         override val canCapture = true
         override val canTransferImages = true
@@ -1773,6 +1775,31 @@ class WifiRemoteControllerTest : WifiLoggingTest() {
         runCurrent()
         assertFalse(registry.get("camera")!!.wifiRemote.photoBrowser.open)
         assertEquals(2, connection.previewStarts)
+        controller.closeAndJoin()
+    }
+
+    @Test
+    fun propertyProbeReportsEachOutcomeAndCoalescesRepeatedTaps() = runTest {
+        val registry = CameraSessionRegistry()
+        val connection = Connection()
+        val controller = WifiRemoteController(backgroundScope, registry, { _, _ -> connection }, {}, {})
+        controller.connect("camera", "127.0.0.1")
+        runCurrent()
+        fun state() = registry.get("camera")!!.wifiRemote
+        for ((index, outcome) in listOf(PropertyProbeStatus.Unsupported, PropertyProbeStatus.Failed, PropertyProbeStatus.Recorded).withIndex()) {
+            val response = CompletableDeferred<PropertyProbeStatus>()
+            var reads = 0
+            connection.probe = { reads++; response.await() }
+            controller.probeProperties("camera")
+            controller.probeProperties("camera")
+            runCurrent()
+            assertEquals(1, reads)
+            assertEquals(PropertyProbeStatus.Reading, state().propertyProbe)
+            response.complete(outcome)
+            runCurrent()
+            assertEquals(outcome, state().propertyProbe)
+            assertEquals(index + 1, state().probeAttempt)
+        }
         controller.closeAndJoin()
     }
 

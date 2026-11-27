@@ -15,8 +15,11 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
 import androidx.compose.ui.unit.Density
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionRegistry
+import com.sasch.cameragps.sharednew.remote.wifi.PropertyProbeStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCaptureStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiLiveViewFrame
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPreviewStatus
@@ -62,11 +65,24 @@ class RemoteLiveViewComposeTest {
                 GlassBackground(contentIsBackdropSource = false) {
                     RemoteLiveView(
                         state.value, frame, hapticsEnabled = false, onBack = {},
+                        onProbe = { state.value = state.value.copy(propertyProbe = PropertyProbeStatus.Reading) },
                         onShutter = { shots++ }, onRetryLiveView = { retries++ },
                     )
                 }
             }
         }
+    }
+
+    @Test
+    fun probeTapShowsProgressThenAllowsAnotherRead() {
+        show()
+        val probe = compose.onNodeWithContentDescription("Read camera properties into session summary")
+        probe.performTouchInput { click() }
+        compose.onNodeWithText("Reading camera properties…").assertExists()
+        probe.assertIsNotEnabled()
+        compose.runOnIdle { state.value = state.value.copy(propertyProbe = PropertyProbeStatus.Recorded, probeAttempt = 1) }
+        compose.onNodeWithText("Read 1 saved to summary").assertExists()
+        probe.assertIsEnabled()
     }
 
     @Test

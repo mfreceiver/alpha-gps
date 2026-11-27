@@ -58,6 +58,10 @@ import cameragps.sharednew.generated.resources.remote_mode_wifi_title
 import cameragps.sharednew.generated.resources.remote_shutter_cd
 import cameragps.sharednew.generated.resources.remote_wifi_busy
 import cameragps.sharednew.generated.resources.remote_probe
+import cameragps.sharednew.generated.resources.remote_probe_reading
+import cameragps.sharednew.generated.resources.remote_probe_recorded
+import cameragps.sharednew.generated.resources.remote_probe_unsupported
+import cameragps.sharednew.generated.resources.remote_probe_failed
 import cameragps.sharednew.generated.resources.baseline_view_list_24
 import cameragps.sharednew.generated.resources.remote_wifi_capture_confirmed
 import cameragps.sharednew.generated.resources.remote_wifi_capture_rejected
@@ -88,6 +92,7 @@ import cameragps.sharednew.generated.resources.wifi_remote_other_camera
 import cameragps.sharednew.generated.resources.wifi_remote_permission
 import cameragps.sharednew.generated.resources.wifi_remote_preparing
 import cameragps.sharednew.generated.resources.wifi_remote_settings
+import com.sasch.cameragps.sharednew.remote.wifi.PropertyProbeStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCaptureStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiLiveViewFrame
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPreviewStatus
@@ -302,7 +307,7 @@ internal fun RemoteLiveView(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    RemoteLiveTopBar(state.cameraName, onBack, onProbe, Modifier.align(Alignment.Start))
+                    RemoteLiveTopBar(state, onBack, onProbe, Modifier.align(Alignment.Start))
                     if (landscape) {
                         Row(
                             Modifier.fillMaxSize(),
@@ -341,7 +346,7 @@ private fun RemoteLiveImage(frame: State<WifiLiveViewFrame?>) {
 }
 
 @Composable
-private fun RemoteLiveTopBar(cameraName: String, onBack: () -> Unit, onProbe: (() -> Unit)?, modifier: Modifier) {
+private fun RemoteLiveTopBar(state: WifiRemoteState, onBack: () -> Unit, onProbe: (() -> Unit)?, modifier: Modifier) {
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -356,13 +361,22 @@ private fun RemoteLiveTopBar(cameraName: String, onBack: () -> Unit, onProbe: ((
         if (onProbe != null) GlassIconButton(
             icon = painterResource(Res.drawable.baseline_view_list_24),
             contentDescription = stringResource(Res.string.remote_probe),
+            enabled = state.isControlReady && !state.photoBrowser.open && state.capture != WifiCaptureStatus.Shooting &&
+                state.propertyProbe != PropertyProbeStatus.Reading,
             onClick = onProbe,
             container = GlassLevel.Viewer,
         )
-        if (cameraName.isNotEmpty()) {
+        val label = when (state.propertyProbe) {
+            PropertyProbeStatus.Idle -> state.cameraName
+            PropertyProbeStatus.Reading -> stringResource(Res.string.remote_probe_reading)
+            PropertyProbeStatus.Recorded -> stringResource(Res.string.remote_probe_recorded, state.probeAttempt)
+            PropertyProbeStatus.Unsupported -> stringResource(Res.string.remote_probe_unsupported)
+            PropertyProbeStatus.Failed -> stringResource(Res.string.remote_probe_failed)
+        }
+        if (label.isNotEmpty()) {
             Text(
-                cameraName,
-                modifier = Modifier.widthIn(max = 320.dp).viewerChromeScrim().padding(horizontal = 12.dp, vertical = 8.dp),
+                label,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.widthIn(max = 320.dp).viewerChromeScrim().padding(horizontal = 12.dp, vertical = 8.dp),
                 style = AlphaType.Heading,
                 color = AlphaTheme.colors.onPhoto,
                 maxLines = 1,
