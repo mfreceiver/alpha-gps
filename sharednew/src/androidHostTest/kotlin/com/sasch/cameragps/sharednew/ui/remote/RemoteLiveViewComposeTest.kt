@@ -222,8 +222,11 @@ class RemoteLiveViewComposeTest {
                 }
             }
         }
-        // Top read-only strip includes mode, battery, and remaining shots.
-        compose.onNodeWithText("A · 82% · 1240 left").assertExists()
+        // Top bar Row 1 shows battery & remaining shots telemetry; Row 2 shows shooting mode value.
+        compose.onNodeWithContentDescription("82%, 1240 left").assertExists()
+        val telemetryBounds = compose.onNodeWithContentDescription("82%, 1240 left").fetchSemanticsNode().boundsInRoot
+        val modeBounds = compose.onNodeWithText("A").fetchSemanticsNode().boundsInRoot
+        assertEquals(true, telemetryBounds.top < modeBounds.top)
 
         // REC sits on the left of Shutter; AF sits on the right.
         val recBounds = compose.onNodeWithText("REC").fetchSemanticsNode().boundsInRoot
@@ -237,7 +240,7 @@ class RemoteLiveViewComposeTest {
         assertEquals(1, focuses)
         assertEquals(1, movies)
 
-        // Tapping Aperture replaces the bottom shutter row in-place with the horizontal dial.
+        // Tapping Aperture replaces the bottom shutter row in-place with the centered ruler dial.
         compose.onNodeWithText("f/2.4").performClick()
         compose.onNodeWithText("Done").assertExists()
         compose.onNodeWithContentDescription("Shutter").assertDoesNotExist()

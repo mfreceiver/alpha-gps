@@ -1,19 +1,20 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -36,13 +37,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -53,6 +55,8 @@ import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.arrow_back_24px
 import cameragps.sharednew.generated.resources.back
 import cameragps.sharednew.generated.resources.cancel_button
+import cameragps.sharednew.generated.resources.m2_battery_24px
+import cameragps.sharednew.generated.resources.m2_photo_library_24px
 import cameragps.sharednew.generated.resources.refresh_24px
 import cameragps.sharednew.generated.resources.remote_mode_wifi_desc
 import cameragps.sharednew.generated.resources.remote_mode_wifi_title
@@ -69,6 +73,7 @@ import cameragps.sharednew.generated.resources.remote_movie_done
 import cameragps.sharednew.generated.resources.remote_movie_rejected
 import cameragps.sharednew.generated.resources.remote_movie_running
 import cameragps.sharednew.generated.resources.remote_params_more_cd
+import cameragps.sharednew.generated.resources.remote_status_remaining_shots
 import cameragps.sharednew.generated.resources.settings_24px
 import cameragps.sharednew.generated.resources.remote_wifi_capture_confirmed
 import cameragps.sharednew.generated.resources.remote_wifi_capture_rejected
@@ -117,16 +122,21 @@ import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleSize
 import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassBackground
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassFloatingBar
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressCircle
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressSize
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassShutterButton
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSurface
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassTopBar
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassWarningCard
 import com.sasch.cameragps.sharednew.ui.components.glass.InfoTag
 import com.sasch.cameragps.sharednew.ui.components.glass.InfoTagStyle
+import com.sasch.cameragps.sharednew.ui.components.glass.glassSource
 import com.sasch.cameragps.sharednew.ui.components.glass.overlayFocusLevel
+import com.sasch.cameragps.sharednew.ui.components.glass.rememberGlassBackdrop
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
+import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import com.sasch.cameragps.sharednew.ui.theme.CameraGpsTheme
@@ -326,18 +336,18 @@ internal fun RemoteLiveView(
     }
 
     CameraGpsTheme(darkTheme = true, glassRenderMode = LocalGlassRenderMode.current) {
-        ViewerStage(backdrop = null) {
+        val backdrop = rememberGlassBackdrop()
+        ViewerStage(backdrop = backdrop) {
             BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                 val landscape = windowClassOf(maxWidth.value, maxHeight.value) == WindowClass.Landscape
-                val landscapeControlsWidth = minOf(260.dp, maxWidth * 0.42f)
-                val colors = AlphaTheme.colors
+                val landscapeControlsWidth = minOf(280.dp, maxWidth * 0.44f)
                 if (landscape) {
                     Row(Modifier.fillMaxSize()) {
                         Box(Modifier.weight(1f).fillMaxSize()) {
-                            RemoteLiveImage(frame)
+                            RemoteLiveImage(frame, Modifier.fillMaxSize().glassSource(backdrop))
                             Column(
                                 Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 RemoteLiveTopBar(
                                     state = state,
@@ -345,52 +355,63 @@ internal fun RemoteLiveView(
                                     onOpenMore = { moreDrawerOpen = true },
                                     modifier = Modifier.fillMaxWidth(),
                                 )
-                                RemoteTopReadOnlyStrip(state.cameraProperties)
+                                RemoteTopReadOnlyStrip(
+                                    propertiesState = state.cameraProperties,
+                                    onOpenMore = { moreDrawerOpen = true },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
                                 RemoteLiveStatus(state, frame, onRetryLiveView, Modifier.weight(1f).fillMaxWidth())
                             }
                         }
-                        Column(
+                        GlassSurface(
                             modifier = Modifier
                                 .width(landscapeControlsWidth)
                                 .fillMaxSize()
-                                .background(colors.viewerSheet)
-                                .padding(horizontal = 10.dp, vertical = 10.dp),
-                            verticalArrangement = Arrangement.SpaceBetween,
-                            horizontalAlignment = Alignment.CenterHorizontally,
+                                .padding(top = 8.dp, bottom = 8.dp, end = 8.dp),
+                            level = GlassLevel.Viewer,
+                            shape = AlphaShapes.card,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
                         ) {
-                            RemoteExposureBar(
-                                propertiesState = state.cameraProperties,
-                                activeDialKey = activeDialKey,
-                                onSelectKey = { key ->
-                                    activeDialKey = if (activeDialKey == key) null else key
-                                    onClearWriteStatus?.invoke()
-                                },
-                            )
-                            if (activeDialProperty != null) {
-                                RemoteHorizontalDialDeck(
-                                    property = activeDialProperty,
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.SpaceBetween,
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                RemoteExposureBar(
                                     propertiesState = state.cameraProperties,
-                                    onSetProperty = { key, raw -> onSetProperty?.invoke(key, raw) },
-                                    onClose = {
-                                        activeDialKey = null
+                                    activeDialKey = activeDialKey,
+                                    onSelectKey = { key ->
+                                        activeDialKey = if (activeDialKey == key) null else key
                                         onClearWriteStatus?.invoke()
                                     },
                                 )
-                            } else {
-                                RemoteCaptureControls(
-                                    state, hapticsEnabled, onShutter, onFocus, onToggleMovie,
-                                    Modifier.fillMaxWidth(),
-                                )
+                                if (activeDialProperty != null) {
+                                    RemoteHorizontalDialDeck(
+                                        property = activeDialProperty,
+                                        propertiesState = state.cameraProperties,
+                                        hapticsEnabled = hapticsEnabled,
+                                        onSetProperty = { key, raw -> onSetProperty?.invoke(key, raw) },
+                                        onClose = {
+                                            activeDialKey = null
+                                            onClearWriteStatus?.invoke()
+                                        },
+                                    )
+                                } else {
+                                    RemoteCaptureControls(
+                                        state, hapticsEnabled, onShutter, onFocus, onToggleMovie,
+                                        Modifier.fillMaxWidth(),
+                                    )
+                                }
                             }
                         }
                     }
                 } else {
                     Column(Modifier.fillMaxSize()) {
                         Box(Modifier.weight(1f).fillMaxWidth()) {
-                            RemoteLiveImage(frame)
+                            RemoteLiveImage(frame, Modifier.fillMaxSize().glassSource(backdrop))
                             Column(
                                 Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 RemoteLiveTopBar(
                                     state = state,
@@ -398,41 +419,52 @@ internal fun RemoteLiveView(
                                     onOpenMore = { moreDrawerOpen = true },
                                     modifier = Modifier.fillMaxWidth(),
                                 )
-                                RemoteTopReadOnlyStrip(state.cameraProperties)
+                                RemoteTopReadOnlyStrip(
+                                    propertiesState = state.cameraProperties,
+                                    onOpenMore = { moreDrawerOpen = true },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
                                 RemoteLiveStatus(state, frame, onRetryLiveView, Modifier.weight(1f).fillMaxWidth())
                             }
                         }
-                        Column(
+                        GlassSurface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(colors.viewerSheet)
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            level = GlassLevel.Viewer,
+                            shape = AlphaShapes.card,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
                         ) {
-                            RemoteExposureBar(
-                                propertiesState = state.cameraProperties,
-                                activeDialKey = activeDialKey,
-                                onSelectKey = { key ->
-                                    activeDialKey = if (activeDialKey == key) null else key
-                                    onClearWriteStatus?.invoke()
-                                },
-                            )
-                            if (activeDialProperty != null) {
-                                RemoteHorizontalDialDeck(
-                                    property = activeDialProperty,
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                RemoteExposureBar(
                                     propertiesState = state.cameraProperties,
-                                    onSetProperty = { key, raw -> onSetProperty?.invoke(key, raw) },
-                                    onClose = {
-                                        activeDialKey = null
+                                    activeDialKey = activeDialKey,
+                                    onSelectKey = { key ->
+                                        activeDialKey = if (activeDialKey == key) null else key
                                         onClearWriteStatus?.invoke()
                                     },
                                 )
-                            } else {
-                                RemoteCaptureControls(
-                                    state, hapticsEnabled, onShutter, onFocus, onToggleMovie,
-                                    Modifier.widthIn(max = 360.dp).fillMaxWidth(),
-                                )
+                                if (activeDialProperty != null) {
+                                    RemoteHorizontalDialDeck(
+                                        property = activeDialProperty,
+                                        propertiesState = state.cameraProperties,
+                                        hapticsEnabled = hapticsEnabled,
+                                        onSetProperty = { key, raw -> onSetProperty?.invoke(key, raw) },
+                                        onClose = {
+                                            activeDialKey = null
+                                            onClearWriteStatus?.invoke()
+                                        },
+                                    )
+                                } else {
+                                    RemoteCaptureControls(
+                                        state, hapticsEnabled, onShutter, onFocus, onToggleMovie,
+                                        Modifier.widthIn(max = 360.dp).fillMaxWidth(),
+                                    )
+                                }
                             }
                         }
                     }
@@ -454,14 +486,16 @@ internal fun RemoteLiveView(
 }
 
 @Composable
-private fun RemoteLiveImage(frame: State<WifiLiveViewFrame?>) {
-    frame.value?.let {
-        Image(
-            bitmap = it.image,
-            contentDescription = stringResource(Res.string.remote_wifi_live_cd),
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize(),
-        )
+private fun RemoteLiveImage(frame: State<WifiLiveViewFrame?>, modifier: Modifier = Modifier.fillMaxSize()) {
+    Box(modifier) {
+        frame.value?.let {
+            Image(
+                bitmap = it.image,
+                contentDescription = stringResource(Res.string.remote_wifi_live_cd),
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }
 
@@ -472,6 +506,10 @@ private fun RemoteLiveTopBar(
     onOpenMore: () -> Unit,
     modifier: Modifier,
 ) {
+    val colors = AlphaTheme.colors
+    val battery = state.cameraProperties.batteryPercent
+    val shots = state.cameraProperties.remainingShots
+    val shotsDesc = shots?.let { stringResource(Res.string.remote_status_remaining_shots, it) }
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -483,16 +521,71 @@ private fun RemoteLiveTopBar(
             onClick = onBack,
             container = GlassLevel.Viewer,
         )
-        Box(Modifier.weight(1f)) {
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
             if (state.cameraName.isNotEmpty()) {
-                Text(
-                    state.cameraName,
-                    modifier = Modifier.widthIn(max = 320.dp).viewerChromeScrim().padding(horizontal = 12.dp, vertical = 8.dp),
-                    style = AlphaType.Heading,
-                    color = AlphaTheme.colors.onPhoto,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                GlassFloatingBar(
+                    level = GlassLevel.Viewer,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        state.cameraName,
+                        style = AlphaType.Label,
+                        color = colors.onPhoto,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+        if (battery != null || shots != null) {
+            val telemetryCd = listOfNotNull(battery?.let { "$it%" }, shotsDesc).joinToString(", ")
+            GlassFloatingBar(
+                level = GlassLevel.Viewer,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.semantics(mergeDescendants = true) {
+                    contentDescription = telemetryCd
+                },
+            ) {
+                if (battery != null) {
+                    val batteryTint = if (battery <= 15) colors.onPhotoWarning else colors.onPhotoSecondary
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Image(
+                            painter = painterResource(Res.drawable.m2_battery_24px),
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            colorFilter = ColorFilter.tint(batteryTint),
+                        )
+                        Text(
+                            text = "$battery%",
+                            style = AlphaType.Caption,
+                            color = if (battery <= 15) colors.onPhotoWarning else colors.onPhoto,
+                            maxLines = 1,
+                        )
+                    }
+                }
+                if (shots != null) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Image(
+                            painter = painterResource(Res.drawable.m2_photo_library_24px),
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp),
+                            colorFilter = ColorFilter.tint(colors.onPhotoSecondary),
+                        )
+                        Text(
+                            text = shots.toString(),
+                            style = AlphaType.Caption,
+                            color = colors.onPhoto,
+                            maxLines = 1,
+                        )
+                    }
+                }
             }
         }
         GlassIconButton(
@@ -613,22 +706,22 @@ private fun RemoteCaptureControls(
                     },
                     role = CapsuleRole.Danger,
                     size = CapsuleSize.Small,
+                    glass = true,
+                    glassLevel = GlassLevel.Viewer,
                     enabled = state.isControlReady && !actionBusy,
                     loading = state.movieActionStatus == RemoteActionStatus.Running,
                 )
             }
-            Box(Modifier.viewerChromeScrim(CircleShape).padding(6.dp)) {
-                GlassShutterButton(
-                    onClick = {
-                        if (hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onShutter()
-                    },
-                    contentDescription = stringResource(Res.string.remote_shutter_cd),
-                    enabled = canShoot || shooting,
-                    pressing = shooting,
-                    onPhoto = true,
-                )
-            }
+            GlassShutterButton(
+                onClick = {
+                    if (hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onShutter()
+                },
+                contentDescription = stringResource(Res.string.remote_shutter_cd),
+                enabled = canShoot || shooting,
+                pressing = shooting,
+                onPhoto = true,
+            )
             if (state.canFocus && onFocus != null) {
                 CapsuleButton(
                     text = stringResource(Res.string.remote_focus_action),
