@@ -80,13 +80,12 @@ class RemoteLiveViewComposeTest {
     @Test
     fun probeTapShowsProgressThenAllowsAnotherRead() {
         show()
-        val probe = compose.onNodeWithContentDescription("Read camera properties into session summary")
+        compose.onNodeWithContentDescription("More camera settings").performClick()
+        val probe = compose.onNodeWithText("Read camera properties into session summary")
         probe.performTouchInput { click() }
-        compose.onNodeWithText("Reading camera properties…").assertExists()
-        probe.assertIsNotEnabled()
+        compose.onNodeWithText("Reading camera properties…").assertExists().assertIsNotEnabled()
         compose.runOnIdle { state.value = state.value.copy(propertyProbe = PropertyProbeStatus.Recorded, probeAttempt = 1) }
-        compose.onNodeWithText("Read 1 saved to summary").assertExists()
-        probe.assertIsEnabled()
+        compose.onNodeWithText("Read 1 saved to summary").assertExists().assertIsEnabled()
     }
 
     @Test
@@ -171,7 +170,7 @@ class RemoteLiveViewComposeTest {
     }
 
     @Test
-    fun liveParameterStripOpensSheetAndSendsPropertyWriteAndFocusAndMovie() {
+    fun bottomExposureBarOpensInPlaceHorizontalDialAndRecIsLeftOfAf() {
         var written: Pair<CameraShootingPropertyKey, Long>? = null
         var focuses = 0
         var movies = 0
@@ -185,6 +184,8 @@ class RemoteLiveViewComposeTest {
             supportsLiveView = true,
             cameraProperties = CameraPropertiesState(
                 canWrite = true,
+                batteryPercent = 82,
+                remainingShots = 1240,
                 properties = listOf(
                     CameraShootingProperty(
                         key = CameraShootingPropertyKey.ExposureProgram,
@@ -221,15 +222,29 @@ class RemoteLiveViewComposeTest {
                 }
             }
         }
+        // Top read-only strip includes mode, battery, and remaining shots.
+        compose.onNodeWithText("A · 82% · 1240 left").assertExists()
+
+        // REC sits on the left of Shutter; AF sits on the right.
+        val recBounds = compose.onNodeWithText("REC").fetchSemanticsNode().boundsInRoot
+        val shutterBounds = compose.onNodeWithContentDescription("Shutter").fetchSemanticsNode().boundsInRoot
+        val afBounds = compose.onNodeWithText("AF").fetchSemanticsNode().boundsInRoot
+        assertEquals(true, recBounds.left < shutterBounds.left)
+        assertEquals(true, shutterBounds.right < afBounds.right)
+
         compose.onNodeWithText("AF").performClick()
         compose.onNodeWithText("REC").performClick()
         assertEquals(1, focuses)
         assertEquals(1, movies)
 
+        // Tapping Aperture replaces the bottom shutter row in-place with the horizontal dial.
         compose.onNodeWithText("f/2.4").performClick()
-        compose.onNodeWithText("Camera settings").assertExists()
+        compose.onNodeWithText("Done").assertExists()
+        compose.onNodeWithContentDescription("Shutter").assertDoesNotExist()
         compose.onNodeWithText("f/4").performClick()
         assertEquals(CameraShootingPropertyKey.Aperture to 400L, written)
+        compose.onNodeWithText("Done").performClick()
+        compose.onNodeWithContentDescription("Shutter").assertExists()
     }
 
 }

@@ -1,6 +1,7 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -57,11 +58,6 @@ import cameragps.sharednew.generated.resources.remote_mode_wifi_desc
 import cameragps.sharednew.generated.resources.remote_mode_wifi_title
 import cameragps.sharednew.generated.resources.remote_shutter_cd
 import cameragps.sharednew.generated.resources.remote_wifi_busy
-import cameragps.sharednew.generated.resources.remote_probe
-import cameragps.sharednew.generated.resources.remote_probe_reading
-import cameragps.sharednew.generated.resources.remote_probe_recorded
-import cameragps.sharednew.generated.resources.remote_probe_unsupported
-import cameragps.sharednew.generated.resources.remote_probe_failed
 import cameragps.sharednew.generated.resources.remote_focus_action
 import cameragps.sharednew.generated.resources.remote_focus_cd
 import cameragps.sharednew.generated.resources.remote_focus_done
@@ -72,7 +68,8 @@ import cameragps.sharednew.generated.resources.remote_movie_cd
 import cameragps.sharednew.generated.resources.remote_movie_done
 import cameragps.sharednew.generated.resources.remote_movie_rejected
 import cameragps.sharednew.generated.resources.remote_movie_running
-import cameragps.sharednew.generated.resources.baseline_view_list_24
+import cameragps.sharednew.generated.resources.remote_params_more_cd
+import cameragps.sharednew.generated.resources.settings_24px
 import cameragps.sharednew.generated.resources.remote_wifi_capture_confirmed
 import cameragps.sharednew.generated.resources.remote_wifi_capture_rejected
 import cameragps.sharednew.generated.resources.remote_wifi_capture_uncertain
@@ -319,61 +316,138 @@ internal fun RemoteLiveView(
     onSetProperty: ((CameraShootingPropertyKey, Long) -> Unit)? = null,
     onClearWriteStatus: (() -> Unit)? = null,
 ) {
-    var paramsOpen by remember { mutableStateOf(false) }
-    var selectedProperty by remember { mutableStateOf<CameraShootingPropertyKey?>(null) }
-
-    RemoteParametersSheet(
-        visible = paramsOpen,
-        propertiesState = state.cameraProperties,
-        selectedKey = selectedProperty,
-        onSelectKey = { selectedProperty = it },
-        onSetProperty = { key, raw -> onSetProperty?.invoke(key, raw) },
-        onRefresh = { onRefreshProperties?.invoke() },
-        onDismiss = {
-            paramsOpen = false
-            onClearWriteStatus?.invoke()
-        },
-    )
+    var moreDrawerOpen by remember { mutableStateOf(false) }
+    var activeDialKey by remember { mutableStateOf<CameraShootingPropertyKey?>(null) }
+    val activeDialProperty = activeDialKey?.let { key ->
+        state.cameraProperties.byKey(key)?.takeIf { it.writable }
+    }
+    LaunchedEffect(activeDialProperty) {
+        if (activeDialKey != null && activeDialProperty == null) activeDialKey = null
+    }
 
     CameraGpsTheme(darkTheme = true, glassRenderMode = LocalGlassRenderMode.current) {
         ViewerStage(backdrop = null) {
             BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                 val landscape = windowClassOf(maxWidth.value, maxHeight.value) == WindowClass.Landscape
-                val landscapeControlsWidth = minOf(232.dp, maxWidth * 0.4f)
-                RemoteLiveImage(frame)
-                Column(
-                    Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    RemoteLiveTopBar(state, onBack, onProbe, Modifier.align(Alignment.Start))
-                    RemoteParameterStrip(
-                        propertiesState = state.cameraProperties,
-                        onOpenProperty = { key ->
-                            selectedProperty = key
-                            paramsOpen = true
-                        },
-                    )
-                    if (landscape) {
-                        Row(
-                            Modifier.fillMaxSize(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            RemoteLiveStatus(state, frame, onRetryLiveView, Modifier.weight(1f))
-                            RemoteCaptureControls(
-                                state, hapticsEnabled, onShutter, onFocus, onToggleMovie,
-                                Modifier.width(landscapeControlsWidth),
-                            )
+                val landscapeControlsWidth = minOf(260.dp, maxWidth * 0.42f)
+                val colors = AlphaTheme.colors
+                if (landscape) {
+                    Row(Modifier.fillMaxSize()) {
+                        Box(Modifier.weight(1f).fillMaxSize()) {
+                            RemoteLiveImage(frame)
+                            Column(
+                                Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                RemoteLiveTopBar(
+                                    state = state,
+                                    onBack = onBack,
+                                    onOpenMore = { moreDrawerOpen = true },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                RemoteTopReadOnlyStrip(state.cameraProperties)
+                                RemoteLiveStatus(state, frame, onRetryLiveView, Modifier.weight(1f).fillMaxWidth())
+                            }
                         }
-                    } else {
-                        RemoteLiveStatus(state, frame, onRetryLiveView, Modifier.weight(1f).fillMaxWidth())
-                        RemoteCaptureControls(
-                            state, hapticsEnabled, onShutter, onFocus, onToggleMovie,
-                            Modifier.widthIn(max = 320.dp).fillMaxWidth(),
-                        )
+                        Column(
+                            modifier = Modifier
+                                .width(landscapeControlsWidth)
+                                .fillMaxSize()
+                                .background(colors.viewerSheet)
+                                .padding(horizontal = 10.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.SpaceBetween,
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            RemoteExposureBar(
+                                propertiesState = state.cameraProperties,
+                                activeDialKey = activeDialKey,
+                                onSelectKey = { key ->
+                                    activeDialKey = if (activeDialKey == key) null else key
+                                    onClearWriteStatus?.invoke()
+                                },
+                            )
+                            if (activeDialProperty != null) {
+                                RemoteHorizontalDialDeck(
+                                    property = activeDialProperty,
+                                    propertiesState = state.cameraProperties,
+                                    onSetProperty = { key, raw -> onSetProperty?.invoke(key, raw) },
+                                    onClose = {
+                                        activeDialKey = null
+                                        onClearWriteStatus?.invoke()
+                                    },
+                                )
+                            } else {
+                                RemoteCaptureControls(
+                                    state, hapticsEnabled, onShutter, onFocus, onToggleMovie,
+                                    Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Column(Modifier.fillMaxSize()) {
+                        Box(Modifier.weight(1f).fillMaxWidth()) {
+                            RemoteLiveImage(frame)
+                            Column(
+                                Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                RemoteLiveTopBar(
+                                    state = state,
+                                    onBack = onBack,
+                                    onOpenMore = { moreDrawerOpen = true },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                RemoteTopReadOnlyStrip(state.cameraProperties)
+                                RemoteLiveStatus(state, frame, onRetryLiveView, Modifier.weight(1f).fillMaxWidth())
+                            }
+                        }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(colors.viewerSheet)
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            RemoteExposureBar(
+                                propertiesState = state.cameraProperties,
+                                activeDialKey = activeDialKey,
+                                onSelectKey = { key ->
+                                    activeDialKey = if (activeDialKey == key) null else key
+                                    onClearWriteStatus?.invoke()
+                                },
+                            )
+                            if (activeDialProperty != null) {
+                                RemoteHorizontalDialDeck(
+                                    property = activeDialProperty,
+                                    propertiesState = state.cameraProperties,
+                                    onSetProperty = { key, raw -> onSetProperty?.invoke(key, raw) },
+                                    onClose = {
+                                        activeDialKey = null
+                                        onClearWriteStatus?.invoke()
+                                    },
+                                )
+                            } else {
+                                RemoteCaptureControls(
+                                    state, hapticsEnabled, onShutter, onFocus, onToggleMovie,
+                                    Modifier.widthIn(max = 360.dp).fillMaxWidth(),
+                                )
+                            }
+                        }
                     }
                 }
+                RemoteMoreSettingsDrawer(
+                    visible = moreDrawerOpen,
+                    state = state,
+                    onSetProperty = { key, raw -> onSetProperty?.invoke(key, raw) },
+                    onRefresh = { onRefreshProperties?.invoke() },
+                    onProbe = onProbe,
+                    onDismiss = {
+                        moreDrawerOpen = false
+                        onClearWriteStatus?.invoke()
+                    },
+                )
             }
         }
     }
@@ -392,7 +466,12 @@ private fun RemoteLiveImage(frame: State<WifiLiveViewFrame?>) {
 }
 
 @Composable
-private fun RemoteLiveTopBar(state: WifiRemoteState, onBack: () -> Unit, onProbe: (() -> Unit)?, modifier: Modifier) {
+private fun RemoteLiveTopBar(
+    state: WifiRemoteState,
+    onBack: () -> Unit,
+    onOpenMore: () -> Unit,
+    modifier: Modifier,
+) {
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -404,31 +483,24 @@ private fun RemoteLiveTopBar(state: WifiRemoteState, onBack: () -> Unit, onProbe
             onClick = onBack,
             container = GlassLevel.Viewer,
         )
-        if (onProbe != null) GlassIconButton(
-            icon = painterResource(Res.drawable.baseline_view_list_24),
-            contentDescription = stringResource(Res.string.remote_probe),
-            enabled = state.isControlReady && !state.photoBrowser.open && state.capture != WifiCaptureStatus.Shooting &&
-                state.propertyProbe != PropertyProbeStatus.Reading,
-            onClick = onProbe,
+        Box(Modifier.weight(1f)) {
+            if (state.cameraName.isNotEmpty()) {
+                Text(
+                    state.cameraName,
+                    modifier = Modifier.widthIn(max = 320.dp).viewerChromeScrim().padding(horizontal = 12.dp, vertical = 8.dp),
+                    style = AlphaType.Heading,
+                    color = AlphaTheme.colors.onPhoto,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        GlassIconButton(
+            icon = painterResource(Res.drawable.settings_24px),
+            contentDescription = stringResource(Res.string.remote_params_more_cd),
+            onClick = onOpenMore,
             container = GlassLevel.Viewer,
         )
-        val label = when (state.propertyProbe) {
-            PropertyProbeStatus.Idle -> state.cameraName
-            PropertyProbeStatus.Reading -> stringResource(Res.string.remote_probe_reading)
-            PropertyProbeStatus.Recorded -> stringResource(Res.string.remote_probe_recorded, state.probeAttempt)
-            PropertyProbeStatus.Unsupported -> stringResource(Res.string.remote_probe_unsupported)
-            PropertyProbeStatus.Failed -> stringResource(Res.string.remote_probe_failed)
-        }
-        if (label.isNotEmpty()) {
-            Text(
-                label,
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.widthIn(max = 320.dp).viewerChromeScrim().padding(horizontal = 12.dp, vertical = 8.dp),
-                style = AlphaType.Heading,
-                color = AlphaTheme.colors.onPhoto,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
     }
 }
 
@@ -515,36 +587,34 @@ private fun RemoteCaptureControls(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        // Always measure three Caption lines at the current font scale, even while idle.
+        // Compact 1-line status slot so the shutter stays fixed without wasting vertical space.
         Text(
             text,
             style = AlphaType.Caption,
             color = color,
             textAlign = TextAlign.Center,
-            minLines = 3,
-            maxLines = 3,
+            minLines = 1,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
-                .then(if (text.isNotEmpty()) Modifier.viewerChromeScrim() else Modifier)
-                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .padding(horizontal = 8.dp, vertical = 2.dp)
                 .semantics { liveRegion = LiveRegionMode.Polite },
         )
         Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (state.canFocus && onFocus != null) {
+            if (state.canRecordMovie && onToggleMovie != null) {
                 CapsuleButton(
-                    text = stringResource(Res.string.remote_focus_action),
+                    text = stringResource(Res.string.remote_movie_action),
                     onClick = {
                         if (hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onFocus()
+                        onToggleMovie()
                     },
-                    role = CapsuleRole.GlassPrimary,
+                    role = CapsuleRole.Danger,
                     size = CapsuleSize.Small,
-                    glassLevel = GlassLevel.Viewer,
                     enabled = state.isControlReady && !actionBusy,
-                    loading = state.focusStatus == RemoteActionStatus.Running,
+                    loading = state.movieActionStatus == RemoteActionStatus.Running,
                 )
             }
             Box(Modifier.viewerChromeScrim(CircleShape).padding(6.dp)) {
@@ -559,17 +629,18 @@ private fun RemoteCaptureControls(
                     onPhoto = true,
                 )
             }
-            if (state.canRecordMovie && onToggleMovie != null) {
+            if (state.canFocus && onFocus != null) {
                 CapsuleButton(
-                    text = stringResource(Res.string.remote_movie_action),
+                    text = stringResource(Res.string.remote_focus_action),
                     onClick = {
                         if (hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onToggleMovie()
+                        onFocus()
                     },
-                    role = CapsuleRole.Danger,
+                    role = CapsuleRole.GlassPrimary,
                     size = CapsuleSize.Small,
+                    glassLevel = GlassLevel.Viewer,
                     enabled = state.isControlReady && !actionBusy,
-                    loading = state.movieActionStatus == RemoteActionStatus.Running,
+                    loading = state.focusStatus == RemoteActionStatus.Running,
                 )
             }
         }

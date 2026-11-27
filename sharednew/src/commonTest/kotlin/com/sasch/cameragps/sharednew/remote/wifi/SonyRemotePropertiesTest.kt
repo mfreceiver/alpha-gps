@@ -58,6 +58,20 @@ class SonyRemotePropertiesTest {
     }
 
     @Test
+    fun extractsBatteryAndRemainingShotsIntoSnapshot() {
+        val raw = buildPropertyBlob(
+            propEntry(code = CameraShootingPropertyKey.SONY_BATTERY_LEVEL, type = 1, access = 0, enabled = 1,
+                defaultVal = 82L, currentVal = 82L, currentChoices = emptyList(), supportedChoices = emptyList()),
+            propEntry(code = CameraShootingPropertyKey.SONY_MEDIA_SLOT1_REMAINING_SHOTS, type = 6, access = 0, enabled = 2,
+                defaultVal = 1240L, currentVal = 1240L, currentChoices = emptyList(), supportedChoices = emptyList()),
+        )
+        val parsed = SonyCameraProperties.parse(raw, emptySet(), CameraShootingPropertyKey.readCodes)
+        val snapshot = SonyRemotePropertyFormatter.toSnapshot(parsed, supportsWriteOp = true)
+        assertEquals(82, snapshot.batteryPercent)
+        assertEquals(1240, snapshot.remainingShots)
+    }
+
+    @Test
     fun encodesLittleEndianScalarsForSetProperty() {
         assertContentEquals(byteArrayOf(0xf0.toByte(), 0x00), SonyCameraProperties.encodeScalar(4, 240L))
         assertContentEquals(byteArrayOf(0x00, 0x00, 0x01, 0x00), SonyCameraProperties.encodeScalar(6, 0x10000L))

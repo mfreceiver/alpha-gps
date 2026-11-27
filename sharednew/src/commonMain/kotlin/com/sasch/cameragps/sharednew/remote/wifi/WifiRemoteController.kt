@@ -97,7 +97,7 @@ internal interface WifiRemoteConnection {
     val lost: Flow<Unit>
     val propertyChangedEvents: Flow<Unit> get() = emptyFlow()
     suspend fun probeProperties(): PropertyProbeStatus = PropertyProbeStatus.Unsupported
-    suspend fun readShootingProperties(): List<CameraShootingProperty>? = null
+    suspend fun readShootingProperties(): CameraPropertiesSnapshot? = null
     suspend fun setShootingProperty(
         key: CameraShootingPropertyKey,
         dataType: Int,
@@ -566,7 +566,12 @@ class WifiRemoteController internal constructor(
                     it.copy(
                         propertyProbe = outcome,
                         cameraProperties = if (parsed != null) {
-                            it.cameraProperties.copy(properties = parsed, loading = false)
+                            it.cameraProperties.copy(
+                                properties = parsed.properties,
+                                batteryPercent = parsed.batteryPercent ?: it.cameraProperties.batteryPercent,
+                                remainingShots = parsed.remainingShots ?: it.cameraProperties.remainingShots,
+                                loading = false,
+                            )
                         } else it.cameraProperties,
                     )
                 }
@@ -597,7 +602,9 @@ class WifiRemoteController internal constructor(
                 updateReady(id) {
                     it.copy(
                         cameraProperties = it.cameraProperties.copy(
-                            properties = parsed ?: it.cameraProperties.properties,
+                            properties = parsed?.properties ?: it.cameraProperties.properties,
+                            batteryPercent = parsed?.batteryPercent ?: it.cameraProperties.batteryPercent,
+                            remainingShots = parsed?.remainingShots ?: it.cameraProperties.remainingShots,
                             loading = false,
                         ),
                     )
@@ -644,7 +651,9 @@ class WifiRemoteController internal constructor(
                 updateReady(id) {
                     it.copy(
                         cameraProperties = it.cameraProperties.copy(
-                            properties = refreshed ?: it.cameraProperties.properties,
+                            properties = refreshed?.properties ?: it.cameraProperties.properties,
+                            batteryPercent = refreshed?.batteryPercent ?: it.cameraProperties.batteryPercent,
+                            remainingShots = refreshed?.remainingShots ?: it.cameraProperties.remainingShots,
                             loading = false,
                             writingKey = null,
                             writeStatus = status,

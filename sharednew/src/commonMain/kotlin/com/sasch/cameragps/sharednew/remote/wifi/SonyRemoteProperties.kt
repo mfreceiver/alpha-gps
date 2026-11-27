@@ -7,12 +7,12 @@ import kotlin.math.abs
  * Ordered by priority: core exposure first, then focus/metering/flash/drive.
  */
 enum class CameraShootingPropertyKey(val code: Int, val primaryBar: Boolean) {
-    ExposureProgram(0x500e, primaryBar = true),
     ShutterSpeed(0xd20d, primaryBar = true),
     Aperture(0x5007, primaryBar = true),
     Iso(0xd21e, primaryBar = true),
     ExposureBias(0x5010, primaryBar = true),
     WhiteBalance(0x5005, primaryBar = true),
+    ExposureProgram(0x500e, primaryBar = false),
     FocusMode(0x500a, primaryBar = false),
     MeteringMode(0x500b, primaryBar = false),
     FlashMode(0x500c, primaryBar = false),
@@ -20,7 +20,10 @@ enum class CameraShootingPropertyKey(val code: Int, val primaryBar: Boolean) {
     ;
 
     companion object {
+        const val SONY_BATTERY_LEVEL = 0xd218
+        const val SONY_MEDIA_SLOT1_REMAINING_SHOTS = 0xd249
         val allCodes: Set<Int> = entries.mapTo(mutableSetOf()) { it.code }
+        val readCodes: Set<Int> = allCodes + setOf(SONY_BATTERY_LEVEL, SONY_MEDIA_SLOT1_REMAINING_SHOTS)
         fun byCode(code: Int): CameraShootingPropertyKey? = entries.firstOrNull { it.code == code }
     }
 }
@@ -41,8 +44,16 @@ data class CameraShootingProperty(
 
 enum class PropertyWriteStatus { Idle, Writing, Applied, Rejected, Unsupported, Failed }
 
+data class CameraPropertiesSnapshot(
+    val properties: List<CameraShootingProperty>,
+    val batteryPercent: Int? = null,
+    val remainingShots: Int? = null,
+)
+
 data class CameraPropertiesState(
     val properties: List<CameraShootingProperty> = emptyList(),
+    val batteryPercent: Int? = null,
+    val remainingShots: Int? = null,
     val canWrite: Boolean = false,
     val loading: Boolean = false,
     val writingKey: CameraShootingPropertyKey? = null,
@@ -54,6 +65,18 @@ data class CameraPropertiesState(
 
 internal object SonyRemotePropertyFormatter {
     private const val MAX_RANGE_STEPS = 64
+
+    fun toSnapshot(
+        raw: Map<Int, SonyCameraProperty>,
+        supportsWriteOp: Boolean,
+    ): CameraPropertiesSnapshot {
+        val properties = toShootingProperties(raw, supportsWriteOp)
+        val battery = raw[CameraShootingPropertyKey.SONY_BATTERY_LEVEL]
+            ?.takeIf { it.enabled }?.value?.toInt()?.takeIf { it in 0..100 }
+        val remaining = raw[CameraShootingPropertyKey.SONY_MEDIA_SLOT1_REMAINING_SHOTS]
+            ?.takeIf { it.enabled }?.value?.takeIf { it in 0L..999_999L }?.toInt()
+        return CameraPropertiesSnapshot(properties, battery, remaining)
+    }
 
     fun toShootingProperties(
         raw: Map<Int, SonyCameraProperty>,

@@ -200,7 +200,7 @@ private class SonyWifiConnection(
         return SonyBatteryReader(session.ptp.commands, session.ready).read().also { report?.record("battery=${it ?: "unknown"}") }
     }
 
-    override suspend fun readShootingProperties(): List<CameraShootingProperty>? {
+    override suspend fun readShootingProperties(): CameraPropertiesSnapshot? {
         val session = current ?: return null
         if (session.ready.purpose != SonySessionPurpose.RemoteShooting) return null
         val op = SonyPtpOperation.SDIO_GET_ALL_EXT_DEVICE_PROP_INFO
@@ -213,9 +213,9 @@ private class SonyWifiConnection(
             val parsed = SonyCameraProperties.parse(
                 data,
                 session.ready.extendedInfo.controlCodes,
-                CameraShootingPropertyKey.allCodes,
+                CameraShootingPropertyKey.readCodes,
             )
-            SonyRemotePropertyFormatter.toShootingProperties(
+            SonyRemotePropertyFormatter.toSnapshot(
                 parsed,
                 supportsWriteOp = session.ready.deviceInfo.supports(SonyPtpOperation.SDIO_SET_EXT_DEVICE_PROP_VALUE),
             )
