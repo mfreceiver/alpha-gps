@@ -843,4 +843,5 @@
     <string name="remote_val_drive_self_10">Self 10s</string>
     <string name="remote_val_drive_self_5">Self 5s</string>
     <string name="remote_val_drive_self_2">Self 2s</string>
+    <string name="remote_wifi_fallback_ble">Use Bluetooth shutter instead</string>
 </resources>

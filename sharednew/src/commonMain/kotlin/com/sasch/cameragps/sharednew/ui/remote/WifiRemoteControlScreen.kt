@@ -81,6 +81,7 @@ import cameragps.sharednew.generated.resources.remote_wifi_capture_uncertain
 import cameragps.sharednew.generated.resources.remote_wifi_capture_unsupported
 import cameragps.sharednew.generated.resources.remote_wifi_capture_shooting
 import cameragps.sharednew.generated.resources.remote_wifi_download_busy
+import cameragps.sharednew.generated.resources.remote_wifi_fallback_ble
 import cameragps.sharednew.generated.resources.remote_wifi_live_cd
 import cameragps.sharednew.generated.resources.remote_wifi_live_paused
 import cameragps.sharednew.generated.resources.remote_wifi_live_retry
@@ -175,6 +176,7 @@ fun WifiRemoteControlScreen(
     ensureNetworkPermission: (host: String?, proceed: () -> Unit) -> Unit,
     onWifiSettings: () -> Unit,
     onClose: () -> Unit,
+    onFallbackToBle: (() -> Unit)? = null,
     onAppSettings: (() -> Unit)? = null,
     networkPermissionMessage: String = stringResource(Res.string.wifi_remote_permission),
 ) {
@@ -274,6 +276,15 @@ fun WifiRemoteControlScreen(
                 },
                 onAppSettings = onAppSettings,
                 onWifiSettings = onWifiSettings,
+                fallbackActionLabel = onFallbackToBle?.let { stringResource(Res.string.remote_wifi_fallback_ble) },
+                onFallbackAction = onFallbackToBle?.let { fallback ->
+                    {
+                        if (ownsRemoteSession && state.purpose == WifiSessionPurpose.RemoteControl) {
+                            controller.disconnect(id)
+                        }
+                        fallback()
+                    }
+                },
                 modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
             )
             showLiveView -> RemoteLiveView(

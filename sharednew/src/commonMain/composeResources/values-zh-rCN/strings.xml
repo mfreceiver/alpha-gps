@@ -815,4 +815,5 @@
     <string name="remote_val_drive_self_10">自拍 10 秒</string>
     <string name="remote_val_drive_self_5">自拍 5 秒</string>
     <string name="remote_val_drive_self_2">自拍 2 秒</string>
+    <string name="remote_wifi_fallback_ble">改用蓝牙快门</string>
 </resources>

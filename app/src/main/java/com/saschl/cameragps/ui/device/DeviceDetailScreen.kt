@@ -89,7 +89,11 @@ fun DeviceDetailScreen(
             return
         }
         RemoteRoute.Wifi -> {
-            AndroidWifiRemoteControlScreen(device.address, onClose = { remoteRoute = RemoteRoute.Chooser.name })
+            AndroidWifiRemoteControlScreen(
+                identifier = device.address,
+                onClose = { remoteRoute = RemoteRoute.None.name },
+                onFallbackToBle = { remoteRoute = RemoteRoute.Ble.name },
+            )
             return
         }
     }
@@ -128,7 +132,7 @@ fun DeviceDetailScreen(
 
         DeviceDetailContent(
             onWifiRemote = { wifiRemoteOpen = true },
-            onRemoteControl = { remoteRoute = RemoteRoute.Chooser.name },
+            onRemoteControl = { remoteRoute = RemoteRoute.Wifi.name },
             gpsRecoveryBaseline = gpsRecoveryBaseline,
             onGpsRecoveryResolved = { gpsRecoveryBaseline = null },
             onOpenTroubleshooting = onOpenTroubleshooting,

@@ -24,10 +24,12 @@ import com.sasch.cameragps.sharednew.remote.wifi.CameraPropertyOption
 import com.sasch.cameragps.sharednew.remote.wifi.CameraShootingProperty
 import com.sasch.cameragps.sharednew.remote.wifi.CameraShootingPropertyKey
 import com.sasch.cameragps.sharednew.remote.wifi.PropertyProbeStatus
+import com.sasch.cameragps.sharednew.remote.wifi.WifiAutomaticConnector
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCaptureStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiLiveViewFrame
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPreviewStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteController
+import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteFailure
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemotePhase
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiSessionPurpose
@@ -146,6 +148,14 @@ class RemoteLiveViewComposeTest {
             CoroutineScope(EmptyCoroutineContext), registry,
             connector = { _, _ -> error("Unexpected connection") },
             claimControls = {}, releaseControls = {},
+            automaticConnector = object : WifiAutomaticConnector {
+                override val phonePreconditions = null
+                override suspend fun open(
+                    identifier: String,
+                    scope: CoroutineScope,
+                    onPhase: (WifiRemotePhase) -> Unit,
+                ) = error("Unexpected connection")
+            },
         )
         var closed = false
         compose.setContent {
@@ -248,6 +258,49 @@ class RemoteLiveViewComposeTest {
         assertEquals(CameraShootingPropertyKey.Aperture to 400L, written)
         compose.onNodeWithText("Done").performClick()
         compose.onNodeWithContentDescription("Shutter").assertExists()
+    }
+
+    @Test
+    fun wifiRemoteFailureOffersBluetoothShutterFallback() {
+        val id = "CAMERA"
+        val registry = CameraSessionRegistry().apply {
+            upsert(id) {
+                it.copy(
+                    wifiRemote = WifiRemoteState(
+                        phase = WifiRemotePhase.Failed,
+                        failure = WifiRemoteFailure.NetworkConnectionFailed,
+                        purpose = WifiSessionPurpose.RemoteControl,
+                    ),
+                )
+            }
+        }
+        val controller = WifiRemoteController(
+            CoroutineScope(EmptyCoroutineContext), registry,
+            connector = { _, _ -> error("Unexpected connection") },
+            claimControls = {}, releaseControls = {},
+            automaticConnector = object : WifiAutomaticConnector {
+                override val phonePreconditions = null
+                override suspend fun open(
+                    identifier: String,
+                    scope: CoroutineScope,
+                    onPhase: (WifiRemotePhase) -> Unit,
+                ) = error("Unexpected connection")
+            },
+        )
+        var fellBackToBle = false
+        compose.setContent {
+            CameraGpsTheme(darkTheme = false) {
+                WifiRemoteControlScreen(
+                    id, controller, hapticsEnabled = false,
+                    ensureNetworkPermission = { _, _ -> },
+                    onWifiSettings = {},
+                    onClose = {},
+                    onFallbackToBle = { fellBackToBle = true },
+                )
+            }
+        }
+        compose.onNodeWithText("Use Bluetooth shutter instead").assertExists().performClick()
+        assertEquals(true, fellBackToBle)
     }
 
 }

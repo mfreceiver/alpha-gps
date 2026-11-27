@@ -152,12 +152,15 @@ internal fun WifiConnectionOverlay(
     modifier: Modifier = Modifier,
     onWifiSettings: (() -> Unit)? = null,
     totalSteps: Int = WifiConnectStep.ReadCatalog.ordinal,
+    fallbackActionLabel: String? = null,
+    onFallbackAction: (() -> Unit)? = null,
 ) {
     val ended = frame is WifiConnectionFrame.Failed || frame is WifiConnectionFrame.Unsupported
     val permission = frame.needsPermissionAction() && onAppSettings != null
     val wifiSettingsAction = frame is WifiConnectionFrame.Failed &&
         frame.failure == WifiRemoteFailure.WifiDisabled && onWifiSettings != null
-    val waitsForSettings = permission || wifiSettingsAction
+    val hasFallback = ended && fallbackActionLabel != null && onFallbackAction != null
+    val waitsForSettings = permission || wifiSettingsAction || hasFallback
     val readsCatalog = totalSteps > WifiConnectStep.ReadCatalog.ordinal
     val presentedFrame = if (!readsCatalog && frame is WifiConnectionFrame.Progress && frame.step == WifiConnectStep.ReadCatalog) {
         WifiConnectionFrame.Progress(WifiConnectStep.JoinCamera)
@@ -219,7 +222,16 @@ internal fun WifiConnectionOverlay(
                         Modifier.fillMaxWidth().padding(top = 8.dp).heightIn(min = ActionSlot),
                         contentAlignment = Alignment.Center,
                     ) {
-                        FrameAction(frame, permission, onCancel, onAppSettings, onWifiSettings)
+                        FrameAction(
+                            frame = frame,
+                            permission = permission,
+                            onCancel = onCancel,
+                            onDismiss = onDismiss,
+                            onAppSettings = onAppSettings,
+                            onWifiSettings = onWifiSettings,
+                            fallbackActionLabel = fallbackActionLabel,
+                            onFallbackAction = onFallbackAction,
+                        )
                     }
                 }
             }
@@ -334,8 +346,14 @@ private fun StepRing(
 
 @Composable
 private fun FrameAction(
-    frame: WifiConnectionFrame, permission: Boolean, onCancel: () -> Unit, onAppSettings: (() -> Unit)?,
+    frame: WifiConnectionFrame,
+    permission: Boolean,
+    onCancel: () -> Unit,
+    onDismiss: () -> Unit,
+    onAppSettings: (() -> Unit)?,
     onWifiSettings: (() -> Unit)?,
+    fallbackActionLabel: String?,
+    onFallbackAction: (() -> Unit)?,
 ) {
     when (frame) {
         is WifiConnectionFrame.Progress, WifiConnectionFrame.Ready -> {
@@ -351,21 +369,44 @@ private fun FrameAction(
                 )
             }
         }
-        is WifiConnectionFrame.Failed, WifiConnectionFrame.Unsupported -> when {
-            permission && onAppSettings != null -> CapsuleButton(
-                text = stringResource(Res.string.mw_connect_grant), onClick = onAppSettings,
+        is WifiConnectionFrame.Failed, WifiConnectionFrame.Unsupported -> {
+            val hasFallback = fallbackActionLabel != null && onFallbackAction != null
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-            )
-            frame is WifiConnectionFrame.Failed && frame.failure == WifiRemoteFailure.WifiDisabled &&
-                onWifiSettings != null -> CapsuleButton(
-                text = stringResource(Res.string.c1_open_wifi_settings), onClick = onWifiSettings,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            else -> Text(
-                stringResource(Res.string.mw_connect_tap_to_return), style = AlphaType.Body,
-                textAlign = TextAlign.Center,
-                color = AlphaTheme.colors.textSecondary,
-            )
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                when {
+                    permission && onAppSettings != null -> CapsuleButton(
+                        text = stringResource(Res.string.mw_connect_grant), onClick = onAppSettings,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    frame is WifiConnectionFrame.Failed && frame.failure == WifiRemoteFailure.WifiDisabled &&
+                        onWifiSettings != null -> CapsuleButton(
+                        text = stringResource(Res.string.c1_open_wifi_settings), onClick = onWifiSettings,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    !hasFallback -> Text(
+                        stringResource(Res.string.mw_connect_tap_to_return), style = AlphaType.Body,
+                        textAlign = TextAlign.Center,
+                        color = AlphaTheme.colors.textSecondary,
+                    )
+                }
+                if (hasFallback) {
+                    CapsuleButton(
+                        text = fallbackActionLabel,
+                        onClick = onFallbackAction,
+                        role = CapsuleRole.Tonal,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    CapsuleButton(
+                        text = stringResource(Res.string.mw_connect_dismiss),
+                        onClick = onDismiss,
+                        role = CapsuleRole.Secondary,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
         }
         WifiConnectionFrame.Closing -> Unit
     }

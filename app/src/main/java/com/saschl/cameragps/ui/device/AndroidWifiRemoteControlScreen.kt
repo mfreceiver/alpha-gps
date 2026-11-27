@@ -29,7 +29,11 @@ import com.saschl.cameragps.utils.PreferencesManager
 
 /** R2 host: the shared remote-shooting page plus the platform's network permission and Wi-Fi settings hooks. */
 @Composable
-fun AndroidWifiRemoteControlScreen(identifier: String, onClose: () -> Unit) {
+fun AndroidWifiRemoteControlScreen(
+    identifier: String,
+    onClose: () -> Unit,
+    onFallbackToBle: (() -> Unit)? = null,
+) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -88,6 +92,7 @@ fun AndroidWifiRemoteControlScreen(identifier: String, onClose: () -> Unit) {
             } else context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
         },
         onClose = onClose,
+        onFallbackToBle = onFallbackToBle,
         onAppSettings = {
             context.startActivity(
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:${context.packageName}".toUri())
