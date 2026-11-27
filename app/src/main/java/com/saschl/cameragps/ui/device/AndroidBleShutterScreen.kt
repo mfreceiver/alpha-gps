@@ -35,6 +35,8 @@ fun AndroidBleShutterScreen(
     onClose: () -> Unit,
     onLeft: (GpsRecoveryBaseline) -> Unit,
     onOpenGuide: (GuideTopic) -> Unit,
+    onSwitchToWifi: () -> Unit,
+    displayName: String?,
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -57,5 +59,7 @@ fun AndroidBleShutterScreen(
         onClose = onClose,
         onLeft = onLeft,
         onOpenGuide = onOpenGuide,
+        onSwitchToWifi = onSwitchToWifi,
+        displayName = displayName,
     )
 }

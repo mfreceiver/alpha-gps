@@ -83,6 +83,8 @@ fun DeviceDetailScreen(
                 onClose = { remoteRoute = RemoteRoute.None.name },
                 onLeft = { gpsRecoveryBaseline = it },
                 onOpenGuide = { onOpenTroubleshooting(it) },
+                onSwitchToWifi = { remoteRoute = RemoteRoute.Wifi.name },
+                displayName = resolvedName,
             )
             return
         }

@@ -57,7 +57,7 @@ class BleShutterScreenComposeTest {
     private var baselines = mutableListOf<GpsRecoveryBaseline>()
     private var guides = mutableListOf<GuideTopic>()
 
-    private fun show(name: String? = "ILCE-7M4") {
+    private fun show(name: String? = "ILCE-7M4", onSwitchToWifi: (() -> Unit)? = null) {
         compose.setContent {
             CameraGpsTheme(darkTheme = true) {
                 BleShutterScreen(
@@ -70,6 +70,7 @@ class BleShutterScreenComposeTest {
                     onClose = { closed++ },
                     onLeft = { baselines += it },
                     onOpenGuide = { guides += it },
+                    onSwitchToWifi = onSwitchToWifi,
                 )
             }
         }
@@ -140,6 +141,32 @@ class BleShutterScreenComposeTest {
         assertEquals(2, controls.acquired.size)
         compose.onNodeWithText("Fix steps").performClick()
         assertEquals(listOf(GuideTopic.Remote), guides)
+    }
+
+    @Test
+    fun cameraNameAndShutterStayInPlaceWhenRecoveryActionsAppear() {
+        show()
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("ILCE-7M4").assertExists()
+        val shutter = compose.onNodeWithContentDescription("Shutter")
+        val initial = shutter.fetchSemanticsNode().boundsInRoot
+        controls.set(BleShutterState(phase = BleShutterPhase.Failed, failureReason = BleShutterFailureReason.Disconnected))
+        compose.onNodeWithText("Bluetooth disconnected.").assertExists()
+        assertEquals(initial, shutter.fetchSemanticsNode().boundsInRoot)
+    }
+
+    @Test
+    fun switchingToWifiReleasesAndRecordsGpsBaselineBeforeNavigation() {
+        var switches = 0
+        show(onSwitchToWifi = {
+            assertEquals(listOf("AA:BB"), controls.released)
+            assertEquals(1, baselines.size)
+            switches++
+        })
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("Switch to Wi-Fi live view").performClick()
+        assertEquals(1, switches)
+        assertEquals(0, closed)
     }
 
     @Test

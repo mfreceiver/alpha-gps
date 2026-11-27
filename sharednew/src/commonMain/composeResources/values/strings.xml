@@ -240,7 +240,7 @@
     <string name="faq_subtitle_accuracy">Understand location precision</string>
     <string name="faq_subtitle_background">Keep location updates running</string>
     <string name="faq_subtitle_disconnects">Resolve interruptions</string>
-    <string name="wifi_remote_clear_selection_back">Going back will clear all selected photos</string>
+    <string name="wifi_remote_clear_selection_back">Going back to the date list will clear your photo selection.</string>
     <string name="is_there_documenation">Is there any documentation?</string>
     <string name="is_there_documenation_answer">Documentation and issue tracker:</string>
     <string name="app_standby_title">Standby</string>
@@ -335,7 +335,7 @@
     <string name="wifi_remote_lost">The camera connection was lost. Join its Wi-Fi again and reconnect.</string>
     <string name="wifi_remote_other_camera">Another Wi-Fi photo transfer session is open. Close it before connecting this camera.</string>
     <string name="wifi_remote_auto_setup">Keep the camera connected by Bluetooth and close Creators’ App. AlphaGPS will start camera Wi-Fi and ask your phone to connect.</string>
-    <string name="wifi_remote_auto_connect">Tap To Connect automatically</string>
+    <string name="wifi_remote_auto_connect">Connect automatically</string>
     <string name="wifi_remote_prepare_only_hint">Enable the camera’s Wi-Fi over Bluetooth, then join its network in phone settings. The camera IP will be detected after you join.</string>
     <string name="wifi_remote_prepare_only">Enable camera Wi-Fi</string>
     <string name="wifi_remote_manual_join_hint">Camera Wi-Fi is ready. Join the network below in phone settings, then return here and connect. If Android warns that this network has no internet, stay connected.</string>
@@ -540,7 +540,7 @@
     <string name="mw_connect_closing_hint">Ending the camera Wi-Fi session.</string>
     <string name="mw_connect_failed">Could not connect</string>
     <string name="mw_connect_unsupported">Photo transfer unavailable</string>
-    <string name="mw_connect_tap_to_return">Tap anywhere to return</string>
+    <string name="mw_connect_tap_to_return">Tap outside the card to return.</string>
     <string name="mw_connect_grant">Grant permission</string>
     <string name="mw_dates_reload">Read again</string>
     <string name="mw_weekday_1">Mon</string>
@@ -698,12 +698,11 @@
     <string name="wifi_remote_batch_retry_failed">Retry failed</string>
     <string name="remote_entry">Remote shooting</string>
     <string name="remote_chooser_title">Remote shooting</string>
-    <string name="remote_mode_ble_title">Bluetooth shutter (no live view, saves power)</string>
-    <string name="remote_mode_ble_desc">Fires the shutter over Bluetooth. No preview image, lowest power use.</string>
-    <string name="remote_mode_wifi_title">Wi-Fi live view remote</string>
+    <string name="remote_mode_ble_title">Bluetooth shutter</string>
+    <string name="remote_mode_ble_desc">Take single photos over Bluetooth. This mode uses less power and has no live view.</string>
+    <string name="remote_mode_wifi_title">Wi-Fi live view</string>
     <string name="remote_mode_wifi_desc">Shows the camera’s live view and shoots single frames over the camera’s Wi-Fi.</string>
     <string name="remote_need_bluetooth">Connect Bluetooth first.</string>
-    <string name="remote_open">Open</string>
     <string name="remote_shutter_cd">Shutter</string>
     <string name="remote_request_sent">Request sent</string>
     <string name="remote_check_camera">Please check the camera</string>
@@ -749,4 +748,21 @@
     <string name="mw_options_labels">Photo labels</string>
     <string name="mw_options_filter">Filter</string>
     <string name="device_pairing_unavailable">Camera pairing is unavailable on this device.</string>
+    <string name="remote_ble_camera">Camera</string>
+    <string name="remote_ble_status_unavailable">Shutter unavailable</string>
+    <string name="remote_switch_to_wifi">Switch to Wi-Fi live view</string>
+    <string name="remote_start_ble">Open Bluetooth shutter</string>
+    <string name="remote_start_wifi">Start Wi-Fi live view</string>
+    <string name="remote_chooser_no_auto_connect">Opening this page does not connect to the camera.</string>
+    <string name="remote_wifi_ready_hint">Opening live view…</string>
+    <string name="mw_connect_dismiss">Return</string>
+    <string name="wifi_remote_clear_selection_title">Clear selection?</string>
+    <string name="wifi_remote_clear_selection_confirm">Clear and go back</string>
+    <string name="wifi_remote_automatic_heading">Guided connection</string>
+    <string name="wifi_remote_blocked_heading">Wi-Fi connection unavailable</string>
+    <string name="wifi_remote_manual_hide">Hide manual connection</string>
+    <string name="wifi_remote_copy_ssid">Copy network name</string>
+    <string name="wifi_remote_copy_password">Copy Wi-Fi password</string>
+    <string name="wifi_remote_ssid_copied">Network name copied</string>
+    <string name="wifi_remote_password_copied">Wi-Fi password copied</string>
 </resources>

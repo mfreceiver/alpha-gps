@@ -1,10 +1,16 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,11 +26,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
@@ -35,32 +41,41 @@ import cameragps.sharednew.generated.resources.back
 import cameragps.sharednew.generated.resources.cancel_button
 import cameragps.sharednew.generated.resources.continue_button
 import cameragps.sharednew.generated.resources.q_alert_open_guide
+import cameragps.sharednew.generated.resources.remote_ble_camera
 import cameragps.sharednew.generated.resources.remote_ble_dialog_title
+import cameragps.sharednew.generated.resources.remote_ble_status_failed
 import cameragps.sharednew.generated.resources.remote_ble_status_idle
-import cameragps.sharednew.generated.resources.remote_ble_status_pressing
 import cameragps.sharednew.generated.resources.remote_ble_status_preparing
+import cameragps.sharednew.generated.resources.remote_ble_status_pressing
 import cameragps.sharednew.generated.resources.remote_ble_status_ready
 import cameragps.sharednew.generated.resources.remote_ble_status_releasing
+import cameragps.sharednew.generated.resources.remote_ble_status_unavailable
 import cameragps.sharednew.generated.resources.remote_ble_title
 import cameragps.sharednew.generated.resources.remote_check_camera
 import cameragps.sharednew.generated.resources.remote_request_sent
 import cameragps.sharednew.generated.resources.remote_retry
 import cameragps.sharednew.generated.resources.remote_shutter_cd
+import cameragps.sharednew.generated.resources.remote_switch_to_wifi
 import com.sasch.cameragps.sharednew.bluetooth.coordinator.BleShutterPhase
 import com.sasch.cameragps.sharednew.bluetooth.coordinator.BleShutterState
 import com.sasch.cameragps.sharednew.bluetooth.coordinator.GpsRecoveryBaseline
 import com.sasch.cameragps.sharednew.bluetooth.coordinator.assessBleLocationCompatibility
 import com.sasch.cameragps.sharednew.bluetooth.coordinator.captureGpsRecoveryBaseline
 import com.sasch.cameragps.sharednew.bluetooth.status.CameraLiveStatus
+import com.sasch.cameragps.sharednew.ui.components.ScreenContent
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
-import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleSize
 import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassBackground
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassShutterButton
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassTopBar
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassWarningCard
+import com.sasch.cameragps.sharednew.ui.components.glass.StatusLine
+import com.sasch.cameragps.sharednew.ui.components.glass.StatusTone
+import com.sasch.cameragps.sharednew.ui.components.glass.isScrolledUnderTopBar
 import com.sasch.cameragps.sharednew.ui.help.GuideTopic
 import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
@@ -77,8 +92,7 @@ private class LeaveGuard {
 /**
  * R1 · Bluetooth minimal shutter. Entering asks (in-page [CapsuleDialog]) whether location linking
  * may be paused — the text depends on [assessBleLocationCompatibility] — and only the confirmation
- * calls [BleShutterControls.acquire]. The page is one [GlassShutterButton] plus one status line;
- * a failure adds Retry and a link to the Remote troubleshooting topic.
+ * calls [BleShutterControls.acquire]. Recovery actions sit below the camera and shutter controls.
  *
  * Leaving (Back or disposal) releases the remote and hands [onLeft] a [GpsRecoveryBaseline] so the
  * device page can watch location linking recover. If the dialog was cancelled nothing was acquired
@@ -95,6 +109,8 @@ fun BleShutterScreen(
     onClose: () -> Unit,
     onLeft: (GpsRecoveryBaseline) -> Unit,
     onOpenGuide: ((GuideTopic) -> Unit)? = null,
+    onSwitchToWifi: (() -> Unit)? = null,
+    displayName: String? = deviceName,
 ) {
     val id = identifier.uppercase()
     val compatibility = remember(deviceName, isCustomName) { assessBleLocationCompatibility(deviceName, isCustomName) }
@@ -138,7 +154,8 @@ fun BleShutterScreen(
         onBackCompleted = back,
     )
 
-    GlassBackground(contentIsBackdropSource = false) {
+    val scroll = rememberScrollState()
+    GlassBackground {
         if (!confirmed) {
             CapsuleDialog(
                 onDismissRequest = onClose,
@@ -158,6 +175,7 @@ fun BleShutterScreen(
             topBar = {
                 GlassTopBar(
                     title = stringResource(Res.string.remote_ble_title),
+                    scrolled = scroll.isScrolledUnderTopBar,
                     navigationIcon = {
                         GlassIconButton(
                             icon = painterResource(Res.drawable.arrow_back_24px),
@@ -168,34 +186,65 @@ fun BleShutterScreen(
                 )
             },
         ) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Column(
-                    Modifier.padding(horizontal = AlphaDimens.screenMargin),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
+            BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
+                val viewportHeight = maxHeight
+                ScreenContent(
+                    modifier = Modifier.fillMaxSize()
+                        .verticalScroll(scroll)
+                        .padding(horizontal = AlphaDimens.screenMargin),
+                    maxWidth = 560.dp,
                 ) {
-                    GlassShutterButton(
-                        onClick = {
-                            if (hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            controls.trigger(id)
-                        },
-                        contentDescription = stringResource(Res.string.remote_shutter_cd),
-                        enabled = confirmed && state.canTrigger,
-                        pressing = bleShutterPressing(state),
-                    )
-                    BleStatusText(state, requestSent)
-                    if (confirmed && state.phase == BleShutterPhase.Failed) {
-                        CapsuleButton(
-                            text = stringResource(Res.string.remote_retry),
-                            onClick = { controls.acquire(id) },
-                            role = CapsuleRole.Tonal,
+                    Column(
+                        Modifier.fillMaxWidth().heightIn(min = viewportHeight).padding(vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(AlphaDimens.cardGap),
+                    ) {
+                        GlassCard(Modifier.fillMaxWidth()) {
+                            Text(
+                                displayName?.takeIf { it.isNotBlank() } ?: stringResource(Res.string.remote_ble_camera),
+                                style = AlphaType.Title,
+                                color = AlphaTheme.colors.textPrimary,
+                            )
+                            BleStatusText(state, requestSent)
+                        }
+                        Spacer(Modifier.height((viewportHeight * 0.16f).coerceIn(12.dp, 112.dp)))
+                        GlassShutterButton(
+                            onClick = {
+                                if (hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                controls.trigger(id)
+                            },
+                            contentDescription = stringResource(Res.string.remote_shutter_cd),
+                            enabled = confirmed && state.canTrigger,
+                            pressing = bleShutterPressing(state),
                         )
-                        if (onOpenGuide != null) {
+                        if (confirmed && state.phase == BleShutterPhase.Failed) {
+                            GlassWarningCard(
+                                title = stringResource(Res.string.remote_ble_status_failed),
+                                message = state.failureReason?.let { stringResource(bleShutterFailureText(it)) },
+                                tone = StatusTone.Error,
+                                actionLabel = stringResource(Res.string.remote_retry),
+                                onAction = { controls.acquire(id) },
+                            )
+                            if (onOpenGuide != null) {
+                                CapsuleButton(
+                                    text = stringResource(Res.string.q_alert_open_guide),
+                                    onClick = { onOpenGuide(GuideTopic.Remote) },
+                                    role = CapsuleRole.Secondary,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
+                        if (onSwitchToWifi != null) {
+                            Spacer(Modifier.weight(1f))
                             CapsuleButton(
-                                text = stringResource(Res.string.q_alert_open_guide),
-                                onClick = { onOpenGuide(GuideTopic.Remote) },
-                                role = CapsuleRole.Secondary,
-                                size = CapsuleSize.Small,
+                                text = stringResource(Res.string.remote_switch_to_wifi),
+                                onClick = {
+                                    leave()
+                                    onSwitchToWifi()
+                                },
+                                role = CapsuleRole.Tonal,
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = confirmed,
                             )
                         }
                     }
@@ -207,7 +256,6 @@ fun BleShutterScreen(
 
 @Composable
 private fun BleStatusText(state: BleShutterState, requestSent: Boolean) {
-    val colors = AlphaTheme.colors
     val line = bleShutterStatusLine(state, requestSent)
     val text = when (line) {
         BleShutterStatusLine.Idle -> stringResource(Res.string.remote_ble_status_idle)
@@ -217,19 +265,19 @@ private fun BleStatusText(state: BleShutterState, requestSent: Boolean) {
         BleShutterStatusLine.Pressing -> stringResource(Res.string.remote_ble_status_pressing)
         BleShutterStatusLine.Releasing -> stringResource(Res.string.remote_ble_status_releasing)
         BleShutterStatusLine.Uncertain -> stringResource(Res.string.remote_check_camera)
-        BleShutterStatusLine.Failed -> stringResource(bleShutterFailureText(state.failureReason))
+        BleShutterStatusLine.Failed -> stringResource(Res.string.remote_ble_status_unavailable)
     }
-    val color = when (line) {
-        BleShutterStatusLine.Failed -> colors.danger
-        BleShutterStatusLine.Uncertain -> colors.warningText
-        BleShutterStatusLine.RequestSent -> colors.success
-        else -> colors.textSecondary
+    val tone = when (line) {
+        BleShutterStatusLine.Failed -> StatusTone.Error
+        BleShutterStatusLine.Uncertain -> StatusTone.Warning
+        BleShutterStatusLine.Ready, BleShutterStatusLine.RequestSent -> StatusTone.Success
+        BleShutterStatusLine.Idle -> StatusTone.Neutral
+        else -> StatusTone.Active
     }
-    Text(
-        text,
-        style = AlphaType.Body,
-        color = color,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+    val slotHeight = with(LocalDensity.current) { AlphaType.Heading.lineHeight.toDp() * 2 }
+    StatusLine(
+        title = text,
+        tone = tone,
+        modifier = Modifier.heightIn(min = slotHeight).semantics { liveRegion = LiveRegionMode.Polite },
     )
 }

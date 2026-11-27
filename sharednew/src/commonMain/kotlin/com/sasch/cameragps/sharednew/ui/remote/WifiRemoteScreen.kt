@@ -1,8 +1,6 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,22 +8,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
@@ -34,29 +28,15 @@ import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.arrow_back_24px
 import cameragps.sharednew.generated.resources.back
 import cameragps.sharednew.generated.resources.cancel_button
-import cameragps.sharednew.generated.resources.continue_button
-import cameragps.sharednew.generated.resources.wifi_remote_clear_selection_back
-import cameragps.sharednew.generated.resources.wifi_remote_approval
-import cameragps.sharednew.generated.resources.wifi_remote_auto_connect
-import cameragps.sharednew.generated.resources.wifi_remote_auto_setup
 import cameragps.sharednew.generated.resources.wifi_remote_browse
 import cameragps.sharednew.generated.resources.wifi_remote_browse_unsupported
-import cameragps.sharednew.generated.resources.wifi_remote_closing
-import cameragps.sharednew.generated.resources.wifi_remote_connect
-import cameragps.sharednew.generated.resources.wifi_remote_connected
-import cameragps.sharednew.generated.resources.wifi_remote_disconnect
-import cameragps.sharednew.generated.resources.wifi_remote_ip
-import cameragps.sharednew.generated.resources.wifi_remote_joining
-import cameragps.sharednew.generated.resources.wifi_remote_manual
+import cameragps.sharednew.generated.resources.wifi_remote_clear_selection_back
+import cameragps.sharednew.generated.resources.wifi_remote_clear_selection_confirm
+import cameragps.sharednew.generated.resources.wifi_remote_clear_selection_title
 import cameragps.sharednew.generated.resources.wifi_remote_opening
 import cameragps.sharednew.generated.resources.wifi_remote_other_camera
 import cameragps.sharednew.generated.resources.wifi_remote_permission
-import cameragps.sharednew.generated.resources.wifi_remote_prepare_only
-import cameragps.sharednew.generated.resources.wifi_remote_prepare_only_hint
-import cameragps.sharednew.generated.resources.wifi_remote_preparing
 import cameragps.sharednew.generated.resources.wifi_remote_settings
-import cameragps.sharednew.generated.resources.wifi_remote_setup
-import cameragps.sharednew.generated.resources.wifi_remote_setup_detect_address
 import cameragps.sharednew.generated.resources.wifi_remote_shutdown_requested
 import cameragps.sharednew.generated.resources.wifi_remote_shutdown_unavailable
 import cameragps.sharednew.generated.resources.wifi_remote_shutdown_unconfirmed
@@ -64,29 +44,28 @@ import cameragps.sharednew.generated.resources.wifi_remote_title
 import com.diamondedge.logging.logging
 import com.sasch.cameragps.sharednew.remote.wifi.WifiBatchSummary
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
-import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferState
-import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
-import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatChoice
 import com.sasch.cameragps.sharednew.remote.wifi.WifiDownloadFormatSetting
-import com.sasch.cameragps.sharednew.remote.wifi.batchFormatChoices
 import com.sasch.cameragps.sharednew.remote.wifi.WifiDownloadPlan
+import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatChoice
+import com.sasch.cameragps.sharednew.remote.wifi.WifiFormatPolicy
+import com.sasch.cameragps.sharednew.remote.wifi.WifiImageTransferState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoBrowserState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPhotoDownload
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteController
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemotePhase
 import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiShutdownStatus
+import com.sasch.cameragps.sharednew.remote.wifi.batchFormatChoices
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import com.sasch.cameragps.sharednew.remote.wifi.isCaptureFullySaved
 import com.sasch.cameragps.sharednew.remote.wifi.planDownloads
 import com.sasch.cameragps.sharednew.remote.wifi.toSummary
-import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
-import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
+import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassBackground
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
-import com.sasch.cameragps.sharednew.ui.components.glass.GlassTextField
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassTopBar
 import com.sasch.cameragps.sharednew.ui.components.glass.isScrolledUnderTopBar
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
@@ -757,10 +736,15 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
         if (viewModel.confirmClearSelectionBack) {
             CapsuleDialog(
                 onDismissRequest = viewModel::cancelClearSelectionBack,
-                title = stringResource(Res.string.wifi_remote_clear_selection_back),
+                title = stringResource(Res.string.wifi_remote_clear_selection_title),
+                message = stringResource(Res.string.wifi_remote_clear_selection_back),
                 dismiss = DialogAction(stringResource(Res.string.cancel_button), viewModel::cancelClearSelectionBack),
-                confirm = DialogAction(stringResource(Res.string.continue_button), viewModel::confirmClearSelectionAndBack),
-            ) { }
+                confirm = DialogAction(
+                    stringResource(Res.string.wifi_remote_clear_selection_confirm),
+                    viewModel::confirmClearSelectionAndBack,
+                ),
+                destructive = true,
+            )
         }
         // First entry: the one-time notice is a dialog over a blank glass background, never over the
         // manual connection controls. Continuing starts the automatic connection straight into the
@@ -790,6 +774,7 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
                 onAppSettings = onAppSettings,
                 onWifiSettings = onWifiSettings,
                 modifier = Modifier.systemBarsPadding(),
+                totalSteps = WifiConnectStep.entries.size,
             )
 
             viewModel.viewedPhotoIndex != null && ready && state.photoBrowser.open ->
@@ -820,6 +805,7 @@ fun WifiRemoteScreen(viewModel: WifiRemoteViewModel, onConnect: (String) -> Unit
                 onWifiSettings = onWifiSettings, onBack = back, wifiSettingsLabel = wifiSettingsLabel,
                 networkPermissionMessage = networkPermissionMessage,
                 openingSessionMessage = openingSessionMessage,
+                onAppSettings = onAppSettings,
             )
         }
     }
@@ -864,15 +850,18 @@ private fun WifiConnectionControls(
     wifiSettingsLabel: String,
     networkPermissionMessage: String,
     openingSessionMessage: String,
+    onAppSettings: (() -> Unit)?,
 ) {
     val controller = viewModel.controller
     val id = viewModel.identifier.uppercase()
-    val ready = state.phase == WifiRemotePhase.Ready
-    val busy = state.phase !in setOf(WifiRemotePhase.Idle, WifiRemotePhase.Failed)
-    var manual by remember { mutableStateOf(!controller.supportsAutomaticConnection && !controller.supportsManualSetup) }
+    var manual by remember { mutableStateOf(false) }
     val scroll = rememberScrollState()
-    val body = AlphaType.Body
-    val colors = AlphaTheme.colors
+    val shutdownMessage = when (state.wifiShutdown) {
+        WifiShutdownStatus.Requested -> Res.string.wifi_remote_shutdown_requested
+        WifiShutdownStatus.Unavailable -> Res.string.wifi_remote_shutdown_unavailable
+        WifiShutdownStatus.Unconfirmed -> Res.string.wifi_remote_shutdown_unconfirmed
+        WifiShutdownStatus.NotRequested -> null
+    }
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
@@ -889,98 +878,44 @@ private fun WifiConnectionControls(
             )
         },
     ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).padding(16.dp).verticalScroll(scroll),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        WifiConnectFallbackContent(
+            state = state,
+            supportsAutomaticConnection = controller.supportsAutomaticConnection,
+            supportsManualSetup = controller.supportsManualSetup,
+            supportsAddressDiscovery = controller.supportsAddressDiscovery,
+            host = viewModel.host,
+            onHostChange = { viewModel.host = it.take(64) },
+            manual = manual,
+            onToggleManual = { manual = !manual },
+            onAutoConnect = onConnectAutomatically,
+            onManualConnect = { onConnect(viewModel.host) },
+            onWifiSettings = onWifiSettings,
+            onContinueManualJoin = { controller.continueManualConnection(id) },
+            onDisconnect = { controller.disconnect(id) },
+            networkPermissionMessage = networkPermissionMessage,
+            modifier = Modifier.fillMaxSize().padding(padding),
+            scrollState = scroll,
+            notice = if (otherCamera) stringResource(Res.string.wifi_remote_other_camera) else null,
+            connectionBlocked = otherCamera,
+            onAppSettings = onAppSettings,
+            wifiSettingsLabel = wifiSettingsLabel,
+            openingSessionMessage = openingSessionMessage,
+            idleMessage = shutdownMessage?.let { stringResource(it) },
         ) {
-            if (!busy && (controller.supportsAutomaticConnection || controller.supportsManualSetup)) {
+            if (state.canTransferImages) {
                 CapsuleButton(
-                    text = stringResource(
-                        if (controller.supportsAutomaticConnection) Res.string.wifi_remote_auto_connect
-                        else Res.string.wifi_remote_prepare_only
-                    ),
-                    onClick = onConnectAutomatically,
-                    enabled = !otherCamera,
-                )
-                Text(
-                    stringResource(
-                        if (controller.supportsAutomaticConnection) Res.string.wifi_remote_auto_setup
-                        else Res.string.wifi_remote_prepare_only_hint
-                    ),
-                    style = body,
-                    color = colors.textSecondary,
-                )
-                CapsuleButton(
-                    text = stringResource(Res.string.wifi_remote_manual),
-                    onClick = { manual = !manual },
-                    role = CapsuleRole.Secondary,
-                )
-            }
-            if (!busy && manual) {
-                Text(
-                    stringResource(
-                        if (controller.supportsAddressDiscovery) Res.string.wifi_remote_setup_detect_address
-                        else Res.string.wifi_remote_setup
-                    ),
-                    style = body,
-                    color = colors.textPrimary,
-                )
-                CapsuleButton(text = wifiSettingsLabel, onClick = onWifiSettings, role = CapsuleRole.Secondary)
-                GlassTextField(
-                    value = viewModel.host, onValueChange = { viewModel.host = it.take(64) },
-                    label = stringResource(Res.string.wifi_remote_ip), singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                CapsuleButton(
-                    text = stringResource(Res.string.wifi_remote_connect),
-                    onClick = { onConnect(viewModel.host) },
-                    enabled = (controller.supportsAddressDiscovery || viewModel.host.isNotBlank()) && !otherCamera,
-                )
-            }
-            if (otherCamera) Text(stringResource(Res.string.wifi_remote_other_camera), style = body, color = colors.warningText)
-            if (state.phase == WifiRemotePhase.Idle) {
-                val shutdownMessage = when (state.wifiShutdown) {
-                    WifiShutdownStatus.Requested -> Res.string.wifi_remote_shutdown_requested
-                    WifiShutdownStatus.Unavailable -> Res.string.wifi_remote_shutdown_unavailable
-                    WifiShutdownStatus.Unconfirmed -> Res.string.wifi_remote_shutdown_unconfirmed
-                    WifiShutdownStatus.NotRequested -> null
-                }
-                shutdownMessage?.let { Text(stringResource(it), style = body, color = colors.textSecondary) }
-            }
-            if (state.phase == WifiRemotePhase.OpeningSession) StatusText(openingSessionMessage)
-            if (state.phase == WifiRemotePhase.PreparingCamera) StatusText(stringResource(Res.string.wifi_remote_preparing))
-            state.manualNetwork?.let { credentials ->
-                WifiManualJoin(
-                    credentials, onWifiSettings,
-                    onContinue = { controller.continueManualConnection(id) })
-            }
-            if (state.phase == WifiRemotePhase.AwaitingNetworkApproval) StatusText(stringResource(Res.string.wifi_remote_approval))
-            if (state.phase == WifiRemotePhase.JoiningNetwork) StatusText(stringResource(Res.string.wifi_remote_joining))
-            if (state.phase == WifiRemotePhase.Closing) StatusText(stringResource(Res.string.wifi_remote_closing))
-            state.failure?.let { failure ->
-                Text(wifiFailureMessage(failure, networkPermissionMessage), style = body, color = colors.danger)
-            }
-            if (ready) {
-                Text(stringResource(Res.string.wifi_remote_connected, state.cameraName), style = AlphaType.Label, color = colors.success)
-                if (state.canTransferImages) CapsuleButton(
                     text = stringResource(Res.string.wifi_remote_browse),
                     onClick = { controller.browseDates(id) },
                     role = CapsuleRole.Tonal,
-                ) else StatusText(stringResource(Res.string.wifi_remote_browse_unsupported))
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                Text(
+                    stringResource(Res.string.wifi_remote_browse_unsupported),
+                    style = AlphaType.Body,
+                    color = AlphaTheme.colors.textPrimary,
+                )
             }
-            if (busy) CapsuleButton(
-                text = stringResource(Res.string.wifi_remote_disconnect),
-                onClick = { controller.disconnect(id) },
-                role = CapsuleRole.Secondary,
-                enabled = state.phase != WifiRemotePhase.Closing,
-            )
         }
     }
-}
-
-/** A progress / status line of the connection page (Body, textPrimary). */
-@Composable
-private fun StatusText(text: String) {
-    Text(text, style = AlphaType.Body, color = AlphaTheme.colors.textPrimary)
 }

@@ -97,6 +97,7 @@ fun GlassWarningCard(
     tone: StatusTone = StatusTone.Warning,
     icon: Painter? = null,
     actionLabel: String? = null,
+    actionModifier: Modifier = Modifier,
     onAction: (() -> Unit)? = null,
 ) {
     val colors = AlphaTheme.colors
@@ -130,7 +131,7 @@ fun GlassWarningCard(
                 Text(message, style = AlphaType.Body, color = colors.textSecondary)
             }
             if (actionLabel != null && onAction != null) {
-                CapsuleButton(actionLabel, onAction, role = CapsuleRole.Tonal, modifier = Modifier.padding(top = 4.dp))
+                CapsuleButton(actionLabel, onAction, role = CapsuleRole.Tonal, modifier = actionModifier.padding(top = 4.dp))
             }
         }
     }

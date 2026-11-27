@@ -12,14 +12,13 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
@@ -28,20 +27,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
 import cameragps.sharednew.generated.resources.c1_open_wifi_settings
@@ -50,6 +51,7 @@ import cameragps.sharednew.generated.resources.cancel
 import cameragps.sharednew.generated.resources.check_24px
 import cameragps.sharednew.generated.resources.mw_connect_closing
 import cameragps.sharednew.generated.resources.mw_connect_closing_hint
+import cameragps.sharednew.generated.resources.mw_connect_dismiss
 import cameragps.sharednew.generated.resources.mw_connect_failed
 import cameragps.sharednew.generated.resources.mw_connect_grant
 import cameragps.sharednew.generated.resources.mw_connect_ready
@@ -69,6 +71,9 @@ import cameragps.sharednew.generated.resources.mw_phonelink_24px
 import cameragps.sharednew.generated.resources.mw_photo_library_24px
 import cameragps.sharednew.generated.resources.mw_wifi_24px
 import cameragps.sharednew.generated.resources.mw_wifi_off_24px
+import cameragps.sharednew.generated.resources.remote_mode_wifi_title
+import cameragps.sharednew.generated.resources.remote_wifi_live_unsupported
+import cameragps.sharednew.generated.resources.remote_wifi_ready_hint
 import cameragps.sharednew.generated.resources.wifi_connection_failed
 import cameragps.sharednew.generated.resources.wifi_remote_address_failed
 import cameragps.sharednew.generated.resources.wifi_remote_bluetooth_required
@@ -86,8 +91,9 @@ import com.sasch.cameragps.sharednew.remote.wifi.WifiRemoteFailure
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressCircle
-import com.sasch.cameragps.sharednew.ui.components.glass.glass
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSurface
 import com.sasch.cameragps.sharednew.ui.components.glass.glassProgressColors
+import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.sasch.cameragps.sharednew.ui.theme.AlphaType
@@ -97,7 +103,7 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
-private val CardWidth = 310.dp
+private val CardMaxWidth = 360.dp
 private val CardHeight = 320.dp
 private val IconSlot = 144.dp
 private val TextSlot = 84.dp
@@ -129,15 +135,11 @@ internal fun wifiFailureText(failure: WifiRemoteFailure?): StringResource = when
 }
 
 /**
- * Full-screen connection overlay (design v3, connection frames): one fixed-size glass card with
- * three fixed slots — icon + step ring, title + two-line hint, one action — so nothing jumps between
- * frames. No dividers, no help or retry: a failure is left by tapping anywhere, Back or after
- * [CONNECTION_FAILURE_AUTO_DISMISS_MS]; only a missing permission offers "grant" (and waits), and a
- * disabled phone Wi-Fi additionally offers "open Wi-Fi settings" (still auto-dismissing: coming
- * back from the settings panel and tapping the entry again is the retry).
+ * Full-screen connection overlay with reserved icon, text, and action slots. The remote path has
+ * three steps. Photo transfer passes a fourth step for reading the catalog.
  *
- * [onCancel] ends the attempt (cancel button while connecting); [onDismiss] leaves a finished
- * (failed / unsupported) attempt; [onWifiSettings] opens the system Wi-Fi settings.
+ * [onCancel] ends the active attempt. [onDismiss] leaves a failed or unsupported attempt via the
+ * background or the existing timeout. A missing permission with a settings action waits for input.
  */
 @Composable
 internal fun WifiConnectionOverlay(
@@ -148,59 +150,85 @@ internal fun WifiConnectionOverlay(
     onAppSettings: (() -> Unit)?,
     modifier: Modifier = Modifier,
     onWifiSettings: (() -> Unit)? = null,
+    totalSteps: Int = WifiConnectStep.ReadCatalog.ordinal,
 ) {
     val ended = frame is WifiConnectionFrame.Failed || frame is WifiConnectionFrame.Unsupported
     val permission = frame.needsPermissionAction() && onAppSettings != null
-    val (title, hint) = frameTexts(frame, networkPermissionMessage)
+    val readsCatalog = totalSteps > WifiConnectStep.ReadCatalog.ordinal
+    val presentedFrame = if (!readsCatalog && frame is WifiConnectionFrame.Progress && frame.step == WifiConnectStep.ReadCatalog) {
+        WifiConnectionFrame.Progress(WifiConnectStep.JoinCamera)
+    } else frame
+    val (title, hint) = frameTexts(presentedFrame, networkPermissionMessage, readsCatalog)
     val accessibilityEnabled = rememberAccessibilityEnabled()
     val autoDismissMs = connectionFailureAutoDismissMs(hint.length, accessibilityEnabled)
+    val dismissNow by rememberUpdatedState(onDismiss)
     if (ended && !permission && autoDismissMs != null) {
         LaunchedEffect(frame, autoDismissMs) {
             delay(autoDismissMs)
-            onDismiss()
+            dismissNow()
         }
     }
-    val dismissModifier = if (ended) Modifier.clickable(
-        interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss
-    ) else Modifier
-    Box(modifier.fillMaxSize().then(dismissModifier), contentAlignment = Alignment.Center) {
-        Column(
-            Modifier.width(CardWidth).heightIn(min = CardHeight)
-                .glass(GlassLevel.Modal, AlphaShapes.dialog)
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Box(Modifier.fillMaxWidth().height(IconSlot), contentAlignment = Alignment.Center) {
-                FrameIcon(frame)
-            }
-            Column(
-                Modifier.fillMaxWidth().heightIn(min = TextSlot, max = 220.dp)
-                    .verticalScroll(rememberScrollState())
-                    .semantics { liveRegion = LiveRegionMode.Polite },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        if (ended) {
+            Box(
+                Modifier.matchParentSize().clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClickLabel = stringResource(Res.string.mw_connect_dismiss),
+                    onClick = onDismiss,
+                ),
+            )
+        }
+        Box(Modifier.padding(horizontal = AlphaDimens.screenMargin, vertical = 8.dp)) {
+            GlassSurface(
+                modifier = Modifier.widthIn(max = CardMaxWidth).fillMaxWidth(),
+                level = GlassLevel.Modal,
+                shape = AlphaShapes.dialog,
             ) {
-                Text(
-                    title, style = AlphaType.Heading, maxLines = if (ended) 2 else 1,
-                    overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-                    color = if (ended) AlphaTheme.colors.danger else AlphaTheme.colors.textPrimary,
-                )
-                Text(
-                    hint, style = AlphaType.Body, minLines = 2, maxLines = if (ended) Int.MAX_VALUE else 2,
-                    overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-                    color = AlphaTheme.colors.textSecondary,
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            Box(Modifier.fillMaxWidth().height(ActionSlot), contentAlignment = Alignment.Center) {
-                FrameAction(frame, permission, onCancel, onAppSettings, onWifiSettings)
+                // The scroll viewport covers the card, including its padding, and owns hit-testing
+                // there. The sibling behind it can only receive taps outside the card.
+                Column(
+                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                        .heightIn(min = CardHeight)
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(Modifier.fillMaxWidth().height(IconSlot), contentAlignment = Alignment.Center) {
+                        FrameIcon(presentedFrame, totalSteps)
+                    }
+                    Column(
+                        Modifier.fillMaxWidth().heightIn(min = TextSlot)
+                            .semantics { liveRegion = LiveRegionMode.Polite },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            title, style = AlphaType.Heading, textAlign = TextAlign.Center,
+                            color = if (ended) AlphaTheme.colors.danger else AlphaTheme.colors.textPrimary,
+                        )
+                        Text(
+                            hint, style = AlphaType.Body, textAlign = TextAlign.Center,
+                            color = AlphaTheme.colors.textSecondary,
+                        )
+                    }
+                    Box(
+                        Modifier.fillMaxWidth().padding(top = 8.dp).heightIn(min = ActionSlot),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        FrameAction(frame, permission, onCancel, onAppSettings, onWifiSettings)
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun frameTexts(frame: WifiConnectionFrame, networkPermissionMessage: String): Pair<String, String> =
+private fun frameTexts(
+    frame: WifiConnectionFrame,
+    networkPermissionMessage: String,
+    readsCatalog: Boolean,
+): Pair<String, String> =
     when (frame) {
         is WifiConnectionFrame.Progress -> when (frame.step) {
             WifiConnectStep.PrepareCamera ->
@@ -213,17 +241,23 @@ private fun frameTexts(frame: WifiConnectionFrame, networkPermissionMessage: Str
                 stringResource(Res.string.mw_connect_step_catalog) to stringResource(Res.string.mw_connect_step_catalog_hint)
         }
         WifiConnectionFrame.Ready ->
-            stringResource(Res.string.mw_connect_ready) to stringResource(Res.string.mw_connect_ready_hint)
+            stringResource(Res.string.mw_connect_ready) to stringResource(
+                if (readsCatalog) Res.string.mw_connect_ready_hint
+                else Res.string.remote_wifi_ready_hint,
+            )
         WifiConnectionFrame.Closing ->
             stringResource(Res.string.mw_connect_closing) to stringResource(Res.string.mw_connect_closing_hint)
-        WifiConnectionFrame.Unsupported ->
+        WifiConnectionFrame.Unsupported -> if (readsCatalog) {
             stringResource(Res.string.mw_connect_unsupported) to stringResource(Res.string.wifi_remote_browse_unsupported)
+        } else {
+            stringResource(Res.string.remote_mode_wifi_title) to stringResource(Res.string.remote_wifi_live_unsupported)
+        }
         is WifiConnectionFrame.Failed ->
             stringResource(Res.string.mw_connect_failed) to wifiFailureMessage(frame.failure, networkPermissionMessage)
     }
 
 @Composable
-private fun FrameIcon(frame: WifiConnectionFrame) {
+private fun FrameIcon(frame: WifiConnectionFrame, totalSteps: Int) {
     val colors = AlphaTheme.colors
     // Remaining segments use the GlassProgress track so the ring reads as the same progress family.
     val todo = glassProgressColors(colors, onPhoto = false).first
@@ -243,11 +277,14 @@ private fun FrameIcon(frame: WifiConnectionFrame) {
             )
         }
         WifiConnectionFrame.Ready -> {
-            StepRing(done = WifiConnectStep.entries.size, current = null, doneColor = colors.success, todo = todo)
+            StepRing(done = totalSteps, current = null, doneColor = colors.success, todo = todo, totalSteps = totalSteps)
             Icon(painterResource(Res.drawable.check_24px), null, tint = colors.success, modifier = Modifier.size(StepIcon))
         }
         is WifiConnectionFrame.Progress -> {
-            StepRing(done = frame.step.ordinal, current = frame.step.ordinal, doneColor = colors.accent, todo = todo)
+            StepRing(
+                done = frame.step.ordinal, current = frame.step.ordinal, doneColor = colors.accent,
+                todo = todo, totalSteps = totalSteps,
+            )
             Icon(stepIcon(frame.step), null, tint = colors.accent, modifier = Modifier.size(StepIcon))
         }
     }
@@ -265,18 +302,19 @@ private fun stepIcon(step: WifiConnectStep): Painter = painterResource(
 
 /** Segmented ring: [done] segments solid, the [current] one pulsing, the rest light grey. */
 @Composable
-private fun StepRing(done: Int, current: Int?, doneColor: Color, todo: Color) {
+private fun StepRing(
+    done: Int, current: Int?, doneColor: Color, todo: Color, totalSteps: Int = WifiConnectStep.entries.size,
+) {
     val pulse by rememberInfiniteTransition(label = "step").animateFloat(
         0.35f, 1f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "pulse"
     )
-    val segments = WifiConnectStep.entries.size
     Canvas(Modifier.size(RingRadius * 2 + RingStroke)) {
         val stroke = RingStroke.toPx()
         val diameter = RingRadius.toPx() * 2
         val topLeft = Offset((size.width - diameter) / 2, (size.height - diameter) / 2)
         val gap = 10f
-        val sweep = 360f / segments
-        for (i in 0 until segments) {
+        val sweep = 360f / totalSteps
+        for (i in 0 until totalSteps) {
             val color = when {
                 i == current -> doneColor.copy(alpha = pulse)
                 i < done -> doneColor
@@ -298,12 +336,16 @@ private fun FrameAction(
     when (frame) {
         is WifiConnectionFrame.Progress, WifiConnectionFrame.Ready -> {
             // Kept in place (only faded) when ready so the card does not change shape.
-            val visible by animateFloatAsState(if (frame is WifiConnectionFrame.Ready) 0f else 1f, tween(150))
-            CapsuleButton(
-                text = stringResource(Res.string.cancel), onClick = onCancel,
-                role = CapsuleRole.Secondary, enabled = frame !is WifiConnectionFrame.Ready,
-                modifier = Modifier.fillMaxWidth().alpha(visible),
-            )
+            val ready = frame == WifiConnectionFrame.Ready
+            val visible by animateFloatAsState(if (ready) 0f else 1f, tween(150))
+            val hiddenSemantics = if (ready) Modifier.clearAndSetSemantics { hideFromAccessibility() } else Modifier
+            Box(hiddenSemantics) {
+                CapsuleButton(
+                    text = stringResource(Res.string.cancel), onClick = onCancel,
+                    role = CapsuleRole.Secondary, enabled = !ready,
+                    modifier = Modifier.fillMaxWidth().alpha(visible),
+                )
+            }
         }
         is WifiConnectionFrame.Failed, WifiConnectionFrame.Unsupported -> when {
             permission && onAppSettings != null -> CapsuleButton(
@@ -317,6 +359,7 @@ private fun FrameAction(
             )
             else -> Text(
                 stringResource(Res.string.mw_connect_tap_to_return), style = AlphaType.Body,
+                textAlign = TextAlign.Center,
                 color = AlphaTheme.colors.textSecondary,
             )
         }
