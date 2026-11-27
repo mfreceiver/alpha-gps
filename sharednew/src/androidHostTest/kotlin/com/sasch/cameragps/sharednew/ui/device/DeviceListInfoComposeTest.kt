@@ -267,6 +267,6 @@ class DeviceListInfoComposeTest {
             }
         }
         compose.onNodeWithText("Sending location · 3 min ago").assertExists()
-        compose.onNodeWithText("87%").assertExists()
+        compose.onNodeWithText("87%").assertDoesNotExist()
     }
 }

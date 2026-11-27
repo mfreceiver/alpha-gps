@@ -130,7 +130,35 @@ private class SonyWifiConnection(
                     ready.extendedInfo.supportsControl(SonyPtpControlCode.HALF_PRESS) &&
                     ready.extendedInfo.supportsControl(SonyPtpControlCode.FULL_PRESS)
         } == true
+    override val canFocus: Boolean
+        get() = current?.ready?.let { ready ->
+            ready.purpose == SonySessionPurpose.RemoteShooting &&
+                    ready.deviceInfo.supports(SonyPtpOperation.SDIO_CONTROL_DEVICE) &&
+                    ready.extendedInfo.supportsControl(SonyPtpControlCode.HALF_PRESS)
+        } == true
+    override val canRecordMovie: Boolean
+        get() = current?.ready?.let { ready ->
+            ready.purpose == SonySessionPurpose.RemoteShooting &&
+                    ready.deviceInfo.supports(SonyPtpOperation.SDIO_CONTROL_DEVICE) &&
+                    ready.extendedInfo.supportsControl(SonyPtpControlCode.MOVIE_RECORD)
+        } == true
+    override val canReadProperties: Boolean
+        get() = current?.ready?.let { ready ->
+            ready.purpose == SonySessionPurpose.RemoteShooting &&
+                    ready.deviceInfo.supports(SonyPtpOperation.SDIO_GET_ALL_EXT_DEVICE_PROP_INFO)
+        } == true
+    override val canWriteProperties: Boolean
+        get() = canReadProperties &&
+                current?.ready?.deviceInfo?.supports(SonyPtpOperation.SDIO_SET_EXT_DEVICE_PROP_VALUE) == true
     override val lost: Flow<Unit> = merge(networkLost.onEach { report?.record("network lost") }, disconnected.filter { it }.map { })
+    override val propertyChangedEvents: Flow<Unit> = flow {
+        val session = current ?: return@flow
+        session.ptp.events.events.collect { signal ->
+            if (signal is PtpIpEventSignal.Received && signal.event.isPropertyChanged) {
+                emit(Unit)
+            }
+        }
+    }
 
     private suspend fun enterTransferMode() {
         if (separateTransfer && current?.ready?.purpose != SonySessionPurpose.ImageTransfer) {
@@ -170,6 +198,89 @@ private class SonyWifiConnection(
     override suspend fun readBatteryPercent(): Int? {
         val session = current ?: return null
         return SonyBatteryReader(session.ptp.commands, session.ready).read().also { report?.record("battery=${it ?: "unknown"}") }
+    }
+
+    override suspend fun readShootingProperties(): List<CameraShootingProperty>? {
+        val session = current ?: return null
+        if (session.ready.purpose != SonySessionPurpose.RemoteShooting) return null
+        val op = SonyPtpOperation.SDIO_GET_ALL_EXT_DEVICE_PROP_INFO
+        if (!session.ready.deviceInfo.supports(op)) return null
+        return try {
+            val params = if ((session.ready.vendorCodeVersion ?: 0) >= 310) listOf(0L, 1L) else listOf(0L)
+            val result = session.ptp.commands.executeDataIn(op, params, maxDataBytes = 1024 * 1024)
+            if (result !is PtpIpTransactionResult.Response || result.response.code != 0x2001) return null
+            val data = result.data ?: return null
+            val parsed = SonyCameraProperties.parse(
+                data,
+                session.ready.extendedInfo.controlCodes,
+                CameraShootingPropertyKey.allCodes,
+            )
+            SonyRemotePropertyFormatter.toShootingProperties(
+                parsed,
+                supportsWriteOp = session.ready.deviceInfo.supports(SonyPtpOperation.SDIO_SET_EXT_DEVICE_PROP_VALUE),
+            )
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            log.w { "Shooting properties read failed: ${error::class.simpleName}" }
+            null
+        }
+    }
+
+    override suspend fun setShootingProperty(
+        key: CameraShootingPropertyKey,
+        dataType: Int,
+        rawValue: Long,
+    ): PropertyWriteStatus {
+        val session = current ?: return PropertyWriteStatus.Failed
+        if (session.ready.purpose != SonySessionPurpose.RemoteShooting) return PropertyWriteStatus.Unsupported
+        val op = SonyPtpOperation.SDIO_SET_EXT_DEVICE_PROP_VALUE
+        if (!session.ready.deviceInfo.supports(op)) return PropertyWriteStatus.Unsupported
+        val payload = SonyCameraProperties.encodeScalar(dataType, rawValue) ?: return PropertyWriteStatus.Unsupported
+        val vendor310 = (session.ready.vendorCodeVersion ?: 0) >= 310
+        val primaryParams = if (vendor310) listOf(key.code.toLong(), 1L) else listOf(key.code.toLong())
+        report?.record("property write 0x${key.code.toString(16)} type=$dataType raw=$rawValue params=$primaryParams")
+        return try {
+            var result = session.ptp.commands.executeDataOut(op, primaryParams, payload)
+            report?.record("property write 0x${key.code.toString(16)} ${result.diagnosticSummary()}")
+            if (vendor310 && result is PtpIpTransactionResult.Response && result.response.code == PtpResponse.INVALID_PARAMETER) {
+                val fallbackParams = listOf(key.code.toLong())
+                report?.record("property write 0x${key.code.toString(16)} fallback params=$fallbackParams")
+                result = session.ptp.commands.executeDataOut(op, fallbackParams, payload)
+                report?.record("property write 0x${key.code.toString(16)} fallback ${result.diagnosticSummary()}")
+            }
+            when (result) {
+                is PtpIpTransactionResult.Response ->
+                    if (result.response.code == PtpResponse.OK) PropertyWriteStatus.Applied
+                    else PropertyWriteStatus.Rejected
+                PtpIpTransactionResult.Uncertain,
+                is PtpIpTransactionResult.Failure,
+                PtpIpTransactionResult.Closed -> PropertyWriteStatus.Failed
+            }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            report?.record("property write failed: ${error::class.simpleName}")
+            PropertyWriteStatus.Failed
+        }
+    }
+
+    override suspend fun focus(): RemoteActionStatus {
+        if (!canFocus) return RemoteActionStatus.Rejected
+        return when (checkNotNull(current).shutter.focus().also { report?.record("focus=$it") }) {
+            SonyPtpCaptureResult.Submitted, SonyPtpCaptureResult.CaptureEventObserved -> RemoteActionStatus.Done
+            is SonyPtpCaptureResult.Rejected, SonyPtpCaptureResult.Unsupported -> RemoteActionStatus.Rejected
+            else -> RemoteActionStatus.Uncertain
+        }
+    }
+
+    override suspend fun toggleMovieRecord(): RemoteActionStatus {
+        if (!canRecordMovie) return RemoteActionStatus.Rejected
+        return when (checkNotNull(current).shutter.toggleMovieRecord().also { report?.record("movie=$it") }) {
+            SonyPtpCaptureResult.Submitted, SonyPtpCaptureResult.CaptureEventObserved -> RemoteActionStatus.Done
+            is SonyPtpCaptureResult.Rejected, SonyPtpCaptureResult.Unsupported -> RemoteActionStatus.Rejected
+            else -> RemoteActionStatus.Uncertain
+        }
     }
 
     override suspend fun probeProperties(): PropertyProbeStatus {

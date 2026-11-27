@@ -19,6 +19,10 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
 import androidx.compose.ui.unit.Density
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSessionRegistry
+import com.sasch.cameragps.sharednew.remote.wifi.CameraPropertiesState
+import com.sasch.cameragps.sharednew.remote.wifi.CameraPropertyOption
+import com.sasch.cameragps.sharednew.remote.wifi.CameraShootingProperty
+import com.sasch.cameragps.sharednew.remote.wifi.CameraShootingPropertyKey
 import com.sasch.cameragps.sharednew.remote.wifi.PropertyProbeStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCaptureStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiLiveViewFrame
@@ -164,6 +168,68 @@ class RemoteLiveViewComposeTest {
             assertEquals(true, closed)
             assertEquals(WifiSessionPurpose.Browse, registry.get(id)?.wifiRemote?.purpose)
         }
+    }
+
+    @Test
+    fun liveParameterStripOpensSheetAndSendsPropertyWriteAndFocusAndMovie() {
+        var written: Pair<CameraShootingPropertyKey, Long>? = null
+        var focuses = 0
+        var movies = 0
+        val richState = WifiRemoteState(
+            phase = WifiRemotePhase.Ready,
+            purpose = WifiSessionPurpose.RemoteControl,
+            cameraName = "ILCE-1",
+            canCaptureStill = true,
+            canFocus = true,
+            canRecordMovie = true,
+            supportsLiveView = true,
+            cameraProperties = CameraPropertiesState(
+                canWrite = true,
+                properties = listOf(
+                    CameraShootingProperty(
+                        key = CameraShootingPropertyKey.ExposureProgram,
+                        dataType = 6,
+                        rawValue = 131075L,
+                        displayValue = "A",
+                        writable = false,
+                    ),
+                    CameraShootingProperty(
+                        key = CameraShootingPropertyKey.Aperture,
+                        dataType = 4,
+                        rawValue = 240L,
+                        displayValue = "f/2.4",
+                        writable = true,
+                        options = listOf(
+                            CameraPropertyOption(140L, "f/1.4"),
+                            CameraPropertyOption(240L, "f/2.4"),
+                            CameraPropertyOption(400L, "f/4"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        compose.setContent {
+            CameraGpsTheme(darkTheme = false) {
+                GlassBackground(contentIsBackdropSource = false) {
+                    RemoteLiveView(
+                        richState, frame, hapticsEnabled = false, onBack = {},
+                        onShutter = { shots++ }, onRetryLiveView = { retries++ },
+                        onFocus = { focuses++ },
+                        onToggleMovie = { movies++ },
+                        onSetProperty = { k, v -> written = k to v },
+                    )
+                }
+            }
+        }
+        compose.onNodeWithText("AF").performClick()
+        compose.onNodeWithText("REC").performClick()
+        assertEquals(1, focuses)
+        assertEquals(1, movies)
+
+        compose.onNodeWithText("f/2.4").performClick()
+        compose.onNodeWithText("Camera settings").assertExists()
+        compose.onNodeWithText("f/4").performClick()
+        assertEquals(CameraShootingPropertyKey.Aperture to 400L, written)
     }
 
 }

@@ -123,17 +123,22 @@ data class WifiPhotoBrowserState(
 )
 
 enum class PropertyProbeStatus { Idle, Reading, Recorded, Unsupported, Failed }
+enum class RemoteActionStatus { Idle, Running, Done, Rejected, Uncertain }
 
 data class WifiRemoteState(
     val phase: WifiRemotePhase = WifiRemotePhase.Idle,
     val failure: WifiRemoteFailure? = null,
     val purpose: WifiSessionPurpose = WifiSessionPurpose.Browse,
     val canCaptureStill: Boolean = false,
+    val canFocus: Boolean = false,
+    val canRecordMovie: Boolean = false,
     val hasLiveView: Boolean = false,
     val supportsLiveView: Boolean = false,
     val liveViewPaused: Boolean = false,
     val cameraName: String = "",
     val capture: WifiCaptureStatus = WifiCaptureStatus.Idle,
+    val focusStatus: RemoteActionStatus = RemoteActionStatus.Idle,
+    val movieActionStatus: RemoteActionStatus = RemoteActionStatus.Idle,
     val preview: WifiPreviewStatus = WifiPreviewStatus.Waiting,
     val canTransferImages: Boolean = false,
     val canConvertHeif: Boolean = false,
@@ -143,6 +148,7 @@ data class WifiRemoteState(
     val manualNetwork: CameraWifiCredentials? = null,
     val propertyProbe: PropertyProbeStatus = PropertyProbeStatus.Idle,
     val probeAttempt: Int = 0,
+    val cameraProperties: CameraPropertiesState = CameraPropertiesState(),
 ) {
     /** R2 control channel readiness, independent of live-view stream state. */
     val isControlReady: Boolean get() = phase == WifiRemotePhase.Ready
@@ -156,7 +162,7 @@ data class WifiRemoteState(
 
     init {
         require((phase == WifiRemotePhase.Failed) == (failure != null))
-        require(phase == WifiRemotePhase.Ready || (!canCaptureStill && !hasLiveView && !supportsLiveView))
+        require(phase == WifiRemotePhase.Ready || (!canCaptureStill && !canFocus && !canRecordMovie && !hasLiveView && !supportsLiveView))
         require(phase == WifiRemotePhase.Ready || !liveViewPaused)
     }
 }

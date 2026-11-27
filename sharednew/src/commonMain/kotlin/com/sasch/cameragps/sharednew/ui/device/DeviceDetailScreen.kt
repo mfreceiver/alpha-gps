@@ -336,8 +336,8 @@ fun DeviceDetailContent(
 
 /**
  * The page's one status card: connection state (+ one warning line only when something is wrong),
- * battery and Bluetooth signal on the right, then the location-transfer metrics. One glass level,
- * one padding and one caption style, so connection and transfer read as one unit.
+ * Bluetooth signal and link action on the right, then the location-transfer metrics. One glass
+ * level, one padding and one caption style, so connection and transfer read as one unit.
  */
 @Composable
 private fun DeviceStatusCard(
@@ -352,9 +352,7 @@ private fun DeviceStatusCard(
     onOpenTroubleshooting: ((GuideTopic) -> Unit)?,
 ) {
     val colors = AlphaTheme.colors
-    val battery = batteryDisplay(live?.battery, nowMillis)
     val connected = trailing == ConnectionCardTrailing.ConnectedIndicator
-    val actionBelowHeader = !connected && battery is BatteryDisplay.Value
     GlassCard(Modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -373,13 +371,12 @@ private fun DeviceStatusCard(
                 color = colors.textPrimary,
                 modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
             )
-            if (battery is BatteryDisplay.Value) BatteryBlock(battery)
             BluetoothSignalRing(
                 connected = connected,
                 level = if (connected && live?.connected == true) live.signalLevel else SignalLevel.Unknown,
                 stale = isRssiStale(live?.rssiAtMillis, nowMillis),
             )
-            if (!actionBelowHeader) ConnectionCardAction(trailing, onConnect, onCancelConnecting)
+            ConnectionCardAction(trailing, onConnect, onCancelConnecting)
         }
         val alertText = statusCardAlertText(alert)
         if (alertText != null) {
@@ -389,11 +386,6 @@ private fun DeviceStatusCard(
                 color = statusToneColor(statusCardAlertTone(alert), colors),
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
-        }
-        if (actionBelowHeader) {
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                ConnectionCardAction(trailing, onConnect, onCancelConnecting)
-            }
         }
         val topic = statusCardAlertTopic(alert)
         if (topic != null && onOpenTroubleshooting != null) {

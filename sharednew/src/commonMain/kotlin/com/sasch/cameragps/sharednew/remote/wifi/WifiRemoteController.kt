@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -38,6 +39,10 @@ import kotlin.time.TimeSource
 internal interface WifiRemoteConnection {
     val cameraName: String
     val canCapture: Boolean
+    val canFocus: Boolean get() = false
+    val canRecordMovie: Boolean get() = false
+    val canReadProperties: Boolean get() = false
+    val canWriteProperties: Boolean get() = false
     val canTransferImages: Boolean get() = false
     val canConvertHeif: Boolean get() = false
     val photoHandlesSurviveModeSwitch: Boolean get() = true
@@ -90,7 +95,16 @@ internal interface WifiRemoteConnection {
     val images: Flow<ImageBitmap>
     val liveViewFrames: Flow<WifiLiveViewFrame> get() = images.map { WifiLiveViewFrame(it) }
     val lost: Flow<Unit>
+    val propertyChangedEvents: Flow<Unit> get() = emptyFlow()
     suspend fun probeProperties(): PropertyProbeStatus = PropertyProbeStatus.Unsupported
+    suspend fun readShootingProperties(): List<CameraShootingProperty>? = null
+    suspend fun setShootingProperty(
+        key: CameraShootingPropertyKey,
+        dataType: Int,
+        rawValue: Long,
+    ): PropertyWriteStatus = PropertyWriteStatus.Unsupported
+    suspend fun focus(): RemoteActionStatus = RemoteActionStatus.Rejected
+    suspend fun toggleMovieRecord(): RemoteActionStatus = RemoteActionStatus.Rejected
     suspend fun capture(): WifiCaptureStatus
     suspend fun turnOffWifi(): WifiShutdownStatus = WifiShutdownStatus.NotRequested
     suspend fun close()
@@ -523,6 +537,8 @@ class WifiRemoteController internal constructor(
     }
 
     private var propertyProbe: Job? = null
+    private var propertyJob: Job? = null
+    private var actionJob: Job? = null
 
     fun probeProperties(identifier: String) {
         val id = identifier.uppercase()
@@ -540,7 +556,178 @@ class WifiRemoteController internal constructor(
             } catch (_: Exception) {
                 PropertyProbeStatus.Failed
             }
-            if (activeConnection === connection) updateReady(id) { it.copy(propertyProbe = outcome) }
+            val parsed = if (outcome == PropertyProbeStatus.Recorded) {
+                try { connection.readShootingProperties() }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { null }
+            } else null
+            if (activeConnection === connection) {
+                updateReady(id) {
+                    it.copy(
+                        propertyProbe = outcome,
+                        cameraProperties = if (parsed != null) {
+                            it.cameraProperties.copy(properties = parsed, loading = false)
+                        } else it.cameraProperties,
+                    )
+                }
+            }
+        }
+    }
+
+    /** Refreshes the live shooting-property snapshot for the Wi-Fi remote UI. */
+    fun refreshProperties(identifier: String) {
+        val id = identifier.uppercase()
+        val state = registry.get(id)?.wifiRemote ?: return
+        if (_owner.value != id || state.phase != WifiRemotePhase.Ready || state.photoBrowser.open ||
+            state.capture == WifiCaptureStatus.Shooting || propertyJob?.isActive == true
+        ) return
+        val connection = activeConnection ?: return
+        val parent = sessionScope ?: return
+        if (!connection.canReadProperties) return
+        updateReady(id) { it.copy(cameraProperties = it.cameraProperties.copy(loading = true)) }
+        propertyJob = parent.launch {
+            val parsed = try {
+                connection.readShootingProperties()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            if (activeConnection === connection) {
+                updateReady(id) {
+                    it.copy(
+                        cameraProperties = it.cameraProperties.copy(
+                            properties = parsed ?: it.cameraProperties.properties,
+                            loading = false,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    /** Writes one shooting property over `0x9205` and re-reads all properties from the camera. */
+    fun setCameraProperty(identifier: String, key: CameraShootingPropertyKey, rawValue: Long) {
+        val id = identifier.uppercase()
+        val state = registry.get(id)?.wifiRemote ?: return
+        if (_owner.value != id || state.phase != WifiRemotePhase.Ready || state.photoBrowser.open ||
+            state.capture == WifiCaptureStatus.Shooting || propertyJob?.isActive == true
+        ) return
+        val prop = state.cameraProperties.byKey(key) ?: return
+        if (!prop.writable) return
+        val connection = activeConnection ?: return
+        val parent = sessionScope ?: return
+        updateReady(id) {
+            it.copy(
+                cameraProperties = it.cameraProperties.copy(
+                    writingKey = key,
+                    writeStatus = PropertyWriteStatus.Writing,
+                ),
+            )
+        }
+        propertyJob = parent.launch {
+            val status = try {
+                connection.setShootingProperty(key, prop.dataType, rawValue)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                PropertyWriteStatus.Failed
+            }
+            val refreshed = try {
+                connection.readShootingProperties()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            if (activeConnection === connection) {
+                updateReady(id) {
+                    it.copy(
+                        cameraProperties = it.cameraProperties.copy(
+                            properties = refreshed ?: it.cameraProperties.properties,
+                            loading = false,
+                            writingKey = null,
+                            writeStatus = status,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearPropertyWriteStatus(identifier: String) {
+        val id = identifier.uppercase()
+        if (_owner.value != id) return
+        updateReady(id) {
+            it.copy(cameraProperties = it.cameraProperties.copy(writeStatus = PropertyWriteStatus.Idle))
+        }
+    }
+
+    /** Standalone half-press AF focus trigger (`0xD2C1`). */
+    fun focus(identifier: String) {
+        val id = identifier.uppercase()
+        val state = registry.get(id)?.wifiRemote ?: return
+        if (_owner.value != id || state.phase != WifiRemotePhase.Ready || !state.canFocus ||
+            state.capture == WifiCaptureStatus.Shooting || state.photoBrowser.open ||
+            photoJob != null || actionJob?.isActive == true
+        ) return
+        val connection = activeConnection ?: return
+        val parent = sessionScope ?: return
+        updateReady(id) { it.copy(focusStatus = RemoteActionStatus.Running) }
+        actionJob = parent.launch {
+            val result = try {
+                connection.focus()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                RemoteActionStatus.Uncertain
+            }
+            if (activeConnection === connection) {
+                updateReady(id) { it.copy(focusStatus = result) }
+                if (result == RemoteActionStatus.Done) {
+                    delay(2.seconds)
+                    if (activeConnection === connection) {
+                        updateReady(id) {
+                            if (it.focusStatus == RemoteActionStatus.Done) it.copy(focusStatus = RemoteActionStatus.Idle)
+                            else it
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Toggles movie recording (`0xD2C8`). */
+    fun toggleMovieRecord(identifier: String) {
+        val id = identifier.uppercase()
+        val state = registry.get(id)?.wifiRemote ?: return
+        if (_owner.value != id || state.phase != WifiRemotePhase.Ready || !state.canRecordMovie ||
+            state.capture == WifiCaptureStatus.Shooting || state.photoBrowser.open ||
+            photoJob != null || actionJob?.isActive == true
+        ) return
+        val connection = activeConnection ?: return
+        val parent = sessionScope ?: return
+        updateReady(id) { it.copy(movieActionStatus = RemoteActionStatus.Running) }
+        actionJob = parent.launch {
+            val result = try {
+                connection.toggleMovieRecord()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                RemoteActionStatus.Uncertain
+            }
+            if (activeConnection === connection) {
+                updateReady(id) { it.copy(movieActionStatus = result) }
+                if (result == RemoteActionStatus.Done) {
+                    delay(2.seconds)
+                    if (activeConnection === connection) {
+                        updateReady(id) {
+                            if (it.movieActionStatus == RemoteActionStatus.Done) it.copy(movieActionStatus = RemoteActionStatus.Idle)
+                            else it
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1275,10 +1462,13 @@ class WifiRemoteController internal constructor(
                         phase = WifiRemotePhase.Ready,
                         purpose = purpose,
                         canCaptureStill = opened.canCapture,
+                        canFocus = opened.canFocus,
+                        canRecordMovie = opened.canRecordMovie,
                         supportsLiveView = opened.hasLiveViewStream,
                         cameraName = opened.cameraName,
                         canTransferImages = opened.canTransferImages,
                         canConvertHeif = opened.canConvertHeif,
+                        cameraProperties = CameraPropertiesState(canWrite = opened.canWriteProperties),
                     ),
                 )
                 launch {
@@ -1293,6 +1483,19 @@ class WifiRemoteController internal constructor(
                     catch (_: Exception) { null }
                     if (percent != null) onBatteryRead(id, percent)
                 }
+                if (purpose == WifiSessionPurpose.RemoteControl && opened.canReadProperties) {
+                    refreshProperties(id)
+                    launch {
+                        var debounceJob: Job? = null
+                        opened.propertyChangedEvents.collect {
+                            debounceJob?.cancel()
+                            debounceJob = launch {
+                                delay(300)
+                                refreshProperties(id)
+                            }
+                        }
+                    }
+                }
                 startPreview(id, opened, this)
                 launch(start = CoroutineStart.UNDISPATCHED) {
                     var confirmationTimer: Job? = null
@@ -1302,6 +1505,7 @@ class WifiRemoteController internal constructor(
                         catch (cancelled: CancellationException) { throw cancelled }
                         catch (_: Exception) { WifiCaptureStatus.Uncertain }
                         updateReady(id) { it.copy(capture = result) }
+                        if (opened.canReadProperties) refreshProperties(id)
                         confirmationTimer = if (result == WifiCaptureStatus.Captured) launch {
                             delay(3.seconds)
                             updateReady(id) {
@@ -1328,6 +1532,9 @@ class WifiRemoteController internal constructor(
             sessionScope = null
             activeConnection = null
             previewJob = null
+            propertyProbe = null
+            propertyJob = null
+            actionJob = null
             photoJob = null
             userDownloadInProgress = false
             cancelBackgroundDownloadTimer()

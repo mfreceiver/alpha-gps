@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
 internal object SonyPtpControlCode {
     const val HALF_PRESS = 0xd2c1
     const val FULL_PRESS = 0xd2c2
+    const val MOVIE_RECORD = 0xd2c8
     const val LIVE_VIEW_ENABLE = 0xd313
 }
 
@@ -54,6 +55,70 @@ internal class SonyPtpShutter(
         captureInProgress = true
         return try {
             pressAndRelease()
+        } finally {
+            captureInProgress = false
+        }
+    }
+
+    /** Standalone half-press AF trigger (press -> hold -> release), serialized with captureStill. */
+    suspend fun focus(holdMs: Long = 800): SonyPtpCaptureResult {
+        if (!capabilities.deviceInfo.supports(SonyPtpOperation.SDIO_CONTROL_DEVICE) ||
+            !capabilities.extendedInfo.supportsControl(SonyPtpControlCode.HALF_PRESS)) {
+            return SonyPtpCaptureResult.Unsupported
+        }
+        if (captureInProgress) return SonyPtpCaptureResult.Busy
+        captureInProgress = true
+        return try {
+            var pressed = false
+            var releaseFailed = false
+            try {
+                pressed = true
+                val down = outcome(control(SonyPtpControlCode.HALF_PRESS, down = true))
+                if (down != SonyPtpCaptureResult.Submitted) return down
+                delay(holdMs.coerceIn(0, 2_000))
+            } finally {
+                if (pressed) {
+                    withContext(NonCancellable) {
+                        val up = control(SonyPtpControlCode.HALF_PRESS, down = false)
+                        if (up !is PtpIpTransactionResult.Response || up.response.code != 0x2001) {
+                            releaseFailed = true
+                        }
+                    }
+                }
+            }
+            if (releaseFailed) SonyPtpCaptureResult.Uncertain else SonyPtpCaptureResult.Submitted
+        } finally {
+            captureInProgress = false
+        }
+    }
+
+    /** Toggles movie recording via Sony's 0xD2C8 control (press -> release), serialized with shutter. */
+    suspend fun toggleMovieRecord(): SonyPtpCaptureResult {
+        if (!capabilities.deviceInfo.supports(SonyPtpOperation.SDIO_CONTROL_DEVICE) ||
+            !capabilities.extendedInfo.supportsControl(SonyPtpControlCode.MOVIE_RECORD)) {
+            return SonyPtpCaptureResult.Unsupported
+        }
+        if (captureInProgress) return SonyPtpCaptureResult.Busy
+        captureInProgress = true
+        return try {
+            var pressed = false
+            var releaseFailed = false
+            try {
+                pressed = true
+                val down = outcome(control(SonyPtpControlCode.MOVIE_RECORD, down = true))
+                if (down != SonyPtpCaptureResult.Submitted) return down
+                delay(150)
+            } finally {
+                if (pressed) {
+                    withContext(NonCancellable) {
+                        val up = control(SonyPtpControlCode.MOVIE_RECORD, down = false)
+                        if (up !is PtpIpTransactionResult.Response || up.response.code != 0x2001) {
+                            releaseFailed = true
+                        }
+                    }
+                }
+            }
+            if (releaseFailed) SonyPtpCaptureResult.Uncertain else SonyPtpCaptureResult.Submitted
         } finally {
             captureInProgress = false
         }

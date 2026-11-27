@@ -20,6 +20,7 @@ internal object SonyPtpOperation {
     const val CLOSE_SESSION = 0x1003
     const val SDIO_CONNECT = 0x9201
     const val SDIO_GET_EXT_DEVICE_INFO = 0x9202
+    const val SDIO_SET_EXT_DEVICE_PROP_VALUE = 0x9205
     const val SDIO_CONTROL_DEVICE = 0x9207
     const val SDIO_OPEN_SESSION = 0x9210
     const val SDIO_GET_VENDOR_CODE_VERSION = 0x9216

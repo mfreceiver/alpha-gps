@@ -15,6 +15,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 internal data class PtpIpEvent(val code: Int, val transactionId: Long, val parameters: List<Long>) {
     val isCaptureComplete: Boolean get() = code == 0x400d || code == 0xc206
+    val isPropertyChanged: Boolean get() = code == 0x4006 || code == 0xc201 || code == 0xc202
 
     companion object {
         fun parse(packet: PtpIpPacket): PtpIpEvent {

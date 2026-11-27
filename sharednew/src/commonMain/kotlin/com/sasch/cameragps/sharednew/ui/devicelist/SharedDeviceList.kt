@@ -285,9 +285,6 @@ private fun DeviceCard(
                     !device.isSaved -> stringResource(Res.string.tap_to_connect)
                     else -> stringResource(Res.string.m2_list_not_connected)
                 }
-                val batteryPercent = item?.freshBatteryPercent?.takeIf {
-                    item.batteryObtainedAtMillis == null || (now - item.batteryObtainedAtMillis) <= 30 * 60_000L
-                }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -304,13 +301,6 @@ private fun DeviceCard(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    if (batteryPercent != null) {
-                        val batteryA11y = stringResource(Res.string.q_battery_a11y, "$batteryPercent%")
-                        InfoTag(
-                            text = "$batteryPercent%",
-                            modifier = Modifier.padding(start = 4.dp).semantics { contentDescription = batteryA11y },
-                        )
-                    }
                 }
                 if (!device.isPaired) {
                     Text(

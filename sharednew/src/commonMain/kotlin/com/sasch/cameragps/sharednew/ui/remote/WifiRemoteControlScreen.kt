@@ -62,6 +62,16 @@ import cameragps.sharednew.generated.resources.remote_probe_reading
 import cameragps.sharednew.generated.resources.remote_probe_recorded
 import cameragps.sharednew.generated.resources.remote_probe_unsupported
 import cameragps.sharednew.generated.resources.remote_probe_failed
+import cameragps.sharednew.generated.resources.remote_focus_action
+import cameragps.sharednew.generated.resources.remote_focus_cd
+import cameragps.sharednew.generated.resources.remote_focus_done
+import cameragps.sharednew.generated.resources.remote_focus_rejected
+import cameragps.sharednew.generated.resources.remote_focus_running
+import cameragps.sharednew.generated.resources.remote_movie_action
+import cameragps.sharednew.generated.resources.remote_movie_cd
+import cameragps.sharednew.generated.resources.remote_movie_done
+import cameragps.sharednew.generated.resources.remote_movie_rejected
+import cameragps.sharednew.generated.resources.remote_movie_running
 import cameragps.sharednew.generated.resources.baseline_view_list_24
 import cameragps.sharednew.generated.resources.remote_wifi_capture_confirmed
 import cameragps.sharednew.generated.resources.remote_wifi_capture_rejected
@@ -92,7 +102,9 @@ import cameragps.sharednew.generated.resources.wifi_remote_other_camera
 import cameragps.sharednew.generated.resources.wifi_remote_permission
 import cameragps.sharednew.generated.resources.wifi_remote_preparing
 import cameragps.sharednew.generated.resources.wifi_remote_settings
+import com.sasch.cameragps.sharednew.remote.wifi.CameraShootingPropertyKey
 import com.sasch.cameragps.sharednew.remote.wifi.PropertyProbeStatus
+import com.sasch.cameragps.sharednew.remote.wifi.RemoteActionStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCaptureStatus
 import com.sasch.cameragps.sharednew.remote.wifi.WifiLiveViewFrame
 import com.sasch.cameragps.sharednew.remote.wifi.WifiPreviewStatus
@@ -104,6 +116,7 @@ import com.sasch.cameragps.sharednew.ui.components.ScreenContent
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleSize
 import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassBackground
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
@@ -264,6 +277,11 @@ fun WifiRemoteControlScreen(
                 onShutter = { controller.capture(id) },
                 onRetryLiveView = { controller.retryLiveView(id) },
                 onProbe = { controller.probeProperties(id) },
+                onFocus = { controller.focus(id) },
+                onToggleMovie = { controller.toggleMovieRecord(id) },
+                onRefreshProperties = { controller.refreshProperties(id) },
+                onSetProperty = { key, raw -> controller.setCameraProperty(id, key, raw) },
+                onClearWriteStatus = { controller.clearPropertyWriteStatus(id) },
             )
             else -> RemoteConnectControls(
                 state = state,
@@ -295,7 +313,28 @@ internal fun RemoteLiveView(
     onShutter: () -> Unit,
     onRetryLiveView: () -> Unit,
     onProbe: (() -> Unit)? = null,
+    onFocus: (() -> Unit)? = null,
+    onToggleMovie: (() -> Unit)? = null,
+    onRefreshProperties: (() -> Unit)? = null,
+    onSetProperty: ((CameraShootingPropertyKey, Long) -> Unit)? = null,
+    onClearWriteStatus: (() -> Unit)? = null,
 ) {
+    var paramsOpen by remember { mutableStateOf(false) }
+    var selectedProperty by remember { mutableStateOf<CameraShootingPropertyKey?>(null) }
+
+    RemoteParametersSheet(
+        visible = paramsOpen,
+        propertiesState = state.cameraProperties,
+        selectedKey = selectedProperty,
+        onSelectKey = { selectedProperty = it },
+        onSetProperty = { key, raw -> onSetProperty?.invoke(key, raw) },
+        onRefresh = { onRefreshProperties?.invoke() },
+        onDismiss = {
+            paramsOpen = false
+            onClearWriteStatus?.invoke()
+        },
+    )
+
     CameraGpsTheme(darkTheme = true, glassRenderMode = LocalGlassRenderMode.current) {
         ViewerStage(backdrop = null) {
             BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -308,6 +347,13 @@ internal fun RemoteLiveView(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     RemoteLiveTopBar(state, onBack, onProbe, Modifier.align(Alignment.Start))
+                    RemoteParameterStrip(
+                        propertiesState = state.cameraProperties,
+                        onOpenProperty = { key ->
+                            selectedProperty = key
+                            paramsOpen = true
+                        },
+                    )
                     if (landscape) {
                         Row(
                             Modifier.fillMaxSize(),
@@ -316,14 +362,14 @@ internal fun RemoteLiveView(
                         ) {
                             RemoteLiveStatus(state, frame, onRetryLiveView, Modifier.weight(1f))
                             RemoteCaptureControls(
-                                state, hapticsEnabled, onShutter,
+                                state, hapticsEnabled, onShutter, onFocus, onToggleMovie,
                                 Modifier.width(landscapeControlsWidth),
                             )
                         }
                     } else {
                         RemoteLiveStatus(state, frame, onRetryLiveView, Modifier.weight(1f).fillMaxWidth())
                         RemoteCaptureControls(
-                            state, hapticsEnabled, onShutter,
+                            state, hapticsEnabled, onShutter, onFocus, onToggleMovie,
                             Modifier.widthIn(max = 320.dp).fillMaxWidth(),
                         )
                     }
@@ -431,12 +477,16 @@ private fun RemoteCaptureControls(
     state: WifiRemoteState,
     hapticsEnabled: Boolean,
     onShutter: () -> Unit,
+    onFocus: (() -> Unit)?,
+    onToggleMovie: (() -> Unit)?,
     modifier: Modifier,
 ) {
     val colors = AlphaTheme.colors
     val haptics = LocalHapticFeedback.current
     val shooting = state.capture == WifiCaptureStatus.Shooting
     val canShoot = wifiShutterEnabled(state)
+    val actionBusy = shooting || state.focusStatus == RemoteActionStatus.Running ||
+        state.movieActionStatus == RemoteActionStatus.Running
     val text = when {
         shooting -> stringResource(Res.string.remote_wifi_capture_shooting)
         !state.isControlReady -> stringResource(Res.string.wifi_remote_lost)
@@ -444,12 +494,20 @@ private fun RemoteCaptureControls(
         state.capture == WifiCaptureStatus.Captured -> stringResource(Res.string.remote_wifi_capture_confirmed)
         state.capture == WifiCaptureStatus.Uncertain -> stringResource(Res.string.remote_wifi_capture_uncertain)
         state.capture == WifiCaptureStatus.Rejected -> stringResource(Res.string.remote_wifi_capture_rejected)
+        state.focusStatus == RemoteActionStatus.Running -> stringResource(Res.string.remote_focus_running)
+        state.focusStatus == RemoteActionStatus.Done -> stringResource(Res.string.remote_focus_done)
+        state.focusStatus == RemoteActionStatus.Rejected -> stringResource(Res.string.remote_focus_rejected)
+        state.movieActionStatus == RemoteActionStatus.Running -> stringResource(Res.string.remote_movie_running)
+        state.movieActionStatus == RemoteActionStatus.Done -> stringResource(Res.string.remote_movie_done)
+        state.movieActionStatus == RemoteActionStatus.Rejected -> stringResource(Res.string.remote_movie_rejected)
         else -> ""
     }
     val color = when {
         !canShoot -> colors.onPhotoMuted
         state.capture == WifiCaptureStatus.Uncertain -> colors.onPhotoWarning
-        state.capture == WifiCaptureStatus.Rejected -> colors.onPhotoDanger
+        state.capture == WifiCaptureStatus.Rejected ||
+            state.focusStatus == RemoteActionStatus.Rejected ||
+            state.movieActionStatus == RemoteActionStatus.Rejected -> colors.onPhotoDanger
         else -> colors.onPhoto
     }
     Column(
@@ -471,17 +529,49 @@ private fun RemoteCaptureControls(
                 .padding(horizontal = 8.dp, vertical = 4.dp)
                 .semantics { liveRegion = LiveRegionMode.Polite },
         )
-        Box(Modifier.viewerChromeScrim(CircleShape).padding(6.dp)) {
-            GlassShutterButton(
-                onClick = {
-                    if (hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onShutter()
-                },
-                contentDescription = stringResource(Res.string.remote_shutter_cd),
-                enabled = canShoot || shooting,
-                pressing = shooting,
-                onPhoto = true,
-            )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (state.canFocus && onFocus != null) {
+                CapsuleButton(
+                    text = stringResource(Res.string.remote_focus_action),
+                    onClick = {
+                        if (hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onFocus()
+                    },
+                    role = CapsuleRole.GlassPrimary,
+                    size = CapsuleSize.Small,
+                    glassLevel = GlassLevel.Viewer,
+                    enabled = state.isControlReady && !actionBusy,
+                    loading = state.focusStatus == RemoteActionStatus.Running,
+                )
+            }
+            Box(Modifier.viewerChromeScrim(CircleShape).padding(6.dp)) {
+                GlassShutterButton(
+                    onClick = {
+                        if (hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onShutter()
+                    },
+                    contentDescription = stringResource(Res.string.remote_shutter_cd),
+                    enabled = canShoot || shooting,
+                    pressing = shooting,
+                    onPhoto = true,
+                )
+            }
+            if (state.canRecordMovie && onToggleMovie != null) {
+                CapsuleButton(
+                    text = stringResource(Res.string.remote_movie_action),
+                    onClick = {
+                        if (hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onToggleMovie()
+                    },
+                    role = CapsuleRole.Danger,
+                    size = CapsuleSize.Small,
+                    enabled = state.isControlReady && !actionBusy,
+                    loading = state.movieActionStatus == RemoteActionStatus.Running,
+                )
+            }
         }
     }
 }
