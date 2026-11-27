@@ -12,6 +12,11 @@
 
 ## P1
 
+### 0.5.0 遥控 Viewer 与全页面一致性收尾（Neon 评审 d8728cc）
+- 做什么：三路并行修复——A 抽取 Viewer 舞台并统一 Wi-Fi 取景、预览页与 Viewer 禁用态；B 重整 BLE 快门/模式选择/连接叠层与手动回退连接；C 修复设备信息重叠、照片浏览/日期列表、日志/帮助/更新日志及样式守卫盲区。主线程合并回写遥控设计决定，Neon High 验收后发布 v0.5.0（versionCode 17）。
+- 验收：`scripts/ui_style_guard.sh --strict`、发版脚本自测与 `./gradlew --no-daemon :sharednew:testAndroidHostTest :app:testDebugUnitTest :app:assembleDebug :app:compileDebugAndroidTestKotlin` 通过；Viewer 禁用态对比度、固定状态槽/弹层语义有测试；遥控文档与实现一致；Neon 验收无 P1/P2 遗留后才允许发版。
+- 依据：`docs/design/ui-v3/README.md`、`docs/design/remote-control/`、`docs/ui-components-cheatsheet.md`、`docs/glass-material-notes.md`，以及 d8728cc 上五路 Neon High 静态评审（真机观感仍由 #13/#23/#27 覆盖）。
+
 ### 真机核对：预览动画、选区顶栏与 Wi-Fi 重进诊断
 - 做什么：安装含本轮改动的版本，在 A/B/C 窗口双击放大/复位、捏合松手复位并检查动画与平移边界；切换选区观察顶栏标签、窄屏及大字体下位置和照片不跳动；安装 v0.3.4 后复测 Wi-Fi 退出重进并采集新的运行日志，若用含诊断改动的后续构建则记录 CC09 状态变化。
 - 验收：动画手感自然且边界正确，标签不遮挡位置计数且照片区域不移动；Wi-Fi 重进结果和状态序列有记录，若仍卡住据日志继续排查。
