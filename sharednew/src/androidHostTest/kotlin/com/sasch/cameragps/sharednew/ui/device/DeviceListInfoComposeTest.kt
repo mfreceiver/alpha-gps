@@ -7,11 +7,13 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import com.sasch.cameragps.sharednew.bluetooth.BleSessionPhase
 import com.sasch.cameragps.sharednew.bluetooth.BluetoothDeviceInfo
 import com.sasch.cameragps.sharednew.bluetooth.session.CameraSession
@@ -24,6 +26,7 @@ import com.sasch.cameragps.sharednew.ui.devicelist.SharedDeviceList
 import kotlin.time.Clock
 import com.sasch.cameragps.sharednew.ui.theme.CameraGpsTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -103,6 +106,7 @@ class DeviceListInfoComposeTest {
         timeSync: TimeSyncStatus? = null,
         nowMillis: Long = 0L,
         onOpenBackgroundConditions: (() -> Unit)? = null,
+        onKeepActiveChange: (Boolean) -> Unit = {},
     ) {
         compose.setContent {
             CameraGpsTheme {
@@ -115,7 +119,7 @@ class DeviceListInfoComposeTest {
                         onCancelConnecting = onCancel,
                         onDisconnect = onDisconnect,
                         keepActive = false,
-                        onKeepActiveChange = {},
+                        onKeepActiveChange = onKeepActiveChange,
                         onClose = {},
                         onRename = {},
                         onRemove = {},
@@ -215,11 +219,24 @@ class DeviceListInfoComposeTest {
     }
 
     @Test
-    fun keepActiveLinksToTheBackgroundConditionsPage() {
+    fun backgroundConditionsLinkIsBelowTheKeepActiveToggleAndTapsAreIndependent() {
         var opened = 0
-        showDialog(onOpenBackgroundConditions = { opened++ })
-        compose.onNodeWithText("Background & running conditions").performClick()
+        var toggled = 0
+        showDialog(
+            onOpenBackgroundConditions = { opened++ },
+            onKeepActiveChange = { toggled++ },
+        )
+
+        val toggle = compose.onNodeWithText("Keep active")
+        val link = compose.onNodeWithText("Background & running conditions")
+        assertTrue(toggle.fetchSemanticsNode().boundsInRoot.bottom <= link.fetchSemanticsNode().boundsInRoot.top)
+        toggle.performTouchInput { click() }
+        assertEquals(1, toggled)
+        assertEquals(0, opened)
+
+        link.performTouchInput { click() }
         assertEquals(1, opened)
+        assertEquals(1, toggled)
     }
 
     @Test

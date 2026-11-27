@@ -32,7 +32,7 @@ import org.jetbrains.compose.resources.stringResource
  *
  * [content] receives the padding that keeps it clear of the bar and the system bars. It is drawn
  * inside the [GlassBackground], so page-level overlays (`GlassSnackbarHost`, `CapsuleDialog` …)
- * can be placed anywhere in it.
+ * can be placed anywhere in it. The overload with an overlay slot also accepts overlays alongside the page content.
  */
 @Composable
 fun GlassPageScaffold(
@@ -41,6 +41,17 @@ fun GlassPageScaffold(
     modifier: Modifier = Modifier,
     actions: @Composable RowScope.() -> Unit = {},
     scrolled: Boolean = false,
+    content: @Composable (PaddingValues) -> Unit,
+) = GlassPageScaffold(title, onBackClick, modifier, actions, scrolled, overlay = {}, content = content)
+
+@Composable
+fun GlassPageScaffold(
+    title: String,
+    onBackClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    actions: @Composable RowScope.() -> Unit = {},
+    scrolled: Boolean = false,
+    overlay: @Composable () -> Unit,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     GlassBackground(modifier = modifier) {
@@ -66,5 +77,6 @@ fun GlassPageScaffold(
         ) { padding ->
             ScreenContent { content(padding) }
         }
+        overlay()
     }
 }

@@ -30,6 +30,7 @@ import androidx.core.content.getSystemService
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import cameragps.sharednew.generated.resources.Res
+import cameragps.sharednew.generated.resources.device_pairing_unavailable
 import cameragps.sharednew.generated.resources.dismiss_button
 import cameragps.sharednew.generated.resources.guide_open_button
 import cameragps.sharednew.generated.resources.m2_error_24px
@@ -86,10 +87,10 @@ fun CameraDeviceManager(
 
     var associatedDevices by remember {
         mutableStateOf(
-            if (SCREENSHOT_MODE) {
-                mockDevices
-            } else {
-                deviceManager!!.getAssociatedDevices(adapter!!)
+            when {
+                SCREENSHOT_MODE -> mockDevices
+                deviceManager != null && adapter != null -> deviceManager.getAssociatedDevices(adapter)
+                else -> emptyList()
             }
         )
     }
@@ -168,11 +169,11 @@ fun CameraDeviceManager(
     }
 
     LaunchedEffect(lifecycleState) {
-        if (SCREENSHOT_MODE) return@LaunchedEffect
+        if (SCREENSHOT_MODE || deviceManager == null || adapter == null) return@LaunchedEffect
         when (lifecycleState) {
             Lifecycle.State.RESUMED -> {
-                associatedDevices = deviceManager!!.getAssociatedDevices(adapter!!)
-                isBluetoothEnabled = adapter.isEnabled == true
+                associatedDevices = deviceManager.getAssociatedDevices(adapter)
+                isBluetoothEnabled = adapter.isEnabled
                 isLocationEnabled =
                     locationManager?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true ||
                             locationManager?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true
@@ -191,7 +192,11 @@ fun CameraDeviceManager(
     }
 
     if (deviceManager == null || adapter == null) {
-        Text(text = "No Companion device manager found. The device does not support it.")
+        Text(
+            text = stringResource(Res.string.device_pairing_unavailable),
+            style = AlphaType.Body,
+            color = AlphaTheme.colors.textSecondary,
+        )
     } else {
         // Shared by the detail screen's Remove button and the list's swipe-to-delete
         val disassociateDevice: (AssociatedDeviceCompat) -> Unit = { device ->

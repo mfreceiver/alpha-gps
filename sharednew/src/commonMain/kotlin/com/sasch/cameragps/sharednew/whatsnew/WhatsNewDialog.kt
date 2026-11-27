@@ -3,7 +3,6 @@ package com.sasch.cameragps.sharednew.whatsnew
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -20,6 +19,7 @@ import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleDialog
 import com.sasch.cameragps.sharednew.ui.components.glass.DialogAction
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsNavRow
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
+import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -33,15 +33,16 @@ fun WhatsNewDialog(release: ReleaseNotes, onDismiss: () -> Unit) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(
                 stringResource(Res.string.whats_new_version, release.version),
-                style = MaterialTheme.typography.titleSmall,
-                color = AlphaTheme.colors.primary,
+                style = AlphaType.Label,
+                color = AlphaTheme.colors.accent,
             )
             release.highlights.forEach { highlight ->
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("•", color = AlphaTheme.colors.onSurface)
+                    Text("•", style = AlphaType.Body, color = AlphaTheme.colors.textSecondary)
                     Text(
                         stringResource(highlight),
-                        color = AlphaTheme.colors.onSurface,
+                        style = AlphaType.Body,
+                        color = AlphaTheme.colors.textPrimary,
                         modifier = Modifier.weight(1f),
                     )
                 }

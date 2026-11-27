@@ -330,7 +330,6 @@
     <string name="wifi_remote_viewer_transfer_wait">请完成或取消下载后，再加载更多照片。</string>
     <string name="wifi_remote_selection_count">已选 %1$d 张</string>
     <string name="wifi_remote_selection_clear">取消选择</string>
-    <string name="wifi_remote_selection_count_other_dates">已选 %1$d 张（含其它日期）</string>
     <string name="wifi_remote_dates_loading">正在读取照片目录…</string>
     <string name="wifi_remote_dates_empty">相机上没有支持的照片。</string>
     <string name="wifi_remote_dates_unknown">未知日期</string>
@@ -344,7 +343,7 @@
     <string name="wifi_remote_browser_hint">将原始 JPEG、RAW 和 HEIF 文件下载到手机相册。较新的相机仅浏览卡槽 1。相机上的文件会保留。请在下载完成前保持此页面打开。</string>
     <string name="wifi_remote_browser_loading">正在读取相机照片…</string>
     <string name="wifi_remote_browser_failed">无法读取相机照片或切换传输模式。请重试；如果相机正忙，请断开连接后重新连接。</string>
-    <string name="wifi_remote_browser_empty">此页没有支持的照片。</string>
+    <string name="wifi_remote_browser_empty">该日期下没有支持的照片。</string>
     <string name="wifi_remote_browser_refresh">刷新</string>
     <string name="wifi_remote_download">下载</string>
     <string name="wifi_remote_download_saved">已保存</string>
@@ -698,7 +697,7 @@
     <string name="remote_ble_failed_disconnected">蓝牙已断开。</string>
     <string name="remote_ble_failed_timeout">相机响应超时。</string>
     <string name="remote_gps_restored">位置联动已恢复</string>
-    <string name="remote_gps_disabled_by_camera">相机仍未恢复位置联动，请在相机关闭蓝牙遥控后恢复。</string>
+    <string name="remote_gps_disabled_by_camera">请关闭相机上的蓝牙遥控以恢复位置联动。</string>
     <string name="remote_wifi_switch_title">切换到遥控拍摄？</string>
     <string name="remote_wifi_switch_message">将结束当前照片浏览连接，并重新连接用于遥控拍摄。</string>
     <string name="remote_wifi_switch_confirm">切换</string>
@@ -714,4 +713,12 @@
     <string name="remote_wifi_capture_confirmed">相机已确认拍摄。</string>
     <string name="remote_wifi_capture_uncertain">拍摄结果未确认，请检查相机。</string>
     <string name="remote_wifi_capture_unsupported">当前无法使用 Wi-Fi 快门。</string>
+    <string name="wifi_remote_selection_other_dates">含其他日期</string>
+    <string name="wifi_remote_batch_download_raw">下载 %1$d 张 RAW（%2$s）</string>
+    <string name="wifi_remote_browser_show_all">显示全部照片</string>
+    <string name="d1_tile_limit_short">超限</string>
+    <string name="mw_options_grid_size">网格大小</string>
+    <string name="mw_options_labels">照片标签</string>
+    <string name="mw_options_filter">筛选</string>
+    <string name="device_pairing_unavailable">此设备不支持配对相机。</string>
 </resources>

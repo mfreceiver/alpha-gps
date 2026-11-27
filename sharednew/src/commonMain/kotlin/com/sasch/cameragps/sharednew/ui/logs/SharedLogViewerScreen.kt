@@ -154,8 +154,29 @@ fun SharedLogViewerScreen(
                 onClick = { showClearConfirm = true },
             )
         },
+        overlay = {
+            GlassSnackbarHost(snackbar)
+            if (showClearConfirm) {
+                CapsuleDialog(
+                    onDismissRequest = { showClearConfirm = false },
+                    title = clearLabel,
+                    message = stringResource(Res.string.m9_logs_clear_confirm),
+                    confirm = DialogAction(
+                        label = clearLabel,
+                        onClick = {
+                            showClearConfirm = false
+                            scope.launch { logRepository.clearAllLogs() }
+                        },
+                    ),
+                    dismiss = DialogAction(
+                        label = stringResource(Res.string.cancel_button),
+                        onClick = { showClearConfirm = false },
+                    ),
+                    destructive = true,
+                )
+            }
+        },
     ) { paddingValues ->
-        GlassSnackbarHost(snackbar)
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -199,25 +220,6 @@ fun SharedLogViewerScreen(
         }
     }
 
-    if (showClearConfirm) {
-        CapsuleDialog(
-            onDismissRequest = { showClearConfirm = false },
-            title = clearLabel,
-            message = stringResource(Res.string.m9_logs_clear_confirm),
-            confirm = DialogAction(
-                label = clearLabel,
-                onClick = {
-                    showClearConfirm = false
-                    scope.launch { logRepository.clearAllLogs() }
-                },
-            ),
-            dismiss = DialogAction(
-                label = stringResource(Res.string.cancel_button),
-                onClick = { showClearConfirm = false },
-            ),
-            destructive = true,
-        )
-    }
 }
 
 /** Compact "Log level  INFO ⌄" row opening an in-page menu of [logLevelOptions]. */

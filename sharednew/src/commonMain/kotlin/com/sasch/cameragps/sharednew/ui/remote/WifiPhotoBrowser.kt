@@ -9,9 +9,9 @@ import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
@@ -19,16 +19,17 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,27 +39,30 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
@@ -70,13 +74,16 @@ import cameragps.sharednew.generated.resources.close_24px
 import cameragps.sharednew.generated.resources.dismiss_button
 import cameragps.sharednew.generated.resources.download_24px
 import cameragps.sharednew.generated.resources.wifi_remote_batch_download_jpg
+import cameragps.sharednew.generated.resources.wifi_remote_batch_download_raw
 import cameragps.sharednew.generated.resources.wifi_remote_batch_download_none
 import cameragps.sharednew.generated.resources.wifi_remote_batch_download_size
 import cameragps.sharednew.generated.resources.search_24px
 import cameragps.sharednew.generated.resources.m2_warning_24px
+import cameragps.sharednew.generated.resources.mw_dates_reload
 import cameragps.sharednew.generated.resources.b1_tile_size
 import cameragps.sharednew.generated.resources.b1_tile_size_not_downloaded
 import cameragps.sharednew.generated.resources.wifi_remote_browser_all_saved
+import cameragps.sharednew.generated.resources.wifi_remote_browser_show_all
 import cameragps.sharednew.generated.resources.wifi_remote_browser_empty
 import cameragps.sharednew.generated.resources.wifi_remote_browser_failed
 import cameragps.sharednew.generated.resources.wifi_remote_batch_skip_hint
@@ -90,6 +97,7 @@ import cameragps.sharednew.generated.resources.r_tile_size_not_downloaded_raw
 import cameragps.sharednew.generated.resources.wifi_remote_skip_saved
 import cameragps.sharednew.generated.resources.wifi_remote_skip_too_large
 import cameragps.sharednew.generated.resources.d1_tile_too_large
+import cameragps.sharednew.generated.resources.d1_tile_limit_short
 import cameragps.sharednew.generated.resources.d1_tile_saved
 import cameragps.sharednew.generated.resources.wifi_remote_conversion_failed
 import cameragps.sharednew.generated.resources.wifi_remote_converting_jpeg
@@ -128,15 +136,17 @@ import com.sasch.cameragps.sharednew.ui.components.glass.GlassCheckbox
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassTileAction
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressCircle
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressLinear
-import com.sasch.cameragps.sharednew.ui.components.glass.glassCheckboxColors
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleSize
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassFloatingBar
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
+import com.sasch.cameragps.sharednew.ui.components.glass.rememberGlassSnackbarHostState
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassSnackbarHost
 import com.sasch.cameragps.sharednew.ui.components.glass.InfoTag
 import com.sasch.cameragps.sharednew.ui.components.glass.InfoTagStyle
 import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.sasch.cameragps.sharednew.ui.theme.AlphaType
+import com.sasch.cameragps.sharednew.ui.theme.GlassLevel
 import cameragps.sharednew.generated.resources.wifi_remote_back_busy
 import cameragps.sharednew.generated.resources.wifi_remote_batch_retry_failed
 import kotlinx.coroutines.delay
@@ -150,6 +160,7 @@ internal fun WifiPhotoBrowser(
     onDownload: (List<WifiPhotoDownload>) -> Unit,
     downloadFormat: WifiDownloadFormatSetting = WifiDownloadFormatSetting.Default,
     gridOptions: WifiGridOptions = WifiGridOptions(),
+    onGridOptionsChange: (WifiGridOptions) -> Unit,
 ) {
     val controller = viewModel.controller
     val identifier = viewModel.identifier
@@ -183,25 +194,22 @@ internal fun WifiPhotoBrowser(
             gridDay = browser.dateKey
         }
     }
-    // The grid reports where the user is looking so the thumbnail loader serves that area first.
-    // A header item (error/empty text) shifts the capture indices by one.
-    val headerItems = if (browser.failed || captures.isEmpty()) 1 else 0
-    val datesScreen = browser.dateKey == null
+    val dateKey = browser.dateKey
+    val datesScreen = dateKey == null
+    val showGrid = !datesScreen && !browser.failed && captures.isNotEmpty()
     // Long-press-and-drag range selection. The pointer handler is keyed on the day, never on the
     // selection, and reads the live day through rememberUpdatedState.
     val latestCaptures by rememberUpdatedState(captures)
-    val latestHeader by rememberUpdatedState(headerItems)
     val density = LocalDensity.current
     val haptics = LocalHapticFeedback.current
     val actionPx = with(density) { TileActionSize.toPx() }
     val drag = remember { RangeDragState() }
     var dragActive by remember { mutableStateOf(false) }
-    val gestureEnabled = !busy && !datesScreen
+    val gestureEnabled = !busy && showGrid
     fun visibleTiles(): List<TileBounds> = gridState.layoutInfo.visibleItemsInfo
-        .filter { it.index >= latestHeader }
         .map {
             TileBounds(
-                it.index - latestHeader, it.offset.x.toFloat(), it.offset.y.toFloat(),
+                it.index, it.offset.x.toFloat(), it.offset.y.toFloat(),
                 it.size.width.toFloat(), it.size.height.toFloat()
             )
         }
@@ -228,16 +236,16 @@ internal fun WifiPhotoBrowser(
         }
     }
     val actionsEnabled = !busy && !dragActive
-    // A day loads only what the viewport shows: the visible captures (stable keys, header
-    // filtered out) plus two rows of margin; scrolling replaces the demand, so requests for tiles
+    // A day loads only what the viewport shows: the visible captures plus two rows of margin.
+    // Scrolling replaces the demand, so requests for tiles
     // that scrolled away are dropped before they reach the camera. The report is tied to the
     // page revision, so a layout of an earlier day can never steer the loader of the current one.
-    LaunchedEffect(gridState, headerItems, browser.pageRevision, captures, datesScreen) {
+    LaunchedEffect(gridState, browser.pageRevision, captures, datesScreen, showGrid) {
         if (datesScreen) return@LaunchedEffect
         snapshotFlow {
-            val items = gridState.layoutInfo.visibleItemsInfo.filter { it.index >= headerItems }
+            val items = if (showGrid) gridState.layoutInfo.visibleItemsInfo else emptyList()
             val firstRow = items.minOfOrNull { it.offset.y }
-            items.map { it.index - headerItems } to items.count { it.offset.y == firstRow }
+            items.map { it.index } to items.count { it.offset.y == firstRow }
         }.distinctUntilChanged().collect { (visible, columns) ->
             val window = thumbnailWindow(visible, columns, captures.size)
             controller.requestThumbnails(
@@ -258,9 +266,23 @@ internal fun WifiPhotoBrowser(
     // always shows its own status instead.
     val showSummary = summary != null && shouldShowBatchSummary(viewModel.batchSummarySettled(), transfer)
     val showTransfer = transfer.busy || transfer.status != WifiImageTransferStatus.Idle
+    val dismissResult = {
+        viewModel.recordBatchSummary(null)
+        viewModel.dismissTransferResult()
+    }
     val bottomBar = !datesScreen && (selecting || showSummary || showTransfer)
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    Box(Modifier.fillMaxSize()) {
+    val snackbar = rememberGlassSnackbarHostState()
+    val backBlockedMessage = stringResource(Res.string.wifi_remote_back_busy)
+    LaunchedEffect(viewModel.backBlockedNotice, backBlockedMessage) {
+        if (viewModel.backBlockedNotice) {
+            snackbar.show(backBlockedMessage)
+            viewModel.dismissBackBlockedNotice()
+        }
+    }
+    var footerHeightPx by remember { mutableIntStateOf(0) }
+    val footerHeight = if (bottomBar) with(density) { footerHeightPx.toDp() } else 0.dp
+    BoxWithConstraints(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             // One thin progress line for everything that is loading: the catalog or the thumbnails.
             // An active transfer takes precedence — the thumbnail loader is held during it anyway.
@@ -269,19 +291,7 @@ internal fun WifiPhotoBrowser(
                     GlassProgressLinear(Modifier.fillMaxWidth())
                 }
             }
-            if (viewModel.backBlockedNotice) {
-                Text(
-                    stringResource(Res.string.wifi_remote_back_busy),
-                    style = AlphaType.Caption,
-                    color = AlphaTheme.colors.danger,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                )
-                LaunchedEffect(Unit) {
-                    delay(BackNoticeMillis)
-                    viewModel.dismissBackBlockedNotice()
-                }
-            }
-            if (datesScreen) {
+            if (dateKey == null) {
                 WifiPhotoDateList(
                     browser, enabled = !busy,
                     onOpen = viewModel::openDate,
@@ -290,6 +300,39 @@ internal fun WifiPhotoBrowser(
                     coverThumbnails = coverThumbnails,
                     onVisibleCovers = { gen, handles -> controller.requestDateCovers(identifier, gen, handles) },
                 )
+            } else if (!showGrid) {
+                CenteredMessage(
+                    modifier = Modifier.weight(1f).padding(
+                        bottom = (footerHeight - navBottom).coerceAtLeast(0.dp)
+                    ),
+                ) {
+                    if (browser.failed || !browser.loading) {
+                        val allSaved = !browser.failed && gridOptions.onlyUnsaved && allCaptures.isNotEmpty()
+                        PhotoBrowserMessage(
+                            message = stringResource(
+                                when {
+                                    browser.failed -> Res.string.wifi_remote_browser_failed
+                                    allSaved -> Res.string.wifi_remote_browser_all_saved
+                                    else -> Res.string.wifi_remote_browser_empty
+                                },
+                            ),
+                            isError = browser.failed,
+                            actionLabel = when {
+                                browser.failed -> stringResource(Res.string.mw_dates_reload)
+                                allSaved -> stringResource(Res.string.wifi_remote_browser_show_all)
+                                else -> null
+                            },
+                            actionEnabled = !busy,
+                            onAction = {
+                                if (browser.failed) {
+                                    controller.browseDate(identifier, dateKey, expectedRevision = browser.pageRevision)
+                                } else {
+                                    onGridOptionsChange(gridOptions.copy(onlyUnsaved = false))
+                                }
+                            },
+                        )
+                    }
+                }
             } else {
                 val tileShape = RoundedCornerShape(gridSize.cornerDp.dp)
                 LazyVerticalGrid(
@@ -336,29 +379,12 @@ internal fun WifiPhotoBrowser(
                     ),
                     contentPadding = PaddingValues(
                         start = GridMargin, end = GridMargin, top = 4.dp,
-                        // Room for the floating download bar so the last row stays reachable.
-                        bottom = (if (bottomBar) FloatingBarSpace else 8.dp) + navBottom,
+                        // The footer already includes the navigation inset.
+                        bottom = maxOf(footerHeight, navBottom) + 8.dp,
                     ),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    if (headerItems > 0) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            Text(
-                                stringResource(
-                                    when {
-                                        browser.failed -> Res.string.wifi_remote_browser_failed
-                                        gridOptions.onlyUnsaved && allCaptures.isNotEmpty() ->
-                                            Res.string.wifi_remote_browser_all_saved
-                                        else -> Res.string.wifi_remote_browser_empty
-                                    }
-                                ),
-                                style = AlphaType.Body,
-                                color = if (browser.failed) AlphaTheme.colors.danger else AlphaTheme.colors.textSecondary,
-                                modifier = Modifier.padding(16.dp).alpha(if (browser.failed || !browser.loading) 1f else 0f),
-                            )
-                        }
-                    }
                     items(captures, key = { it.id }) { capture ->
                         PhotoGridTile(
                             capture = capture,
@@ -381,12 +407,15 @@ internal fun WifiPhotoBrowser(
         if (bottomBar) {
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .heightIn(max = maxHeight * 0.65f)
+                    .onSizeChanged { footerHeightPx = it.height }
                     .background(
                         Brush.verticalGradient(
                             listOf(Color.Transparent, AlphaTheme.colors.scrim.copy(alpha = 0.28f))
                         )
                     )
-                    .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 16.dp + navBottom),
+                    .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp + navBottom)
+                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -413,17 +442,17 @@ internal fun WifiPhotoBrowser(
                                 painterResource(Res.drawable.close_24px),
                                 contentDescription = stringResource(Res.string.wifi_remote_transfer_cancel),
                                 onClick = { controller.cancelPhotoOperation(identifier) },
-                            ) else if (!selecting) GlassIconButton(
+                            ) else GlassIconButton(
                                 painterResource(Res.drawable.close_24px),
                                 contentDescription = stringResource(Res.string.dismiss_button),
-                                onClick = { viewModel.dismissTransferResult() },
+                                onClick = dismissResult,
                             )
                         }
                     }
                     showSummary -> GlassFloatingBar(
-                        Modifier.widthIn(max = 480.dp),
+                        Modifier.widthIn(max = 480.dp).fillMaxWidth(),
                         shape = AlphaShapes.row,
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+                        contentPadding = PaddingValues(start = 20.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
                     ) {
                         Text(
                             if (summary.skippedCount == 0) stringResource(
@@ -433,21 +462,36 @@ internal fun WifiPhotoBrowser(
                                 summary.skippedCount, skipReasonsText(summary.skipped)
                             ),
                             style = AlphaType.Body,
-                            color = AlphaTheme.colors.textPrimary,
+                            color = if (summary.downloaded > 0) AlphaTheme.colors.success else AlphaTheme.colors.textSecondary,
+                            modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
+                        )
+                        GlassIconButton(
+                            painterResource(Res.drawable.close_24px),
+                            contentDescription = stringResource(Res.string.dismiss_button),
+                            onClick = dismissResult,
                         )
                     }
                 }
                 if (selecting && !transfer.busy) {
                     // Under "ask each time" the skips depend on the format: the chooser lists them.
-                    if (policy != null && plan.skippedCount > 0) Text(
-                        stringResource(
-                            Res.string.wifi_remote_batch_skip_hint,
-                            plan.skippedCount, skipReasonsText(plan.skipped)
-                        ),
-                        style = AlphaType.Caption,
-                        color = AlphaTheme.colors.textPrimary,
-                        textAlign = TextAlign.Center,
-                    )
+                    if (policy != null && plan.skippedCount > 0) {
+                        GlassFloatingBar(
+                            Modifier.widthIn(max = 480.dp),
+                            level = GlassLevel.Viewer,
+                            shape = AlphaShapes.row,
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        ) {
+                            Text(
+                                stringResource(
+                                    Res.string.wifi_remote_batch_skip_hint,
+                                    plan.skippedCount, skipReasonsText(plan.skipped),
+                                ),
+                                style = AlphaType.Caption,
+                                color = AlphaTheme.colors.onPhotoSecondary,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
                     // A plan with nothing in it stays tappable: the tap records the
                     // "downloaded 0, skipped N" result instead of doing nothing.
                     // The glass primary capsule floats on its own: no extra bar ring around it and no
@@ -461,6 +505,10 @@ internal fun WifiPhotoBrowser(
                             policy == WifiFormatPolicy.JpegOnly -> stringResource(
                                 Res.string.wifi_remote_batch_download_jpg,
                                 plan.files.size, formatByteSize(plan.totalBytes)
+                            )
+                            policy == WifiFormatPolicy.RawOnly -> stringResource(
+                                Res.string.wifi_remote_batch_download_raw,
+                                plan.files.size, formatByteSize(plan.totalBytes),
                             )
                             else -> stringResource(
                                 Res.string.wifi_remote_batch_download_size,
@@ -485,6 +533,8 @@ internal fun WifiPhotoBrowser(
             }
         }
     }
+    // Keep the transient notice above the footer so dismiss/cancel stays available.
+    GlassSnackbarHost(snackbar, Modifier.padding(bottom = (footerHeight - navBottom - 16.dp).coerceAtLeast(0.dp)))
     // The batch format chooser (in-page dialog). It follows the live selection and closes by itself
     // when there is no longer anything to ask about (selection ended, a transfer started, setting changed).
     val askOpen = askingBatchFormat && policy == null && selecting && !busy && !transfer.busy && plan.files.isNotEmpty()
@@ -577,12 +627,18 @@ private fun PhotoGridTile(
                         style = InfoTagStyle.OnPhoto,
                         icon = painterResource(Res.drawable.check_24px),
                     )
-                    WifiSkipReason.TooLarge -> InfoTag(
-                        stringResource(Res.string.d1_tile_too_large),
-                        modifier = Modifier.align(tileCorner(TileElement.SizeTag).alignment).padding(inset),
-                        style = InfoTagStyle.OnPhoto,
-                        icon = painterResource(Res.drawable.m2_warning_24px),
-                    )
+                    WifiSkipReason.TooLarge -> {
+                        val description = stringResource(Res.string.d1_tile_too_large)
+                        InfoTag(
+                            stringResource(Res.string.d1_tile_limit_short),
+                            modifier = Modifier.align(tileCorner(TileElement.SizeTag).alignment)
+                                .padding(start = TileActionSize, end = inset, top = inset)
+                                .widthIn(max = 64.dp)
+                                .clearAndSetSemantics { contentDescription = description },
+                            style = InfoTagStyle.OnPhoto,
+                            contentColor = AlphaTheme.colors.onPhotoWarning,
+                        )
+                    }
                     else -> formatSizeTag(size.bytes)?.takeIf { policy != null }?.let { text ->
                         val description = stringResource(
                             when (size.reason) {
@@ -666,14 +722,8 @@ internal fun skipReasonsText(skipped: Map<WifiSkipReason, Int>): String =
         )
     }.joinToString(" · ")
 
-/** How long the "can't go back right now" hint stays visible. */
-private const val BackNoticeMillis = 3_000L
-
 /** Outer margin of the day grid (design v3: tiles nearly edge to edge). */
 private val GridMargin = 6.dp
-
-/** Bottom room kept free under the grid for the floating download bar (56 dp + gaps). */
-private val FloatingBarSpace = 96.dp
 
 /** Mutable state of the running drag selection (pointer position, session and range end). */
 private class RangeDragState {
@@ -718,7 +768,15 @@ private fun PhotoTile(image: ImageBitmap?, loading: Boolean) {
 }
 
 @Composable
-internal fun PhotoTransferStatus(transfer: WifiImageTransferState) {
+private fun PhotoTransferStatus(transfer: WifiImageTransferState) {
+    val colors = AlphaTheme.colors
+    val statusColor = when (transfer.status) {
+        WifiImageTransferStatus.Saved -> colors.success
+        WifiImageTransferStatus.Failed,
+        WifiImageTransferStatus.ConversionFailed,
+        WifiImageTransferStatus.PermissionDenied -> colors.danger
+        else -> colors.textSecondary
+    }
     if (transfer.totalFiles > 1) {
         Text(
             stringResource(
@@ -726,23 +784,24 @@ internal fun PhotoTransferStatus(transfer: WifiImageTransferState) {
                 transfer.completedFiles,
                 transfer.totalFiles
             ),
-            style = AlphaType.Label, color = AlphaTheme.colors.textPrimary,
+            style = AlphaType.Label, color = colors.textPrimary,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
         )
     }
     when (transfer.status) {
         WifiImageTransferStatus.Downloading -> {
-            StatusText(stringResource(Res.string.wifi_remote_transfer_progress, transfer.filename))
+            StatusText(stringResource(Res.string.wifi_remote_transfer_progress, transfer.filename), statusColor)
             GlassProgressLinear(
                 Modifier.fillMaxWidth(),
                 progress = if (transfer.totalBytes > 0) transfer.bytesReceived.toFloat() / transfer.totalBytes else 0f,
             )
         }
         WifiImageTransferStatus.Converting -> {
-            StatusText(stringResource(Res.string.wifi_remote_converting_jpeg))
+            StatusText(stringResource(Res.string.wifi_remote_converting_jpeg), statusColor)
             GlassProgressLinear(Modifier.fillMaxWidth())
         }
-        WifiImageTransferStatus.ConversionFailed -> StatusText(stringResource(Res.string.wifi_remote_conversion_failed))
-        WifiImageTransferStatus.Saved -> StatusText(stringResource(Res.string.wifi_remote_transfer_saved, transfer.filename))
+        WifiImageTransferStatus.ConversionFailed -> StatusText(stringResource(Res.string.wifi_remote_conversion_failed), statusColor)
+        WifiImageTransferStatus.Saved -> StatusText(stringResource(Res.string.wifi_remote_transfer_saved, transfer.filename), statusColor)
         WifiImageTransferStatus.Failed -> Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             StatusText(
                 stringResource(
@@ -753,7 +812,8 @@ internal fun PhotoTransferStatus(transfer: WifiImageTransferState) {
                         WifiTransferFailureReason.Protocol -> Res.string.wifi_remote_transfer_failed_protocol
                         null, WifiTransferFailureReason.Unknown -> Res.string.wifi_remote_transfer_failed
                     }
-                )
+                ),
+                statusColor,
             )
             // Already-saved files are session-memory only: re-downloading after a reconnect
             // duplicates them, so connection-related failures warn about that explicitly.
@@ -766,16 +826,19 @@ internal fun PhotoTransferStatus(transfer: WifiImageTransferState) {
                 )
             }
         }
-        WifiImageTransferStatus.Cancelled -> StatusText(stringResource(Res.string.wifi_remote_transfer_cancelled))
-        WifiImageTransferStatus.PermissionDenied -> StatusText(stringResource(Res.string.wifi_remote_storage_permission))
+        WifiImageTransferStatus.Cancelled -> StatusText(stringResource(Res.string.wifi_remote_transfer_cancelled), statusColor)
+        WifiImageTransferStatus.PermissionDenied -> StatusText(stringResource(Res.string.wifi_remote_storage_permission), statusColor)
         WifiImageTransferStatus.Idle -> Unit
     }
 }
 
 /** One line of [PhotoTransferStatus] on the floating glass bar. */
 @Composable
-private fun StatusText(text: String) {
-    Text(text, style = AlphaType.Body, color = AlphaTheme.colors.textPrimary)
+private fun StatusText(text: String, color: Color) {
+    Text(
+        text, style = AlphaType.Body, color = color,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+    )
 }
 
 /**

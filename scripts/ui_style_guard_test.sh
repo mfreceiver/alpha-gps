@@ -8,7 +8,7 @@
 #   场景 6  --strict：基线非空 → 失败
 #   场景 7  --update-baseline：首次建立写入现状；之后拒绝上升、接受下降并重写
 #   场景 8  基线格式错误 / 未知参数 → rc=2
-#   场景 9  app/src/main/java/.../ui/ 同样受管；非 ui 目录（如 data/）不受管
+#   场景 9  app/src/main/java/.../ui/ 同样受管；非 ui 目录的 @Composable 亦受管
 #   场景 10 变异验证：去掉任一模式（只剩三种）时，对应的故意违规必须能被区分
 #   场景 11 扫描必须真实发生：ROOT 不是目录（/dev/null、不存在）、任一扫描目录缺失、
 #           受管 *.kt 为 0 个、grep 出错（rc>1，经 PATH 注入返回 2 的 fake grep 确定性模拟，
@@ -35,7 +35,7 @@ APPUI=app/src/main/java/com/saschl/cameragps/ui
 # new_repo <name>：建骨架，返回根目录
 new_repo() {
   local r=$TMP/$1
-  mkdir -p "$r/$SN/ui/theme" "$r/$SN/ui/components/glass" "$r/$SN/ui/page" "$r/$SN/data" "$r/$APPUI" "$r/docs"
+  mkdir -p "$r/sharednew/src/androidMain/kotlin" "$r/$SN/whatsnew" "$r/$SN/ui/theme" "$r/$SN/ui/components/glass" "$r/$SN/ui/page" "$r/$SN/data" "$r/$APPUI" "$r/docs"
   printf 'package x\nval Ok = AlphaType.Body\n' > "$r/$SN/ui/components/glass/Clean.kt"
   printf 'package x\nval Hi = Color.White\nval T = Color(0xFF0B57D0)\nval S = TextStyle(fontSize = 15.sp)\n' > "$r/$SN/ui/theme/Tokens.kt"
   printf '# empty\n' > "$r/docs/ui-style-guard-baseline.txt"
@@ -115,7 +115,14 @@ printf 'package x\nval a = Color.White\n' > "$R/$APPUI/Screen.kt"
 guard "$R"; check "app ui/ 目录同样受管" rc_is 1
 R=$(new_repo data)
 printf 'package x\nval a = Color.White\n' > "$R/$SN/data/Model.kt"
-guard "$R"; check "非 ui 目录不受管" rc_is 0
+guard "$R"; check "非 ui 目录的普通 Kotlin 文件不受管" rc_is 0
+R=$(new_repo whatsnew)
+printf 'package x\n@Composable\nfun WhatsNewDialog() { val style = MaterialTheme.typography.titleSmall }\n' > "$R/$SN/whatsnew/WhatsNewDialog.kt"
+guard "$R" --strict; check "whatsnew 对话框的样式违规被 --strict 拒绝" rc_is 1
+check "  报告 whatsnew 对话框路径" err_has "whatsnew/WhatsNewDialog.kt"
+R=$(new_repo appoutside)
+printf 'package x\n@androidx.compose.runtime.Composable fun Screen() { val color = Color.White }\n' > "$R/${APPUI%/ui}/MainActivity.kt"
+guard "$R" --strict; check "app ui 外带限定名注解的页面同样受管" rc_is 1
 
 # 场景 10 变异验证：逐个删掉一种模式生成变异守卫，断言对应违规被漏检，原守卫才拒绝
 ALTS=('fontSize[[:space:]]*=' 'MaterialTheme\.typography' 'Color\.White' 'Color\(0x')

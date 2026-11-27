@@ -76,6 +76,7 @@ import com.sasch.cameragps.sharednew.ui.components.glass.isScrolledUnderTopBar
 import com.sasch.cameragps.sharednew.ui.components.page.GlassPageScaffold
 import com.sasch.cameragps.sharednew.ui.help.AlphaGpsLinks
 import com.sasch.cameragps.sharednew.ui.settings.SharedSettingsNavRow
+import com.sasch.cameragps.sharednew.ui.theme.AlphaDimens
 import com.sasch.cameragps.sharednew.ui.theme.AlphaTheme
 import com.sasch.cameragps.sharednew.ui.theme.AlphaType
 import com.saschl.cameragps.ui.about.AboutScreen
@@ -191,7 +192,10 @@ private fun HelpFaqScreen(
                 .padding(innerPadding),
             state = listState,
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp)
+            scrollbarGutter = 0.dp,
+            contentPadding = PaddingValues(
+                start = AlphaDimens.screenMargin, end = AlphaDimens.screenMargin, top = 8.dp, bottom = 32.dp,
+            ),
         ) {
             item {
                 SharedSettingsNavRow(

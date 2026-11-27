@@ -1,11 +1,17 @@
 package com.sasch.cameragps.sharednew.ui.remote
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -26,8 +32,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cameragps.sharednew.generated.resources.Res
+import cameragps.sharednew.generated.resources.m2_error_24px
 import cameragps.sharednew.generated.resources.mw_dates_reload
 import cameragps.sharednew.generated.resources.mw_photo_library_24px
 import cameragps.sharednew.generated.resources.mw_weekday_1
@@ -109,13 +117,12 @@ internal fun WifiPhotoDateList(
     val windowClass = currentWindowClass()
     when {
         browser.failed -> CenteredMessage(modifier) {
-            Text(
-                stringResource(Res.string.wifi_remote_browser_failed), textAlign = TextAlign.Center,
-                style = AlphaType.Body, color = AlphaTheme.colors.textSecondary
-            )
-            CapsuleButton(
-                text = stringResource(Res.string.mw_dates_reload), onClick = onRetry,
-                role = CapsuleRole.Tonal, enabled = !browser.loading,
+            PhotoBrowserMessage(
+                message = stringResource(Res.string.wifi_remote_browser_failed),
+                isError = true,
+                actionLabel = stringResource(Res.string.mw_dates_reload),
+                actionEnabled = enabled,
+                onAction = onRetry,
             )
         }
 
@@ -128,14 +135,7 @@ internal fun WifiPhotoDateList(
         }
 
         browser.dates.isEmpty() -> CenteredMessage(modifier) {
-            Icon(
-                painterResource(Res.drawable.mw_photo_library_24px), null,
-                tint = AlphaTheme.colors.textSecondary, modifier = Modifier.size(48.dp)
-            )
-            Text(
-                stringResource(Res.string.wifi_remote_dates_empty), textAlign = TextAlign.Center,
-                style = AlphaType.Body, color = AlphaTheme.colors.textSecondary
-            )
+            PhotoBrowserMessage(stringResource(Res.string.wifi_remote_dates_empty))
         }
 
         else -> {
@@ -153,11 +153,16 @@ internal fun WifiPhotoDateList(
             Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                 LazyVerticalGrid(
                     GridCells.Fixed(columns),
-                    Modifier.fillMaxSize().let {
+                    Modifier.let {
                         if (windowClass == WindowClass.NearSquare) it.widthIn(max = 640.dp) else it
-                    },
+                    }.fillMaxSize(),
                     state = gridState,
-                    contentPadding = PaddingValues(horizontal = AlphaDimens.screenMargin, vertical = 8.dp),
+                    contentPadding = PaddingValues(
+                        start = AlphaDimens.screenMargin,
+                        end = AlphaDimens.screenMargin,
+                        top = 8.dp,
+                        bottom = 8.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+                    ),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -222,18 +227,46 @@ private fun DateRow(
             }
             Text(
                 stringResource(Res.string.wifi_remote_dates_count, group.count),
-                style = AlphaType.Body, color = AlphaTheme.colors.textSecondary
+                style = AlphaType.Body, color = AlphaTheme.colors.textSecondary,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
     }
 }
 
 @Composable
-private fun CenteredMessage(modifier: Modifier, content: @Composable () -> Unit) {
-    Box(modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+internal fun CenteredMessage(modifier: Modifier, content: @Composable () -> Unit) {
+    Box(
+        modifier.fillMaxSize().navigationBarsPadding().padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
         Column(
+            Modifier.widthIn(max = 480.dp).verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) { content() }
+    }
+}
+
+@Composable
+internal fun PhotoBrowserMessage(
+    message: String,
+    isError: Boolean = false,
+    actionLabel: String? = null,
+    actionEnabled: Boolean = true,
+    onAction: () -> Unit = {},
+) {
+    Icon(
+        painterResource(if (isError) Res.drawable.m2_error_24px else Res.drawable.mw_photo_library_24px),
+        contentDescription = null,
+        tint = if (isError) AlphaTheme.colors.danger else AlphaTheme.colors.textSecondary,
+        modifier = Modifier.size(48.dp),
+    )
+    Text(
+        message, textAlign = TextAlign.Center,
+        style = AlphaType.Body, color = AlphaTheme.colors.textSecondary,
+    )
+    if (actionLabel != null) {
+        CapsuleButton(actionLabel, onAction, role = CapsuleRole.Tonal, enabled = actionEnabled)
     }
 }

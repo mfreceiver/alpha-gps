@@ -339,42 +339,44 @@ internal fun DeviceInfoDialog(
             }
 
             GlassInsetBlock(modifier = Modifier.fillMaxWidth()) {
-                // The whole row is the toggle (one target, one announcement); the switch only draws.
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.toggleable(
-                        value = keepActive,
-                        role = Role.Switch,
-                        onValueChange = onKeepActiveChange,
-                    ),
-                ) {
-                    Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // The whole row is the toggle (one target, one announcement); the switch only draws.
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().toggleable(
+                            value = keepActive,
+                            role = Role.Switch,
+                            onValueChange = onKeepActiveChange,
+                        ),
+                    ) {
+                        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text(
+                                stringResource(Res.string.device_info_keep_active),
+                                style = AlphaType.Label,
+                                color = colors.textPrimary,
+                            )
+                            Text(
+                                stringResource(Res.string.m2_info_keep_active_hint),
+                                style = AlphaType.Caption,
+                                color = colors.textSecondary,
+                            )
+                        }
+                        GlassSwitch(checked = keepActive, onCheckedChange = null)
+                    }
+                    if (onOpenBackgroundConditions != null) {
+                        // Its own target below the toggle row (so it never flips the switch); the text
+                        // wraps, so 200 % font scale grows the row instead of cutting the label.
                         Text(
-                            stringResource(Res.string.device_info_keep_active),
+                            stringResource(Res.string.bg_conditions_title),
                             style = AlphaType.Label,
-                            color = colors.textPrimary,
-                        )
-                        Text(
-                            stringResource(Res.string.m2_info_keep_active_hint),
-                            style = AlphaType.Caption,
-                            color = colors.textSecondary,
+                            color = colors.accent,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = AlphaDimens.minTouchTarget)
+                                .clickable(role = Role.Button, onClick = onOpenBackgroundConditions)
+                                .wrapContentHeight(Alignment.CenterVertically),
                         )
                     }
-                    GlassSwitch(checked = keepActive, onCheckedChange = null)
-                }
-                if (onOpenBackgroundConditions != null) {
-                    // Its own target below the toggle row (so it never flips the switch); the text
-                    // wraps, so 200 % font scale grows the row instead of cutting the label.
-                    Text(
-                        stringResource(Res.string.bg_conditions_title),
-                        style = AlphaType.Label,
-                        color = colors.accent,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = AlphaDimens.minTouchTarget)
-                            .clickable(role = Role.Button, onClick = onOpenBackgroundConditions)
-                            .wrapContentHeight(Alignment.CenterVertically),
-                    )
                 }
             }
 

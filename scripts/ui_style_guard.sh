@@ -4,6 +4,7 @@
 # 扫描范围（*.kt）：
 #   sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/
 #   app/src/main/java/com/saschl/cameragps/ui/
+#   app 和 sharednew 生产源码其它目录中含 @Composable 的文件
 # 豁免：token 文件目录 sharednew/.../ui/theme/（Type.kt / Color.kt / Glass.kt …，唯一允许写色值与字号的地方）。
 # 违规模式（按行计数）：`fontSize =`、`MaterialTheme.typography`、`Color.White`、`Color(0x`。
 #
@@ -28,6 +29,11 @@ SCAN_DIRS=(
   "sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui"
   "app/src/main/java/com/saschl/cameragps/ui"
 )
+COMPOSABLE_DIRS=(
+  "sharednew/src/commonMain/kotlin"
+  "sharednew/src/androidMain/kotlin"
+  "app/src/main/java"
+)
 EXEMPT_PREFIX="sharednew/src/commonMain/kotlin/com/sasch/cameragps/sharednew/ui/theme/"
 PATTERN='fontSize[[:space:]]*=|MaterialTheme\.typography|Color\.White|Color\(0x'
 
@@ -45,22 +51,34 @@ done
 # 扫描必须真实发生：根或任一扫描目录缺失、受管文件为 0、grep 出错（rc>1，如文件不可读）都是
 # 配置/扫描错误（rc=2），不能当作"无违规"放行。带 "# mut:" 标记的行由自测做删行变异验证。
 if [ ! -d "$ROOT" ]; then echo "ui_style_guard: 仓库根不是目录：$ROOT" >&2; exit 2; fi # mut:root
-for dir in "${SCAN_DIRS[@]}"; do
+for dir in "${SCAN_DIRS[@]}" "${COMPOSABLE_DIRS[@]}"; do
   if [ ! -d "$ROOT/$dir" ]; then echo "ui_style_guard: 扫描目录缺失：$ROOT/$dir" >&2; exit 2; fi # mut:dirs
 done
 
-# 受管文件清单（相对 ROOT，豁免 token 目录），按路径排序。
+# UI 目录全部受管。其它生产目录只加入带 @Composable 的文件，避免扩展到非 UI 代码。
+if ! LISTED=$(cd "$ROOT" && find "${COMPOSABLE_DIRS[@]}" -type f -name '*.kt' -print | LC_ALL=C sort); then
+  echo "ui_style_guard: 列举生产源码失败" >&2; exit 2
+fi
 FILES=()
-for dir in "${SCAN_DIRS[@]}"; do
-  if ! LISTED=$(cd "$ROOT" && find "$dir" -type f -name '*.kt' -print | LC_ALL=C sort); then
-    echo "ui_style_guard: 列举 $ROOT/$dir 失败" >&2; exit 2
+OTHER=()
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  case $f in
+    "$EXEMPT_PREFIX"*) continue ;;
+    "${SCAN_DIRS[0]}/"*|"${SCAN_DIRS[1]}/"*) FILES+=("$f") ;;
+    *) OTHER+=("$f") ;;
+  esac
+done <<< "$LISTED"
+if [ "${#OTHER[@]}" -gt 0 ]; then
+  COMPOSABLES=$(cd "$ROOT" && grep -lE -e '(^|[[:space:]])@(androidx\.compose\.runtime\.)?Composable([[:space:](]|$)' -- "${OTHER[@]}")
+  COMPOSABLE_RC=$?
+  if [ "$COMPOSABLE_RC" -gt 1 ]; then
+    echo "ui_style_guard: grep 检查 @Composable 出错（rc=$COMPOSABLE_RC）" >&2; exit 2
   fi
   while IFS= read -r f; do
-    [ -n "$f" ] || continue
-    case $f in "$EXEMPT_PREFIX"*) continue ;; esac
-    FILES+=("$f")
-  done <<< "$LISTED"
-done
+    [ -n "$f" ] && FILES+=("$f")
+  done <<< "$COMPOSABLES"
+fi
 SCANNED=${#FILES[@]}
 if [ "$SCANNED" -eq 0 ]; then echo "ui_style_guard: 扫描了 0 个文件（$ROOT 下没有受管的 *.kt），视为失败" >&2; exit 2; fi # mut:zero
 

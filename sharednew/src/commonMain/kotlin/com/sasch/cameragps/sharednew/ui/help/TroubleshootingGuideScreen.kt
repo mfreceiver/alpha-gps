@@ -247,12 +247,13 @@ fun TroubleshootingGuideContent(
 
     ScreenContent(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
         ScrollbarLazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(start = AlphaDimens.screenMargin),
+            modifier = Modifier.fillMaxSize(),
             state = listState,
             verticalArrangement = Arrangement.spacedBy(AlphaDimens.cardGap),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp),
+            scrollbarGutter = 0.dp,
+            contentPadding = PaddingValues(
+                start = AlphaDimens.screenMargin, end = AlphaDimens.screenMargin, top = 8.dp, bottom = 32.dp,
+            ),
         ) {
             item {
                 Text(

@@ -89,6 +89,7 @@ import com.sasch.cameragps.sharednew.bluetooth.status.SignalLevel
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleSize
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassWarningCard
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassCard
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressCircle
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressSize
@@ -230,7 +231,11 @@ fun DeviceDetailContent(
                 timeSync = live?.timeSync?.outcome,
                 weakSignal = isSignalWeak(live?.rssiDbm, live?.rssiAtMillis, now),
                 bleFailure = session?.failure ?: live?.lastFailure,
-            ),
+            ).let { alert ->
+                if (alert == StatusCardAlert.LocationDisabledByCamera && recovery == GpsRecoveryStatus.DisabledByCamera) {
+                    StatusCardAlert.None
+                } else alert
+            },
             live = live,
             phoneFix = phoneFix,
             nowMillis = now,
@@ -241,22 +246,13 @@ fun DeviceDetailContent(
     }
     val recoveryNotice: @Composable () -> Unit = {
         if (recovery == GpsRecoveryStatus.DisabledByCamera) {
-            GlassCard(Modifier.fillMaxWidth()) {
-                Text(
-                    stringResource(Res.string.remote_gps_disabled_by_camera),
-                    style = AlphaType.Caption,
-                    color = AlphaTheme.colors.warningText,
-                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                )
-                if (onOpenTroubleshooting != null) {
-                    CapsuleButton(
-                        text = stringResource(Res.string.q_alert_open_guide),
-                        onClick = { onOpenTroubleshooting(GuideTopic.Remote) },
-                        role = CapsuleRole.Tonal,
-                        size = CapsuleSize.Small,
-                    )
-                }
-            }
+            GlassWarningCard(
+                title = stringResource(Res.string.q_alert_location_disabled),
+                message = stringResource(Res.string.remote_gps_disabled_by_camera),
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                actionLabel = stringResource(Res.string.q_alert_open_guide),
+                onAction = onOpenTroubleshooting?.let { openGuide -> { openGuide(GuideTopic.Remote) } },
+            )
         }
     }
     // Bottom actions: "Photo transfer" (primary) with "Remote shooting" (secondary) at the same level.
@@ -353,78 +349,85 @@ private fun DeviceStatusCard(
     onOpenTroubleshooting: ((GuideTopic) -> Unit)?,
 ) {
     val colors = AlphaTheme.colors
+    val battery = batteryDisplay(live?.battery, nowMillis)
+    val connected = trailing == ConnectionCardTrailing.ConnectedIndicator
+    val actionBelowHeader = !connected && battery is BatteryDisplay.Value
     GlassCard(Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            val title = stringResource(
-                when (headline) {
-                    ConnectionHeadline.Connected -> Res.string.m2_bt_connected
-                    ConnectionHeadline.Connecting -> Res.string.m2_bt_connecting
-                    ConnectionHeadline.Disconnecting -> Res.string.m2_bt_disconnecting
-                    ConnectionHeadline.Disconnected -> Res.string.m2_bt_disconnected
-                },
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                stringResource(
+                    when (headline) {
+                        ConnectionHeadline.Connected -> Res.string.m2_bt_connected
+                        ConnectionHeadline.Connecting -> Res.string.m2_bt_connecting
+                        ConnectionHeadline.Disconnecting -> Res.string.m2_bt_disconnecting
+                        ConnectionHeadline.Disconnected -> Res.string.m2_bt_disconnected
+                    },
+                ),
+                style = AlphaType.Heading,
+                color = colors.textPrimary,
+                modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
             )
-            val alertText = statusCardAlertText(alert)
-            Column(
-                Modifier
-                    .weight(1f)
-                    .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                Text(title, style = AlphaType.Heading, color = colors.textPrimary)
-                if (alertText != null) {
-                    Text(
-                        alertText,
-                        style = AlphaType.Caption,
-                        color = statusToneColor(statusCardAlertTone(alert), colors),
-                    )
-                    // Alerts the guide can explain link straight to the matching section.
-                    val topic = statusCardAlertTopic(alert)
-                    if (topic != null && onOpenTroubleshooting != null) {
-                        CapsuleButton(
-                            text = stringResource(Res.string.q_alert_open_guide),
-                            onClick = { onOpenTroubleshooting(topic) },
-                            role = CapsuleRole.Tonal,
-                            size = CapsuleSize.Small,
-                        )
-                    }
-                }
-            }
-            Row(
-                Modifier.padding(start = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                val battery = batteryDisplay(live?.battery, nowMillis)
-                if (battery is BatteryDisplay.Value) BatteryBlock(battery)
-                val connected = trailing == ConnectionCardTrailing.ConnectedIndicator
-                BluetoothSignalRing(
-                    connected = connected,
-                    level = if (connected && live?.connected == true) live.signalLevel else SignalLevel.Unknown,
-                    stale = isRssiStale(live?.rssiAtMillis, nowMillis),
-                )
-                // The two actions the page needs stay here; a connected link is a state, not a button
-                // (the manual disconnect lives in Ⓘ).
-                when (trailing) {
-                    ConnectionCardTrailing.ConnectedIndicator -> Unit
-                    ConnectionCardTrailing.CancelConnecting -> CapsuleButton(
-                        text = stringResource(Res.string.cancel),
-                        onClick = onCancelConnecting,
-                        role = CapsuleRole.Secondary,
-                    )
-                    ConnectionCardTrailing.Connect -> CapsuleButton(
-                        text = stringResource(Res.string.device_connection_connect),
-                        onClick = onConnect,
-                        role = CapsuleRole.Tonal,
-                    )
-                    ConnectionCardTrailing.Busy -> GlassProgressCircle(
-                        modifier = Modifier.padding(12.dp),
-                        size = GlassProgressSize.Medium,
-                        color = colors.textSecondary,
-                    )
-                }
+            if (battery is BatteryDisplay.Value) BatteryBlock(battery)
+            BluetoothSignalRing(
+                connected = connected,
+                level = if (connected && live?.connected == true) live.signalLevel else SignalLevel.Unknown,
+                stale = isRssiStale(live?.rssiAtMillis, nowMillis),
+            )
+            if (!actionBelowHeader) ConnectionCardAction(trailing, onConnect, onCancelConnecting)
+        }
+        val alertText = statusCardAlertText(alert)
+        if (alertText != null) {
+            Text(
+                alertText,
+                style = AlphaType.Caption,
+                color = statusToneColor(statusCardAlertTone(alert), colors),
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
+        if (actionBelowHeader) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                ConnectionCardAction(trailing, onConnect, onCancelConnecting)
             }
         }
+        val topic = statusCardAlertTopic(alert)
+        if (topic != null && onOpenTroubleshooting != null) {
+            CapsuleButton(
+                text = stringResource(Res.string.q_alert_open_guide),
+                onClick = { onOpenTroubleshooting(topic) },
+                role = CapsuleRole.Tonal,
+                size = CapsuleSize.Small,
+            )
+        }
         LocationMetrics(live = live, phoneFix = phoneFix, nowMillis = nowMillis)
+    }
+}
+
+@Composable
+private fun ConnectionCardAction(
+    trailing: ConnectionCardTrailing,
+    onConnect: () -> Unit,
+    onCancelConnecting: () -> Unit,
+) {
+    when (trailing) {
+        ConnectionCardTrailing.ConnectedIndicator -> Unit
+        ConnectionCardTrailing.CancelConnecting -> CapsuleButton(
+            text = stringResource(Res.string.cancel),
+            onClick = onCancelConnecting,
+            role = CapsuleRole.Secondary,
+        )
+        ConnectionCardTrailing.Connect -> CapsuleButton(
+            text = stringResource(Res.string.device_connection_connect),
+            onClick = onConnect,
+            role = CapsuleRole.Tonal,
+        )
+        ConnectionCardTrailing.Busy -> GlassProgressCircle(
+            modifier = Modifier.padding(12.dp),
+            size = GlassProgressSize.Medium,
+            color = AlphaTheme.colors.textSecondary,
+        )
     }
 }
 
