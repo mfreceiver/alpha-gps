@@ -134,6 +134,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -193,6 +194,8 @@ import com.sasch.cameragps.sharednew.remote.wifi.formatByteSize
 import com.sasch.cameragps.sharednew.remote.wifi.groupCameraPhotos
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleButton
 import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleRole
+import com.sasch.cameragps.sharednew.ui.components.glass.CapsuleSize
+import com.sasch.cameragps.sharednew.ui.components.glass.GlassBackdrop
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassCheckbox
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassIconButton
 import com.sasch.cameragps.sharednew.ui.components.glass.GlassProgressCircle
@@ -412,9 +415,7 @@ internal fun WifiPhotoViewer(
                 modifier = modifier,
             )
         }
-        CompositionLocalProvider(LocalGlassBackdrop provides backdrop) {
-            ViewerBody(windowClass, parts, drawer, stripFocus, photo, strip, film, zoom)
-        }
+        ViewerBody(windowClass, parts, drawer, stripFocus, photo, strip, film, zoom, backdrop)
     }
 }
 
@@ -506,10 +507,11 @@ internal fun ViewerBody(
     strip: @Composable (Modifier) -> Unit,
     film: @Composable (Modifier) -> Unit,
     zoomState: ViewerZoomState = remember { ViewerZoomState() },
+    backdrop: GlassBackdrop? = LocalGlassBackdrop.current,
 ) {
     val portrait = windowClass == WindowClass.Portrait
     val hasDetails = parts.capture != null
-    Box(Modifier.fillMaxSize().background(AlphaTheme.colors.viewerBackground)) {
+    ViewerStage(backdrop) {
         // While the portrait details drawer is up it is modal: the viewer below (photo, download,
         // selection, filmstrip) is hidden from accessibility services, exactly like a dialog behind
         // a GlassBackground overlay host — this screen has none, so the isolation is applied here.
@@ -593,7 +595,10 @@ private fun WideViewer(
                 if (landscape) {
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         photo(Modifier.fillMaxSize())
-                        ViewerTopBar(parts, Modifier.align(Alignment.TopStart))
+                        ViewerTopBar(
+                            parts,
+                            Modifier.align(Alignment.TopStart).padding(horizontal = 4.dp).viewerChromeScrim(),
+                        )
                     }
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
@@ -605,7 +610,7 @@ private fun WideViewer(
                     }
                 } else {
                     ViewerTopBar(parts)
-                                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
                         photo(Modifier.fillMaxSize())
                         strip(
                             Modifier.align(Alignment.BottomStart).padding(12.dp)
@@ -626,6 +631,7 @@ private fun ViewerTopBar(
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier.fillMaxWidth()) {
+        val positionMaxWidth = maxWidth * 0.25f
         // Hide the tag rather than squeeze navigation or clip a very large count.
         val showSelection = maxWidth >= 320.dp && LocalDensity.current.fontScale <= 1.3f &&
             parts.selectedCount <= 999 && (parts.position?.length ?: 0) <= 9
@@ -661,7 +667,13 @@ private fun ViewerTopBar(
                 stringResource(Res.string.m7_viewer_selected_count, parts.selectedCount),
                 modifier = Modifier.widthIn(max = 120.dp), style = InfoTagStyle.OnPhoto,
             )
-            parts.position?.let { Text(it, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Label, maxLines = 1) }
+            parts.position?.let {
+                Text(
+                    it, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Label,
+                    modifier = Modifier.widthIn(max = positionMaxWidth),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
@@ -786,7 +798,8 @@ internal fun ViewerInfoStripBar(
     modifier: Modifier,
 ) {
     GlassSurface(
-        modifier = modifier, level = GlassLevel.Viewer, shape = StripShape,
+        modifier = modifier.heightIn(min = AlphaDimens.minTouchTarget),
+        level = GlassLevel.Viewer, shape = StripShape,
         onClick = onOpenDetails,
         onClickLabel = onOpenDetails?.let { stringResource(Res.string.b1_details_open) },
         contentPadding = PaddingValues(start = 14.dp, end = if (onOpenDetails != null) 8.dp else 14.dp, top = 8.dp, bottom = 8.dp),
@@ -798,20 +811,27 @@ internal fun ViewerInfoStripBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            val format = info.formatText
-            if (format != null) Text(
-                if (info.missingFormat) stringResource(Res.string.m7_viewer_only_format, format) else format,
-                color = viewerFormatColor(info.missingFormat, AlphaTheme.colors),
-                style = AlphaType.Label, maxLines = 1,
-            )
-            if (format != null && info.sizeBytes > 0) {
-                Text("·", color = AlphaTheme.colors.onPhotoMuted, style = AlphaType.Label)
+            Row(
+                Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val format = info.formatText
+                if (format != null) Text(
+                    if (info.missingFormat) stringResource(Res.string.m7_viewer_only_format, format) else format,
+                    color = viewerFormatColor(info.missingFormat, AlphaTheme.colors),
+                    style = AlphaType.Label, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (format != null && info.sizeBytes > 0) {
+                    Text("·", color = AlphaTheme.colors.onPhotoMuted, style = AlphaType.Label)
+                }
+                if (info.sizeBytes > 0) Text(
+                    size, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Label,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false).semantics { contentDescription = "$sizeLabel $size" },
+                )
             }
-            if (info.sizeBytes > 0) Text(
-                size, color = AlphaTheme.colors.onPhotoSecondary, style = AlphaType.Label, maxLines = 1,
-                modifier = Modifier.semantics { contentDescription = "$sizeLabel $size" },
-            )
-            Spacer(Modifier.weight(1f))
             if (onOpenDetails != null) Image(
                 painterResource(Res.drawable.chevron_right_24px), contentDescription = null,
                 modifier = Modifier.size(20.dp).rotate(-90f),
@@ -1174,30 +1194,46 @@ private fun ViewerDetailsPanel(parts: ViewerParts, modifier: Modifier) {
  */
 @Composable
 private fun ViewerActionRow(parts: ViewerParts, modifier: Modifier, spacing: Dp = 0.dp, balanced: Boolean = true) {
-    val height = viewerActionSlotHeight(with(LocalDensity.current) { AlphaType.Label.lineHeight.toDp() })
-    Row(
-        modifier.height(height).testTag(VIEWER_ACTION_ROW_TAG),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(spacing),
-    ) {
-        if (balanced) Spacer(Modifier.size(AlphaDimens.minTouchTarget))
-        Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
-            ViewerDownloadArea(parts, height)
+    val measurer = rememberTextMeasurer()
+    val savedLabel = stringResource(Res.string.wifi_remote_download_saved)
+    val rawLabel = stringResource(Res.string.viewer_also_download_raw)
+    val density = LocalDensity.current
+    val savedWidth = with(density) { measurer.measure(savedLabel, AlphaType.Tag).size.width.toDp() }
+    val rawWidth = with(density) { measurer.measure(rawLabel, AlphaType.Label).size.width.toDp() }
+    val labelLineHeight = with(density) { AlphaType.Label.lineHeight.toDp() }
+    val tagLineHeight = with(density) { AlphaType.Tag.lineHeight.toDp() }
+    val horizontalWidth = maxOf(17.dp, savedWidth + 10.dp) + 8.dp +
+        maxOf(AlphaDimens.minTouchTarget, rawWidth + CapsuleSize.Regular.horizontalPadding * 2)
+    BoxWithConstraints(modifier) {
+        val sideWidth = AlphaDimens.minTouchTarget
+        val inlineWidth = maxWidth - sideWidth * (if (balanced) 2 else 1) - spacing
+        val stackSaved = inlineWidth < horizontalWidth
+        val height = if (stackSaved) {
+            viewerActionSlotHeight(labelLineHeight * 2) + maxOf(17.dp, tagLineHeight + 3.dp) + 4.dp
+        } else {
+            viewerActionSlotHeight(labelLineHeight)
         }
-        ViewerSelectionToggle(parts)
+        Row(
+            Modifier.fillMaxWidth().height(height).testTag(VIEWER_ACTION_ROW_TAG),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(spacing),
+        ) {
+            if (balanced && !stackSaved) Spacer(Modifier.size(sideWidth))
+            Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                ViewerDownloadArea(parts, height, stackSaved)
+            }
+            ViewerSelectionToggle(parts)
+        }
     }
 }
 
 /**
- * The one download control, swapped **in place** inside a slot of constant height: a single-line
- * capsule in every phase (Download / Saved / Download RAW / disabled with a short reason / the
- * progress capsule). Longer explanations never take a row of their own: a phase's reason ("This
- * photo has no JPG", the full size-limit sentence…) is the control's accessibility state, and the
- * result of a finished transfer (failed / cancelled / no storage access / conversion failed) is an
- * in-page [GlassSnackbarHost] message lifted above this row — it overlays, it never pushes.
+ * Swaps the download controls in place. The slot reserves room for a stacked Saved tag and RAW
+ * action when the width is limited. Long explanations are exposed as accessibility state. A
+ * finished transfer's message is layered above the control by [GlassSnackbarHost].
  */
 @Composable
-private fun ViewerDownloadArea(parts: ViewerParts, slotHeight: Dp) {
+private fun ViewerDownloadArea(parts: ViewerParts, slotHeight: Dp, stackSaved: Boolean) {
     val transfer = parts.transfer
     // Transfer results: announced once when they happen while the viewer is up (never for a state
     // the viewer was opened with), cleared as soon as a new transfer starts.
@@ -1255,7 +1291,7 @@ private fun ViewerDownloadArea(parts: ViewerParts, slotHeight: Dp) {
         val (shown, shownTransfer) = if (phase == download.phase) download to transfer
         else latest[phase] ?: (download to transfer)
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            ViewerDownloadControl(shown, shownTransfer, parts, onAsk = { asking = true })
+            ViewerDownloadControl(shown, shownTransfer, parts, stackSaved, onAsk = { asking = true })
         }
     }
 }
@@ -1265,6 +1301,7 @@ private fun ViewerDownloadControl(
     download: ViewerDownloadState,
     transfer: WifiImageTransferState,
     parts: ViewerParts,
+    stackSaved: Boolean,
     onAsk: () -> Unit,
 ) {
     // Every control fills the slot's height, so they all look the same size at any font scale.
@@ -1283,30 +1320,7 @@ private fun ViewerDownloadControl(
         // photo-overlay colour) so it reads as frosted glass even where it sits on the black
         // letterbox below the photo, and never as an opaque light pill.
         ViewerDownloadPhase.Saved -> if (download.alsoDownloadRaw.isNotEmpty()) {
-            Row(
-                modifier = fill,
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CapsuleButton(
-                    text = stringResource(Res.string.wifi_remote_download_saved),
-                    onClick = {},
-                    modifier = Modifier.fillMaxHeight(),
-                    icon = painterResource(Res.drawable.check_24px),
-                    enabled = false,
-                    glass = true,
-                    glassLevel = GlassLevel.Viewer,
-                )
-                CapsuleButton(
-                    text = stringResource(Res.string.viewer_also_download_raw),
-                    onClick = { parts.onDownload(download.alsoDownloadRaw) },
-                    modifier = Modifier.fillMaxHeight().weight(1f, fill = false),
-                    role = CapsuleRole.Secondary,
-                    icon = painterResource(Res.drawable.download_24px),
-                    glass = true,
-                    glassLevel = GlassLevel.Viewer,
-                )
-            }
+            ViewerSavedWithRaw(stackSaved) { parts.onDownload(download.alsoDownloadRaw) }
         } else {
             CapsuleButton(
                 text = stringResource(Res.string.wifi_remote_download_saved), onClick = {},
@@ -1348,6 +1362,46 @@ private fun ViewerDownloadControl(
             enabled = download.enabled,
             glassLevel = GlassLevel.Viewer,
         )
+    }
+}
+
+@Composable
+private fun ViewerSavedWithRaw(stacked: Boolean, onDownloadRaw: () -> Unit) {
+    val saved: @Composable () -> Unit = {
+        InfoTag(
+            stringResource(Res.string.wifi_remote_download_saved),
+            style = InfoTagStyle.OnPhoto,
+            contentColor = AlphaTheme.colors.onPhotoMuted,
+        )
+    }
+    val download: @Composable (Modifier) -> Unit = { modifier ->
+        CapsuleButton(
+            text = stringResource(Res.string.viewer_also_download_raw),
+            onClick = onDownloadRaw,
+            modifier = modifier,
+            role = CapsuleRole.Secondary,
+            maxLines = if (stacked) 2 else 1,
+            glass = true,
+            glassLevel = GlassLevel.Viewer,
+        )
+    }
+    if (stacked) {
+        Column(
+            Modifier.fillMaxHeight(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            saved()
+            download(Modifier.weight(1f))
+        }
+    } else {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            saved()
+            download(Modifier.fillMaxHeight().weight(1f, fill = false))
+        }
     }
 }
 

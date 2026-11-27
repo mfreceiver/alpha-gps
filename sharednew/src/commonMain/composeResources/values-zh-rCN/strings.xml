@@ -711,4 +711,7 @@
     <string name="remote_wifi_live_unsupported">此相机不支持 Wi-Fi 取景。</string>
     <string name="remote_wifi_capture_shooting">正在拍摄…</string>
     <string name="remote_wifi_capture_rejected">相机未能拍摄。</string>
+    <string name="remote_wifi_capture_confirmed">相机已确认拍摄。</string>
+    <string name="remote_wifi_capture_uncertain">拍摄结果未确认，请检查相机。</string>
+    <string name="remote_wifi_capture_unsupported">当前无法使用 Wi-Fi 快门。</string>
 </resources>

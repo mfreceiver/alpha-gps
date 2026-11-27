@@ -411,6 +411,21 @@ class PaletteContrastTest {
     }
 
     @Test
+    fun disabledViewerCapsuleLabelsAndIconsUseReadableMutedPhotoColor() {
+        for (colors in listOf(light, dark)) {
+            for (role in CapsuleRole.entries) {
+                val capsule = capsuleColors(role, false, colors, glass = true, glassLevel = GlassLevel.Viewer)
+                assertEquals(colors.onPhotoMuted, capsule.content)
+                val backgrounds = viewerSurfaces(colors).map { Contrast.over(capsule.containerBottom, it) }
+                val ratio = minRatio(capsule.content, backgrounds)
+                assertTrue(ratio >= Contrast.AA_LARGE, "disabled Viewer $role dark=${colors.isDark}: $ratio")
+            }
+            val implicitGlass = capsuleColors(CapsuleRole.GlassPrimary, false, colors, glassLevel = GlassLevel.Viewer)
+            assertEquals(colors.onPhotoMuted, implicitGlass.content)
+        }
+    }
+
+    @Test
     fun raisedPrimaryGlowIsSoftAccentNeverDark() {
         listOf(light, dark).forEach { c ->
             val raised = capsuleColors(CapsuleRole.Primary, true, c, raised = true).glow
@@ -425,12 +440,16 @@ class PaletteContrastTest {
 
     @Test
     fun infoTags() {
-        val photo = infoTagColors(InfoTagStyle.OnPhoto, light, content = Color.Red)
-        assertEquals(light.onPhoto, photo.content)
-        photos.forEach { p ->
-            assertAa(photo.content, Contrast.over(photo.background, p), what = "tag on photo $p")
-        }
-        listOf(light, dark).forEach { c ->
+        for (c in listOf(light, dark)) {
+            val photo = infoTagColors(InfoTagStyle.OnPhoto, c)
+            assertEquals(c.onPhoto, photo.content)
+            for (content in listOf(c.onPhoto, c.onPhotoWarning, c.onPhotoDanger)) {
+                val custom = infoTagColors(InfoTagStyle.OnPhoto, c, content = content)
+                assertEquals(content, custom.content)
+                photos.forEach { p ->
+                    assertAa(custom.content, Contrast.over(custom.background, p), what = "tag on photo $p")
+                }
+            }
             val tag = infoTagColors(InfoTagStyle.OnSurface, c)
             assertEquals(Color.Transparent, tag.background, "tags on glass have no fill (N13)")
             assertTrue(tag.stroke.alpha > 0f)

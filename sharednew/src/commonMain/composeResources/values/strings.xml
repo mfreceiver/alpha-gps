@@ -739,4 +739,7 @@
     <string name="remote_wifi_live_unsupported">This camera does not offer live view over Wi-Fi.</string>
     <string name="remote_wifi_capture_shooting">Shooting…</string>
     <string name="remote_wifi_capture_rejected">The camera could not shoot.</string>
+    <string name="remote_wifi_capture_confirmed">The camera confirmed the shot.</string>
+    <string name="remote_wifi_capture_uncertain">Shot unconfirmed. Check the camera.</string>
+    <string name="remote_wifi_capture_unsupported">Wi-Fi shutter unavailable.</string>
 </resources>

@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sasch.cameragps.sharednew.ui.theme.AlphaColors
 import com.sasch.cameragps.sharednew.ui.theme.AlphaShapes
@@ -38,11 +39,15 @@ data class InfoTagColors(val background: Color, val stroke: Color, val content: 
  *   highlight 24 % dark), so it reads as a label on glass and never as a button. Text: textSecondary
  *   (light) / textPrimary (dark keeps AA over the brightest orb), or [content] (e.g. success).
  * - [InfoTagStyle.OnPhoto]: Viewer glass fill (dark translucent, unblurred: a photo grid is not a
- *   blur source) + white 22 % rim + onPhoto text — ≥ 5:1 even on a white photo.
+ *   blur source) + white 22 % rim + onPhoto text (or an explicit photo content colour).
  */
 fun infoTagColors(style: InfoTagStyle, colors: AlphaColors, content: Color = Color.Unspecified): InfoTagColors =
     when (style) {
-        InfoTagStyle.OnPhoto -> InfoTagColors(GlassTokens.Viewer.fill, GlassHighlight.copy(alpha = 0.22f), colors.onPhoto)
+        InfoTagStyle.OnPhoto -> InfoTagColors(
+            background = GlassTokens.Viewer.fill,
+            stroke = GlassHighlight.copy(alpha = 0.22f),
+            content = if (content.isSpecified) content else colors.onPhoto,
+        )
         InfoTagStyle.OnSurface -> InfoTagColors(
             background = Color.Transparent,
             stroke = if (colors.isDark) GlassHighlight.copy(alpha = 0.24f) else colors.textSecondary.copy(alpha = 0.32f),
@@ -55,8 +60,7 @@ fun infoTagColors(style: InfoTagStyle, colors: AlphaColors, content: Color = Col
  * corners, no shadow, **not clickable** — it must never look like a capsule button. Its text is read
  * as part of the owning row / cell (merge the owner's semantics); [icon] is decorative.
  *
- * @param contentColor text / icon colour on [InfoTagStyle.OnSurface] (e.g. success green); ignored
- *   on photos.
+ * @param contentColor text / icon colour, e.g. onPhotoWarning for [InfoTagStyle.OnPhoto].
  */
 @Composable
 fun InfoTag(
@@ -65,6 +69,7 @@ fun InfoTag(
     style: InfoTagStyle = InfoTagStyle.OnSurface,
     contentColor: Color = Color.Unspecified,
     icon: Painter? = null,
+    maxLines: Int = 1,
 ) {
     val c = infoTagColors(style, AlphaTheme.colors, contentColor)
     Row(
@@ -79,6 +84,6 @@ fun InfoTag(
         if (icon != null) {
             Image(icon, contentDescription = null, modifier = Modifier.size(12.dp), colorFilter = ColorFilter.tint(c.content))
         }
-        Text(text = text, style = AlphaType.Tag, color = c.content, maxLines = 1)
+        Text(text = text, style = AlphaType.Tag, color = c.content, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
     }
 }

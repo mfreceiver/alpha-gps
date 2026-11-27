@@ -122,14 +122,17 @@ fun capsuleColors(
     colors: AlphaColors,
     raised: Boolean = false,
     glass: Boolean = false,
+    glassLevel: GlassLevel = GlassLevel.Float,
 ): CapsuleColors {
     val isGlass = glass || role == CapsuleRole.GlassPrimary
+    val onViewer = isGlass && glassLevel == GlassLevel.Viewer
     if (!enabled) {
-        val fill = colors.onSurface.copy(alpha = 0.12f)
+        // Keep the dark GV fill as the backdrop for the muted photo label and icon.
+        val fill = if (onViewer) Color.Transparent else colors.onSurface.copy(alpha = 0.12f)
         return CapsuleColors(
             containerTop = fill,
             containerBottom = fill,
-            content = colors.onSurface.copy(alpha = 0.45f),
+            content = if (onViewer) colors.onPhotoMuted else colors.onSurface.copy(alpha = 0.45f),
             rimAlpha = 0f,
             glow = null,
             border = null,
@@ -138,7 +141,7 @@ fun capsuleColors(
     }
     if (isGlass) {
         val t = GlassTints.of(capsuleGlassTintRole(role), colors)
-        return CapsuleColors(t.tint, t.tint, t.content, 0f, null, null, glass = true)
+        return CapsuleColors(t.tint, t.tint, if (onViewer) colors.onPhoto else t.content, 0f, null, null, glass = true)
     }
     return when (role) {
         CapsuleRole.Primary, CapsuleRole.GlassPrimary -> CapsuleColors(
@@ -189,13 +192,11 @@ fun CapsuleButton(
     loading: Boolean = false,
     glass: Boolean = false,
     glassLevel: GlassLevel = GlassLevel.Float,
+    maxLines: Int = 1,
 ) {
     val alpha = AlphaTheme.colors
     val raised = (role == CapsuleRole.Primary || role == CapsuleRole.GlassPrimary) && size.raised
-    val c0 = capsuleColors(role, enabled, alpha, raised, glass)
-    val onGlass = c0.glass
-    // Viewer glass: label and icon in the photo-overlay colour.
-    val c = if (onGlass && enabled && glassLevel == GlassLevel.Viewer) c0.copy(content = alpha.onPhoto) else c0
+    val c = capsuleColors(role, enabled, alpha, raised, glass, glassLevel)
     val shape = AlphaShapes.capsule
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -222,7 +223,7 @@ fun CapsuleButton(
             // Glass variant: frosted base (blur when a backdrop is reachable, else the near-solid
             // fallback) with the role tint folded into the fill; opaque roles paint their gradient.
             .then(
-                if (onGlass) {
+                if (c.glass) {
                     Modifier.glass(glassLevel, shape, tint = c.containerBottom)
                 } else {
                     Modifier.clip(shape).background(Brush.verticalGradient(listOf(c.containerTop, c.containerBottom)))
@@ -261,7 +262,7 @@ fun CapsuleButton(
             text = text,
             style = AlphaType.Label,
             color = c.content,
-            maxLines = 1,
+            maxLines = maxLines,
             overflow = TextOverflow.Ellipsis,
         )
     }

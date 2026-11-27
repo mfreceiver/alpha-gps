@@ -16,7 +16,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import com.sasch.cameragps.sharednew.remote.wifi.PhotoMetadataState
 import com.sasch.cameragps.sharednew.remote.wifi.WifiCameraCapture
@@ -31,6 +34,8 @@ import com.sasch.cameragps.sharednew.ui.theme.CameraGpsTheme
 import com.sasch.cameragps.sharednew.ui.theme.WindowClass
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -198,4 +203,25 @@ class ViewerDownloadSlotComposeTest {
         assertEquals(listOf(WifiPhotoDownload(2)), lastDownloads)
         assertEquals(before, rowBounds())
     }
+    @Test
+    @Config(qualifiers = "w320dp-h720dp")
+    fun savedAndRawActionStackWithLargeFontsAndFitWithinTheDownloadSlot() {
+        current = cases.first { it.name == "ready" }
+        show(WindowClass.Portrait, 2f)
+        val before = rowBounds()
+        compose.runOnIdle { current = cases.first { it.name == "savedJpgWithRaw" } }
+        val saved = compose.onNodeWithText("Saved").fetchSemanticsNode().boundsInRoot
+        val rawAction = compose.onNodeWithText("Also download RAW")
+        val rawBounds = rawAction.fetchSemanticsNode().boundsInRoot
+        assertTrue(saved.bottom < rawBounds.top)
+        assertTrue(rawBounds.bottom <= before.bottom)
+
+        val layouts = mutableListOf<TextLayoutResult>()
+        rawAction.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertFalse(layouts.single().hasVisualOverflow)
+        rawAction.performClick()
+        assertEquals(listOf(WifiPhotoDownload(2)), lastDownloads)
+        assertEquals(before, rowBounds())
+    }
+
 }
